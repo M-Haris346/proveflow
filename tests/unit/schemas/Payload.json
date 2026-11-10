@@ -1,0 +1,51 @@
+{
+  "additionalProperties": false,
+  "description": "Normalized corpus record; provenance and license always carried along.",
+  "properties": {
+    "attack_family": {
+      "title": "Attack Family",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "language": {
+      "title": "Language",
+      "type": "string"
+    },
+    "license": {
+      "title": "License",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "source_dataset": {
+      "title": "Source Dataset",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "text",
+    "source_dataset",
+    "source_id",
+    "license",
+    "attack_family",
+    "language",
+    "sha256"
+  ],
+  "title": "Payload",
+  "type": "object"
+}

@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "RuleHit": {
+      "enum": [
+        "r1_exfil",
+        "r2_goal_action",
+        "r3_answer_hijack",
+        "r4_suspicious"
+      ],
+      "title": "RuleHit",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Deterministic oracle output for one trial.",
+  "properties": {
+    "blocked_by_mitigation": {
+      "default": false,
+      "title": "Blocked By Mitigation",
+      "type": "boolean"
+    },
+    "compromised": {
+      "title": "Compromised",
+      "type": "boolean"
+    },
+    "latency_ms": {
+      "minimum": 0.0,
+      "title": "Latency Ms",
+      "type": "number"
+    },
+    "rule_hits": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RuleHit"
+      },
+      "title": "Rule Hits",
+      "type": "array"
+    },
+    "tokens_in": {
+      "minimum": 0,
+      "title": "Tokens In",
+      "type": "integer"
+    },
+    "tokens_out": {
+      "minimum": 0,
+      "title": "Tokens Out",
+      "type": "integer"
+    },
+    "trial_id": {
+      "title": "Trial Id",
+      "type": "string"
+    },
+    "utility": {
+      "title": "Utility",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "trial_id",
+    "utility",
+    "compromised",
+    "tokens_in",
+    "tokens_out",
+    "latency_ms"
+  ],
+  "title": "Verdict",
+  "type": "object"
+}

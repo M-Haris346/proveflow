@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "RoleSource": {
+      "enum": [
+        "heuristic",
+        "override",
+        "llm_confirmed"
+      ],
+      "title": "RoleSource",
+      "type": "string"
+    },
+    "ToolRole": {
+      "enum": [
+        "untrusted_source",
+        "private_data",
+        "sink"
+      ],
+      "title": "ToolRole",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Why a tool was assigned a role; provenance is always recorded.",
+  "properties": {
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "role": {
+      "$ref": "#/$defs/ToolRole"
+    },
+    "source": {
+      "$ref": "#/$defs/RoleSource"
+    },
+    "weight": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Weight",
+      "type": "number"
+    }
+  },
+  "required": [
+    "role",
+    "source",
+    "reason",
+    "weight"
+  ],
+  "title": "RoleEvidence",
+  "type": "object"
+}

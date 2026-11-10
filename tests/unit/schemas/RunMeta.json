@@ -1,0 +1,88 @@
+{
+  "additionalProperties": false,
+  "description": "Reporting context: every published number must carry all of this.",
+  "properties": {
+    "corpus_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Corpus Revision"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "hardware": {
+      "title": "Hardware",
+      "type": "string"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "proveflow_version": {
+      "title": "Proveflow Version",
+      "type": "string"
+    },
+    "provider": {
+      "title": "Provider",
+      "type": "string"
+    },
+    "provider_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Version"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "seed_policy": {
+      "title": "Seed Policy",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "temperature": {
+      "title": "Temperature",
+      "type": "number"
+    }
+  },
+  "required": [
+    "run_id",
+    "model",
+    "provider",
+    "temperature",
+    "seed_policy",
+    "proveflow_version",
+    "hardware",
+    "started_at"
+  ],
+  "title": "RunMeta",
+  "type": "object"
+}

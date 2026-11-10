@@ -1,0 +1,233 @@
+{
+  "$defs": {
+    "ActionGoal": {
+      "additionalProperties": false,
+      "description": "Attacker wants a specific sink tool call with attacker-chosen arguments.",
+      "properties": {
+        "arg_predicate": {
+          "title": "Arg Predicate",
+          "type": "string"
+        },
+        "kind": {
+          "const": "action",
+          "default": "action",
+          "title": "Kind",
+          "type": "string"
+        },
+        "sink_tool": {
+          "title": "Sink Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sink_tool",
+        "arg_predicate"
+      ],
+      "title": "ActionGoal",
+      "type": "object"
+    },
+    "Attack": {
+      "additionalProperties": false,
+      "description": "Payload x carrier x goal, instantiated with a per-trial canary.",
+      "properties": {
+        "canary": {
+          "pattern": "^cnry_[0-9a-f]{12}$",
+          "title": "Canary",
+          "type": "string"
+        },
+        "carrier": {
+          "$ref": "#/$defs/Carrier"
+        },
+        "goal": {
+          "discriminator": {
+            "mapping": {
+              "action": "#/$defs/ActionGoal",
+              "exfil": "#/$defs/ExfilGoal",
+              "hijack": "#/$defs/HijackGoal"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ExfilGoal"
+            },
+            {
+              "$ref": "#/$defs/ActionGoal"
+            },
+            {
+              "$ref": "#/$defs/HijackGoal"
+            }
+          ],
+          "title": "Goal"
+        },
+        "payload": {
+          "$ref": "#/$defs/Payload"
+        }
+      },
+      "required": [
+        "payload",
+        "carrier",
+        "goal",
+        "canary"
+      ],
+      "title": "Attack",
+      "type": "object"
+    },
+    "Carrier": {
+      "description": "How a payload is embedded into a source tool's result.",
+      "enum": [
+        "plain",
+        "html_comment",
+        "markdown",
+        "json_string",
+        "code_comment"
+      ],
+      "title": "Carrier",
+      "type": "string"
+    },
+    "ExfilGoal": {
+      "additionalProperties": false,
+      "description": "Attacker wants honey/canary data to reach a sink tool's arguments.",
+      "properties": {
+        "kind": {
+          "const": "exfil",
+          "default": "exfil",
+          "title": "Kind",
+          "type": "string"
+        },
+        "sink_tool": {
+          "title": "Sink Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sink_tool"
+      ],
+      "title": "ExfilGoal",
+      "type": "object"
+    },
+    "HijackGoal": {
+      "additionalProperties": false,
+      "description": "Attacker wants a marker to appear in the agent's final answer.",
+      "properties": {
+        "kind": {
+          "const": "hijack",
+          "default": "hijack",
+          "title": "Kind",
+          "type": "string"
+        },
+        "marker": {
+          "title": "Marker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "marker"
+      ],
+      "title": "HijackGoal",
+      "type": "object"
+    },
+    "Payload": {
+      "additionalProperties": false,
+      "description": "Normalized corpus record; provenance and license always carried along.",
+      "properties": {
+        "attack_family": {
+          "title": "Attack Family",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "language": {
+          "title": "Language",
+          "type": "string"
+        },
+        "license": {
+          "title": "License",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source_dataset": {
+          "title": "Source Dataset",
+          "type": "string"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "source_dataset",
+        "source_id",
+        "license",
+        "attack_family",
+        "language",
+        "sha256"
+      ],
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One (flow, attack | None, model, mitigation, seed) execution.\n\n``attack is None`` marks the clean paired trial run with the same seed.",
+  "properties": {
+    "attack": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Attack"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "flow_id": {
+      "title": "Flow Id",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "mitigation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mitigation Id"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "flow_id",
+    "model",
+    "seed"
+  ],
+  "title": "Trial",
+  "type": "object"
+}

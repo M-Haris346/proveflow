@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "MitigationKind": {
+      "enum": [
+        "m1_remove_sink",
+        "m2_split_profiles",
+        "m3_human_approval",
+        "m4_taint_gate",
+        "m5_spotlighting",
+        "m6_tool_filter"
+      ],
+      "title": "MitigationKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One candidate fix for a flow, written as a reviewable patch.",
+  "properties": {
+    "expected_tradeoff": {
+      "title": "Expected Tradeoff",
+      "type": "string"
+    },
+    "flow_id": {
+      "title": "Flow Id",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/MitigationKind"
+    },
+    "rationale": {
+      "title": "Rationale",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "flow_id",
+    "title",
+    "rationale",
+    "expected_tradeoff"
+  ],
+  "title": "Mitigation",
+  "type": "object"
+}

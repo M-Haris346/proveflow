@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "RoleEvidence": {
+      "additionalProperties": false,
+      "description": "Why a tool was assigned a role; provenance is always recorded.",
+      "properties": {
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/ToolRole"
+        },
+        "source": {
+          "$ref": "#/$defs/RoleSource"
+        },
+        "weight": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "role",
+        "source",
+        "reason",
+        "weight"
+      ],
+      "title": "RoleEvidence",
+      "type": "object"
+    },
+    "RoleSource": {
+      "enum": [
+        "heuristic",
+        "override",
+        "llm_confirmed"
+      ],
+      "title": "RoleSource",
+      "type": "string"
+    },
+    "ToolRole": {
+      "enum": [
+        "untrusted_source",
+        "private_data",
+        "sink"
+      ],
+      "title": "ToolRole",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One tool exposed by a server, with its classified roles.",
+  "properties": {
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "input_schema": {
+      "additionalProperties": true,
+      "title": "Input Schema",
+      "type": "object"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "roles": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RoleEvidence"
+      },
+      "title": "Roles",
+      "type": "array"
+    },
+    "server": {
+      "title": "Server",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "server"
+  ],
+  "title": "ToolSpec",
+  "type": "object"
+}

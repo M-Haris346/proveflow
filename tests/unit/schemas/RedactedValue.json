@@ -1,0 +1,22 @@
+{
+  "additionalProperties": false,
+  "description": "Irreversible fingerprint of a secret: sha256 prefix + length, nothing else.",
+  "properties": {
+    "length": {
+      "minimum": 0,
+      "title": "Length",
+      "type": "integer"
+    },
+    "sha256_prefix": {
+      "pattern": "^[0-9a-f]{12}$",
+      "title": "Sha256 Prefix",
+      "type": "string"
+    }
+  },
+  "required": [
+    "sha256_prefix",
+    "length"
+  ],
+  "title": "RedactedValue",
+  "type": "object"
+}

@@ -1,0 +1,64 @@
+{
+  "$defs": {
+    "FlowClass": {
+      "enum": [
+        "exfil",
+        "action",
+        "leak"
+      ],
+      "title": "FlowClass",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Ordered path source \u2192 (private) \u2192 sink, possibly across servers.",
+  "properties": {
+    "cross_server": {
+      "title": "Cross Server",
+      "type": "boolean"
+    },
+    "flow_class": {
+      "$ref": "#/$defs/FlowClass"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "private_tool": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Private Tool"
+    },
+    "sink_tool": {
+      "title": "Sink Tool",
+      "type": "string"
+    },
+    "source_tool": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Tool"
+    }
+  },
+  "required": [
+    "id",
+    "flow_class",
+    "sink_tool",
+    "cross_server"
+  ],
+  "title": "Flow",
+  "type": "object"
+}

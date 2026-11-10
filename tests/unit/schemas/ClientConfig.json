@@ -1,0 +1,156 @@
+{
+  "$defs": {
+    "ClientKind": {
+      "enum": [
+        "claude_desktop",
+        "claude_code",
+        "cursor",
+        "vscode",
+        "windsurf",
+        "explicit_file"
+      ],
+      "title": "ClientKind",
+      "type": "string"
+    },
+    "ConfigScope": {
+      "enum": [
+        "user",
+        "project",
+        "explicit"
+      ],
+      "title": "ConfigScope",
+      "type": "string"
+    },
+    "RedactedValue": {
+      "additionalProperties": false,
+      "description": "Irreversible fingerprint of a secret: sha256 prefix + length, nothing else.",
+      "properties": {
+        "length": {
+          "minimum": 0,
+          "title": "Length",
+          "type": "integer"
+        },
+        "sha256_prefix": {
+          "pattern": "^[0-9a-f]{12}$",
+          "title": "Sha256 Prefix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256_prefix",
+        "length"
+      ],
+      "title": "RedactedValue",
+      "type": "object"
+    },
+    "ServerSpec": {
+      "additionalProperties": false,
+      "description": "One configured MCP server. Env/header values are redacted at read time.",
+      "properties": {
+        "args": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Args",
+          "type": "array"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command"
+        },
+        "env": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RedactedValue"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "headers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RedactedValue"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source_file": {
+          "format": "path",
+          "title": "Source File",
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportKind"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "name",
+        "transport",
+        "source_file"
+      ],
+      "title": "ServerSpec",
+      "type": "object"
+    },
+    "TransportKind": {
+      "enum": [
+        "stdio",
+        "http"
+      ],
+      "title": "TransportKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One discovered MCP client config file.",
+  "properties": {
+    "kind": {
+      "$ref": "#/$defs/ClientKind"
+    },
+    "path": {
+      "format": "path",
+      "title": "Path",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/ConfigScope"
+    },
+    "servers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ServerSpec"
+      },
+      "title": "Servers",
+      "type": "array"
+    }
+  },
+  "required": [
+    "kind",
+    "scope",
+    "path"
+  ],
+  "title": "ClientConfig",
+  "type": "object"
+}
