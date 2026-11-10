@@ -273,7 +273,7 @@ proveflow/
 
 | Phase | Scope | Exit criteria | Est. |
 |---|---|---|---|
-| **0 Foundation** | Repo, tooling, CI, CLI skeleton, core models, docs (METHODOLOGY v0, THREAT_MODEL v0, COMPETITORS, DATASETS audit, CLIENT_CONFIGS verified, ADRs) | CI green on ubuntu+windows; all audits filled with links | 2–3 d |
+| **0 Foundation** | Repo, tooling, CI, CLI skeleton, core models, docs (METHODOLOGY v0, THREAT_MODEL v0, COMPETITORS, DATASETS audit, CLIENT_CONFIGS verified, ADRs) | **Done 2026-11-10** [impl][tested]: ruff/mypy-strict/pytest (79 tests) green locally on Windows; CI workflow written but **never run** (repo has no remote yet); audits filled with source links, pending Haris review | 2–3 d |
 | **1 Find** | discover + redaction, introspect (tools/list only), role classifier, flow graph, terminal + SARIF report; labeled tool set for classifier eval | `proveflow scan` on Haris's real machine; classifier precision/recall **[measured]**; redaction property tests | 5–6 d |
 | **2 Proxy** | stdio proxy, sink sandbox, carriers, cassette | Safety tests prove no sink forwarding | 3–4 d |
 | **3 Oracle** | canary, encodings, matcher, R1–R4, FakeLLM policies | Exact FakeLLM verdicts; mutation tests fail as designed | 3–4 d |
