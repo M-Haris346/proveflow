@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from proveflow.core._base import FrozenModel
+from proveflow.core.tools import Granularity, SinkSeverity
 
 
 class FlowClass(StrEnum):
@@ -21,25 +22,41 @@ class FlowVerdictKind(StrEnum):
     THEORETICAL = "THEORETICAL"
 
 
+class ToolRef(FrozenModel):
+    """A tool on a server inside one agent profile. ``tool is None``: server-level."""
+
+    server: str
+    tool: str | None = None
+
+    @property
+    def label(self) -> str:
+        return f"{self.server}/{self.tool if self.tool is not None else '*'}"
+
+
 class Flow(FrozenModel):
-    """Ordered path source → (private) → sink, possibly across servers."""
+    """Ordered path source → (private) → sink inside one agent profile."""
 
     id: str
+    profile: str
     flow_class: FlowClass
-    source_tool: str | None = None
-    private_tool: str | None = None
-    sink_tool: str
+    source: ToolRef | None = None
+    private: ToolRef | None = None
+    sink: ToolRef
     cross_server: bool
+    sink_severity: SinkSeverity
+    confidence: float = Field(ge=0.0, le=1.0)
+    granularity: Granularity
+    verdict: FlowVerdictKind = FlowVerdictKind.THEORETICAL
 
     @model_validator(mode="after")
     def _check_shape(self) -> Flow:
-        if self.flow_class is FlowClass.EXFIL and not (self.source_tool and self.private_tool):
-            msg = "exfil flow requires source_tool and private_tool"
+        if self.flow_class is FlowClass.EXFIL and not (self.source and self.private):
+            msg = "exfil flow requires source and private"
             raise ValueError(msg)
-        if self.flow_class is FlowClass.ACTION and not self.source_tool:
-            msg = "action flow requires source_tool"
+        if self.flow_class is FlowClass.ACTION and (not self.source or self.private):
+            msg = "action flow requires source and no private"
             raise ValueError(msg)
-        if self.flow_class is FlowClass.LEAK and self.source_tool is not None:
-            msg = "leak flow must not have a source_tool"
+        if self.flow_class is FlowClass.LEAK and (self.source is not None or not self.private):
+            msg = "leak flow requires private and no source"
             raise ValueError(msg)
         return self

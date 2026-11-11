@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import Field
 
 from proveflow.core._base import FrozenModel
-from proveflow.core.redact import RedactedValue
+from proveflow.core.redact import RedactedText, RedactedValue
 
 
 class ClientKind(StrEnum):
@@ -23,31 +23,54 @@ class ClientKind(StrEnum):
 class ConfigScope(StrEnum):
     USER = "user"
     PROJECT = "project"
+    LOCAL = "local"  # Claude Code per-project private scope (CLIENT_CONFIGS.md §2)
     EXPLICIT = "explicit"
+
+
+class ConfigStatus(StrEnum):
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    PARSE_ERROR = "parse_error"
+    UNREADABLE = "unreadable"
+    UNSUPPORTED = "unsupported"
 
 
 class TransportKind(StrEnum):
     STDIO = "stdio"
     HTTP = "http"
+    SSE = "sse"
+    WS = "ws"
+    UNKNOWN = "unknown"
 
 
 class ServerSpec(FrozenModel):
-    """One configured MCP server. Env/header values are redacted at read time."""
+    """One configured MCP server. Every env/header value is redacted at read time;
+    args, url, command, and envFile path are redacted by pattern (docs/REDACTION.md)."""
 
     name: str
     transport: TransportKind
-    command: str | None = None
-    args: tuple[str, ...] = ()
-    url: str | None = None
+    declared_type: str | None = None
+    command: RedactedText | None = None
+    args: tuple[RedactedText, ...] = ()
+    url: RedactedText | None = None
     env: dict[str, RedactedValue] = Field(default_factory=dict)
     headers: dict[str, RedactedValue] = Field(default_factory=dict)
+    env_file: RedactedText | None = None
+    auth_hint: bool = False
+    ignored_keys: tuple[str, ...] = ()
     source_file: Path
+    scope: ConfigScope = ConfigScope.USER
+    project: str | None = None
 
 
 class ClientConfig(FrozenModel):
-    """One discovered MCP client config file."""
+    """One discovered MCP client config location (one file, or one scope inside a file)."""
 
     kind: ClientKind
     scope: ConfigScope
-    path: Path
+    path: Path | None
+    status: ConfigStatus = ConfigStatus.FOUND
+    detail: str | None = None
+    project: str | None = None
     servers: tuple[ServerSpec, ...] = ()
+    entry_errors: tuple[str, ...] = ()

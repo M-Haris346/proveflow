@@ -13,13 +13,21 @@ from proveflow.core.client import (
     ClientConfig,
     ClientKind,
     ConfigScope,
+    ConfigStatus,
     ServerSpec,
     TransportKind,
 )
-from proveflow.core.flows import Flow, FlowClass, FlowVerdictKind
+from proveflow.core.flows import Flow, FlowClass, FlowVerdictKind, ToolRef
 from proveflow.core.mitigations import Mitigation, MitigationKind
-from proveflow.core.redact import RedactedValue
-from proveflow.core.tools import RoleEvidence, RoleSource, ToolRole, ToolSpec
+from proveflow.core.redact import RedactedText, RedactedValue
+from proveflow.core.tools import (
+    Granularity,
+    RoleEvidence,
+    RoleSource,
+    SinkSeverity,
+    ToolRole,
+    ToolSpec,
+)
 from proveflow.core.trials import RuleHit, RunMeta, Trial, Verdict
 
 __all__ = [
@@ -29,21 +37,26 @@ __all__ = [
     "ClientConfig",
     "ClientKind",
     "ConfigScope",
+    "ConfigStatus",
     "ExfilGoal",
     "Flow",
     "FlowClass",
     "FlowVerdictKind",
     "Goal",
+    "Granularity",
     "HijackGoal",
     "Mitigation",
     "MitigationKind",
     "Payload",
+    "RedactedText",
     "RedactedValue",
     "RoleEvidence",
     "RoleSource",
     "RuleHit",
     "RunMeta",
     "ServerSpec",
+    "SinkSeverity",
+    "ToolRef",
     "ToolRole",
     "ToolSpec",
     "TransportKind",
