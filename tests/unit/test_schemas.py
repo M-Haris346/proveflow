@@ -32,7 +32,13 @@ from proveflow.core import (
     Trial,
     Verdict,
 )
-from proveflow.report.models import DiscoverReport, ScanReport
+from proveflow.report.models import (
+    DiscoverReport,
+    IntrospectionResult,
+    RawTool,
+    ScanReport,
+    ToolChange,
+)
 
 MODELS: list[type[BaseModel]] = [
     RedactedValue,
@@ -51,6 +57,9 @@ MODELS: list[type[BaseModel]] = [
     Mitigation,
     DiscoverReport,
     ScanReport,
+    IntrospectionResult,
+    RawTool,
+    ToolChange,
 ]
 
 SNAPSHOT_DIR = Path(__file__).parent / "schemas"

@@ -22,6 +22,63 @@
       "title": "ConfigScope",
       "type": "string"
     },
+    "Finding": {
+      "additionalProperties": false,
+      "description": "A non-flow static finding about one configured server (e.g. PF-UNPINNED).",
+      "properties": {
+        "launcher": {
+          "title": "Launcher",
+          "type": "string"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Package"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "server": {
+          "title": "Server",
+          "type": "string"
+        },
+        "source_file": {
+          "format": "path",
+          "title": "Source File",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "unpinned",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "server",
+        "source_file",
+        "status",
+        "launcher",
+        "reason"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
     "Flow": {
       "additionalProperties": false,
       "description": "Ordered path source \u2192 (private) \u2192 sink inside one agent profile.",
@@ -125,7 +182,14 @@
     },
     "IntrospectionStatus": {
       "enum": [
+        "ok",
         "skipped_no_launch",
+        "declined",
+        "consent_required",
+        "timeout",
+        "failed",
+        "config_changed",
+        "unresolved_variables",
         "remote_not_introspected",
         "auth_required"
       ],
@@ -276,6 +340,59 @@
     "ServerReport": {
       "additionalProperties": false,
       "properties": {
+        "baseline": {
+          "anyOf": [
+            {
+              "enum": [
+                "first_seen",
+                "compared",
+                "cache_disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Baseline"
+        },
+        "changes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolChange"
+          },
+          "title": "Changes",
+          "type": "array"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "era": {
+          "anyOf": [
+            {
+              "enum": [
+                "modern",
+                "handshake"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Era"
+        },
         "introspection": {
           "$ref": "#/$defs/IntrospectionStatus"
         },
@@ -283,8 +400,32 @@
           "title": "Key",
           "type": "string"
         },
+        "protocol_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol Version"
+        },
         "spec": {
           "$ref": "#/$defs/ServerSpec"
+        },
+        "stderr_tail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stderr Tail"
         },
         "tools": {
           "default": [],
@@ -414,6 +555,14 @@
             }
           ],
           "default": null
+        },
+        "variables": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Variables",
+          "type": "array"
         }
       },
       "required": [
@@ -432,6 +581,35 @@
         "local_write"
       ],
       "title": "SinkSeverity",
+      "type": "string"
+    },
+    "ToolChange": {
+      "additionalProperties": false,
+      "description": "Difference vs the cached previous tools/list (rug-pull signal, never blocking).",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ToolChangeKind"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "tool"
+      ],
+      "title": "ToolChange",
+      "type": "object"
+    },
+    "ToolChangeKind": {
+      "enum": [
+        "added",
+        "removed",
+        "description_changed",
+        "schema_changed"
+      ],
+      "title": "ToolChangeKind",
       "type": "string"
     },
     "ToolRef": {
@@ -522,6 +700,14 @@
   },
   "additionalProperties": false,
   "properties": {
+    "findings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
     "flows": {
       "items": {
         "$ref": "#/$defs/Flow"
@@ -537,7 +723,10 @@
       "type": "array"
     },
     "mode": {
-      "const": "no_launch",
+      "enum": [
+        "introspect",
+        "no_launch"
+      ],
       "title": "Mode",
       "type": "string"
     },

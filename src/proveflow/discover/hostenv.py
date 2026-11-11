@@ -28,6 +28,8 @@ class HostEnv:
     home: Path
     appdata: Path | None = None
     xdg_config_home: Path | None = None
+    localappdata: Path | None = None
+    xdg_cache_home: Path | None = None
 
     @classmethod
     def current(cls) -> HostEnv:
@@ -37,11 +39,16 @@ class HostEnv:
             kind = OsKind.MACOS
         else:
             kind = OsKind.LINUX
-        appdata = os.environ.get("APPDATA")
-        xdg = os.environ.get("XDG_CONFIG_HOME")
+
+        def _path(name: str) -> Path | None:
+            value = os.environ.get(name)
+            return Path(value) if value else None
+
         return cls(
             os=kind,
             home=Path.home(),
-            appdata=Path(appdata) if appdata else None,
-            xdg_config_home=Path(xdg) if xdg else None,
+            appdata=_path("APPDATA"),
+            xdg_config_home=_path("XDG_CONFIG_HOME"),
+            localappdata=_path("LOCALAPPDATA"),
+            xdg_cache_home=_path("XDG_CACHE_HOME"),
         )

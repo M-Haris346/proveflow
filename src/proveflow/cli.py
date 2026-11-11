@@ -6,8 +6,10 @@ them (docs/ARCHITECTURE.md §9) and exit with code 2. No fake output, ever.
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import typer
 from rich.console import Console
@@ -15,12 +17,16 @@ from rich.text import Text
 
 from proveflow import __version__, logging_setup
 from proveflow.config import ConfigError, ProveflowConfig, load_config
+from proveflow.core.client import ClientConfig, ConfigScope, ServerSpec
 from proveflow.discover import HostEnv, run_discovery
+from proveflow.discover.profiles import build_profiles
 from proveflow.report.json_out import to_json
-from proveflow.report.models import DiscoverReport
+from proveflow.report.models import DiscoverReport, IntrospectionResult
 from proveflow.report.sarif import write_sarif
-from proveflow.report.terminal import render_discover, render_scan
-from proveflow.scan import build_scan
+from proveflow.report.terminal import command_line, render_discover, render_scan
+from proveflow.scan import build_scan, stdio_specs
+
+Consent = Literal["yes", "no", "unavailable"]
 
 app = typer.Typer(
     name="proveflow",
@@ -116,6 +122,78 @@ def discover(
         render_discover(report, console)
 
 
+def _interactive() -> bool:
+    """Is a human at the keyboard? (tests replace this)."""
+    return sys.stdin.isatty()
+
+
+def consent_prompt_text(spec: ServerSpec) -> str:
+    """The exact consent prompt (stderr). Only redacted values are shown."""
+    lines = [
+        f"Launch MCP server {spec.name!r} to read its tool list (tools/list only, never "
+        "tools/call)?",
+        f"  command:  {command_line(spec)}",
+        f"  env keys: {', '.join(sorted(spec.env)) or '(none)'} (values hidden)",
+        f"  config:   {spec.source_file} [{spec.scope.value} scope]",
+    ]
+    if spec.scope is ConfigScope.PROJECT:
+        lines.append(
+            "  WARNING: this server is defined in the scanned project (repository-controlled),"
+            " not by you."
+        )
+    lines.append(
+        "  The server's own code will run on this machine with its configured environment,"
+        " as your MCP client would run it."
+    )
+    return "\n".join(lines)
+
+
+def _consent_prompt(yes: bool, yes_project: bool) -> Callable[[ServerSpec], Consent]:
+    """--yes covers user/local/explicit servers only; project-scoped servers (from the
+    scanned repository) need --yes-project or an interactive answer (THREAT_MODEL T15)."""
+    err = Console(stderr=True)
+
+    def ask(spec: ServerSpec) -> Consent:
+        project_scoped = spec.scope is ConfigScope.PROJECT
+        if yes_project and project_scoped:
+            return "yes"
+        if yes and not project_scoped:
+            return "yes"
+        if not _interactive():
+            return "unavailable"
+        err.print(Text(consent_prompt_text(spec)))
+        return "yes" if typer.confirm("  Launch?", default=False, err=True) else "no"
+
+    return ask
+
+
+def _introspect(
+    configs: list[ClientConfig],
+    host: HostEnv,
+    project: Path,
+    *,
+    yes: bool,
+    yes_project: bool,
+    timeout: float,
+    cache_dir: Path | None,
+    write_cache: bool,
+) -> dict[str, IntrospectionResult]:
+    # Lazy: the MCP SDK is imported only when servers are actually launched.
+    from proveflow.introspect.cache import ToolCache, default_cache_dir
+    from proveflow.introspect.runner import introspect_specs
+
+    root = cache_dir if cache_dir is not None else default_cache_dir(host)
+    cache = ToolCache(root, write=write_cache) if root is not None else None
+    specs = stdio_specs(build_profiles(configs, host, project))
+    return introspect_specs(
+        specs,
+        consent=_consent_prompt(yes, yes_project),
+        timeout=timeout,
+        cache=cache,
+        untrusted_dirs=[project],
+    )
+
+
 @app.command()
 def scan(
     project: ProjectOpt = None,
@@ -137,17 +215,41 @@ def scan(
         typer.Option("--sarif", help="Also write SARIF 2.1.0 to this path.", dir_okay=False),
     ] = None,
     limit: Annotated[int, typer.Option("--limit", min=0, help="Flows shown in the table.")] = 50,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Consent to launching your own (user/local/--servers) stdio servers. "
+            "Does NOT cover servers defined in the scanned project.",
+        ),
+    ] = False,
+    yes_project: Annotated[
+        bool,
+        typer.Option(
+            "--yes-project",
+            help="Also consent to launching servers defined in the scanned project's own "
+            "config files (repository-controlled code).",
+        ),
+    ] = False,
+    timeout: Annotated[
+        float, typer.Option("--timeout", min=1.0, help="Seconds per server before kill.")
+    ] = 20.0,
+    cache_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--cache-dir", help="Tool cache dir (default: per-user cache dir).", file_okay=False
+        ),
+    ] = None,
+    no_cache_write: Annotated[
+        bool, typer.Option("--no-cache-write", help="Compare with the cache but do not update it.")
+    ] = False,
 ) -> None:
-    """Static toxic-flow map of the discovered setup, no LLM."""
+    """Toxic-flow map of the discovered setup, no LLM.
+
+    By default each stdio server is launched (after per-server consent) and asked for
+    tools/list only - never tools/call. --no-launch never starts anything.
+    """
     console = _console()
-    if not no_launch:
-        console.print(
-            Text(
-                "scan: introspection (launching servers for tools/list) is not implemented yet "
-                "(Phase 1, checkpoint 1b). Use --no-launch for a config-only scan."
-            )
-        )
-        raise typer.Exit(code=NOT_IMPLEMENTED_EXIT_CODE)
     proj = _project(project)
     cfg_path = config if config is not None else proj / DEFAULT_CONFIG_NAME
     try:
@@ -159,8 +261,21 @@ def scan(
     except ConfigError as exc:
         console.print(Text(f"error: {exc}", style="red"))
         raise typer.Exit(code=USAGE_ERROR_EXIT_CODE) from None
-    configs = run_discovery(_host(), proj, servers)
-    report = build_scan(configs, _host(), proj, cfg)
+    host = _host()
+    configs = run_discovery(host, proj, servers)
+    introspection = None
+    if not no_launch:
+        introspection = _introspect(
+            configs,
+            host,
+            proj,
+            yes=yes,
+            yes_project=yes_project,
+            timeout=timeout,
+            cache_dir=cache_dir,
+            write_cache=not no_cache_write,
+        )
+    report = build_scan(configs, host, proj, cfg, introspection)
     if sarif is not None:
         write_sarif(report, sarif)
     if json_output:

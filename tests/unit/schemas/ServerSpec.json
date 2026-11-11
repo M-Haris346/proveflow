@@ -177,6 +177,14 @@
         }
       ],
       "default": null
+    },
+    "variables": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Variables",
+      "type": "array"
     }
   },
   "required": [

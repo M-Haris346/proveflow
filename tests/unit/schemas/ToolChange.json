@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "ToolChangeKind": {
+      "enum": [
+        "added",
+        "removed",
+        "description_changed",
+        "schema_changed"
+      ],
+      "title": "ToolChangeKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Difference vs the cached previous tools/list (rug-pull signal, never blocking).",
+  "properties": {
+    "kind": {
+      "$ref": "#/$defs/ToolChangeKind"
+    },
+    "tool": {
+      "title": "Tool",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "tool"
+  ],
+  "title": "ToolChange",
+  "type": "object"
+}

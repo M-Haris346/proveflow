@@ -25,6 +25,13 @@ _ROLE_SHORT = {
 }
 
 
+_BASELINE_TEXT = {
+    "first_seen": "first run (nothing to compare)",
+    "compared": "compared with cache",
+    "cache_disabled": "no cache (not compared)",
+}
+
+
 def command_line(spec: ServerSpec) -> str:
     if spec.command is not None:
         return " ".join([str(spec.command), *(str(a) for a in spec.args)])
@@ -92,19 +99,34 @@ def render_discover(report: DiscoverReport, console: Console) -> None:
 def render_scan(report: ScanReport, console: Console, limit: int) -> None:
     for prof in report.profiles:
         table = Table(title=f"Profile {prof.id}")
-        for col in ("server", "transport", "introspection", "roles (server-level guess)"):
+        for col in ("server", "transport", "introspection", "era", "tools", "baseline", "roles"):
             table.add_column(col)
         for srv in prof.servers:
             roles = sorted({_ROLE_SHORT[e.role] for t in srv.tools for e in t.roles})
+            server_level = any(t.name == "*" for t in srv.tools)
             table.add_row(
                 Text(srv.key),
                 Text(srv.spec.transport.value),
                 Text(srv.introspection.text),
-                Text(", ".join(roles) or "-"),
+                Text(srv.era or "-"),
+                Text("-" if server_level else str(len(srv.tools))),
+                Text(_BASELINE_TEXT.get(srv.baseline or "", "-")),
+                Text((", ".join(roles) or "-") + (" (server-level guess)" if server_level else "")),
             )
         console.print(table)
         for line in (*prof.shadowed, *prof.notes):
             console.print(Text(f"  note: {line}", style="dim"))
+        for srv in prof.servers:
+            if srv.detail:
+                console.print(Text(f"  {srv.key}: {srv.detail}", style="yellow"))
+            for change in srv.changes:
+                console.print(
+                    Text(
+                        f"  CHANGED since last scan: {srv.key}/{change.tool} "
+                        f"{change.kind.value} (possible rug-pull; review before trusting)",
+                        style="bold yellow",
+                    )
+                )
 
     flows = Table(title=f"Toxic flows ({len(report.flows)} total, all THEORETICAL)")
     for col in (
@@ -136,6 +158,19 @@ def render_scan(report: ScanReport, console: Console, limit: int) -> None:
         console.print(
             Text(f"... {len(report.flows) - limit} more flows (use --limit, --json or --sarif)")
         )
+    if report.findings:
+        notes = Table(title="Supply-chain notes (PF-UNPINNED)")
+        for col in ("server", "launcher", "package", "status", "reason"):
+            notes.add_column(col)
+        for fnd in report.findings:
+            notes.add_row(
+                Text(fnd.server),
+                Text(fnd.launcher),
+                Text(fnd.package or "-"),
+                Text(fnd.status),
+                Text(fnd.reason),
+            )
+        console.print(notes)
     for o in report.unused_overrides:
         console.print(Text(f"unused override: {o}", style="yellow"))
     for lim in report.limitations:

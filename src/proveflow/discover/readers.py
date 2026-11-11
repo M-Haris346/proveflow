@@ -14,6 +14,7 @@ from proveflow.core.client import ClientConfig, ClientKind, ConfigScope, ConfigS
 from proveflow.discover._common import parse_servers
 from proveflow.discover._io import load_json_config
 from proveflow.discover.hostenv import HostEnv, OsKind
+from proveflow.discover.variables import VarSyntax
 
 _URL = ("url",)
 _URL_WINDSURF = ("serverUrl", "url")
@@ -27,6 +28,7 @@ def _read_simple(
     key: str,
     url_keys: tuple[str, ...],
     project: str | None = None,
+    var_syntax: VarSyntax = VarSyntax.NONE_DOCUMENTED,
 ) -> ClientConfig:
     loaded = load_json_config(path)
     if loaded.status is not ConfigStatus.FOUND or loaded.data is None:
@@ -45,6 +47,7 @@ def _read_simple(
         source_file=path,
         scope=scope,
         project=project,
+        var_syntax=var_syntax,
     )
     detail = None if key in loaded.data else f"no {key!r} key in file"
     return ClientConfig(
@@ -118,6 +121,7 @@ def read_claude_code(host: HostEnv, project: Path) -> list[ClientConfig]:
             url_keys=_URL,
             source_file=user_path,
             scope=ConfigScope.USER,
+            var_syntax=VarSyntax.CLAUDE_CODE,
         )
         out.append(
             ClientConfig(
@@ -138,6 +142,7 @@ def read_claude_code(host: HostEnv, project: Path) -> list[ClientConfig]:
             key="mcpServers",
             url_keys=_URL,
             project=str(project),
+            var_syntax=VarSyntax.CLAUDE_CODE,
         )
     )
     return out
@@ -161,6 +166,7 @@ def _claude_code_local_scopes(projects: Any, user_path: Path) -> list[ClientConf
             source_file=user_path,
             scope=ConfigScope.LOCAL,
             project=key,
+            var_syntax=VarSyntax.CLAUDE_CODE,
         )
         out.append(
             ClientConfig(
@@ -186,6 +192,7 @@ def read_cursor(host: HostEnv, project: Path) -> list[ClientConfig]:
             host.home / ".cursor" / "mcp.json",
             key="mcpServers",
             url_keys=_URL,
+            var_syntax=VarSyntax.CURSOR,
         ),
         _read_simple(
             kind,
@@ -194,6 +201,7 @@ def read_cursor(host: HostEnv, project: Path) -> list[ClientConfig]:
             key="mcpServers",
             url_keys=_URL,
             project=str(project),
+            var_syntax=VarSyntax.CURSOR,
         ),
     ]
 
@@ -214,6 +222,7 @@ def read_vscode(host: HostEnv, project: Path) -> list[ClientConfig]:
             key="servers",
             url_keys=_URL,
             project=str(project),
+            var_syntax=VarSyntax.VSCODE,
         ),
         ClientConfig(
             kind=kind,
@@ -254,7 +263,14 @@ def read_windsurf(host: HostEnv) -> list[ClientConfig]:
         else:
             new_path = host.appdata / "devin" / "mcp_config.json"
             out.append(
-                _read_simple(kind, scope, new_path, key="mcpServers", url_keys=_URL_WINDSURF)
+                _read_simple(
+                    kind,
+                    scope,
+                    new_path,
+                    key="mcpServers",
+                    url_keys=_URL_WINDSURF,
+                    var_syntax=VarSyntax.WINDSURF,
+                )
             )
     else:
         base = host.xdg_config_home or (host.home / ".config")
@@ -265,6 +281,7 @@ def read_windsurf(host: HostEnv) -> list[ClientConfig]:
                 base / "devin" / "mcp_config.json",
                 key="mcpServers",
                 url_keys=_URL_WINDSURF,
+                var_syntax=VarSyntax.WINDSURF,
             )
         )
     for legacy in ("windsurf", "windsurf-next"):
@@ -275,6 +292,7 @@ def read_windsurf(host: HostEnv) -> list[ClientConfig]:
                 host.home / ".codeium" / legacy / "mcp_config.json",
                 key="mcpServers",
                 url_keys=_URL_WINDSURF,
+                var_syntax=VarSyntax.WINDSURF,
             )
         )
     return out

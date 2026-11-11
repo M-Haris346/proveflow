@@ -16,6 +16,7 @@ from typing import Any
 from proveflow.core.client import ConfigScope, ServerSpec, TransportKind
 from proveflow.core.redact import RedactedValue
 from proveflow.discover.redact_rules import redact_args, redact_text
+from proveflow.discover.variables import VarSyntax, find_variables
 
 KNOWN_KEYS = frozenset({"command", "args", "env", "headers", "type", "envFile"})
 # Present => the server needs credentials/OAuth proveflow will not handle in Phase 1.
@@ -34,7 +35,7 @@ class EntryError(ValueError):
     """A malformed server entry. The message names fields only, never values."""
 
 
-def _scalar_to_str(value: Any) -> str | None:
+def scalar_to_str(value: Any) -> str | None:
     if isinstance(value, str):
         return value
     if isinstance(value, bool | int | float):
@@ -49,14 +50,14 @@ def _redact_mapping(name: str, field: str, value: Any) -> dict[str, RedactedValu
         raise EntryError(f"server {name!r}: {field!r} must be an object")
     out: dict[str, RedactedValue] = {}
     for key in sorted(value):
-        text = _scalar_to_str(value[key])
+        text = scalar_to_str(value[key])
         if text is None:
             raise EntryError(f"server {name!r}: {field}.{key} must be a string")
         out[key] = RedactedValue.from_secret(text)
     return out
 
 
-def _parse_entry(
+def parse_entry(
     name: str,
     entry: Any,
     *,
@@ -64,6 +65,7 @@ def _parse_entry(
     source_file: Path,
     scope: ConfigScope,
     project: str | None,
+    var_syntax: VarSyntax = VarSyntax.NONE_DOCUMENTED,
 ) -> ServerSpec:
     if not isinstance(entry, dict):
         raise EntryError(f"server {name!r}: entry must be an object")
@@ -107,6 +109,12 @@ def _parse_entry(
     env = _redact_mapping(name, "env", entry.get("env"))
     headers = _redact_mapping(name, "headers", entry.get("headers"))
     known = KNOWN_KEYS | set(url_keys)
+    raw_values = [v for v in (command_raw, url_raw, env_file_raw) if v is not None] + list(args_raw)
+    for mapping_key in ("env", "headers"):
+        mapping = entry.get(mapping_key) or {}
+        raw_values += [t for t in (scalar_to_str(v) for v in mapping.values()) if t is not None]
+    variables = find_variables(raw_values, var_syntax)
+    del raw_values
     return ServerSpec(
         name=name,
         transport=transport,
@@ -122,6 +130,7 @@ def _parse_entry(
         source_file=source_file,
         scope=scope,
         project=project,
+        variables=variables,
     )
 
 
@@ -133,6 +142,7 @@ def parse_servers(
     source_file: Path,
     scope: ConfigScope,
     project: str | None = None,
+    var_syntax: VarSyntax = VarSyntax.NONE_DOCUMENTED,
 ) -> tuple[tuple[ServerSpec, ...], tuple[str, ...]]:
     """Return (servers, entry_errors). A bad entry never hides the good ones."""
     if mapping is None:
@@ -144,13 +154,14 @@ def parse_servers(
     for name in sorted(mapping):
         try:
             servers.append(
-                _parse_entry(
+                parse_entry(
                     name,
                     mapping[name],
                     url_keys=url_keys,
                     source_file=source_file,
                     scope=scope,
                     project=project,
+                    var_syntax=var_syntax,
                 )
             )
         except EntryError as exc:

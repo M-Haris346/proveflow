@@ -23,6 +23,7 @@ htmlcov/
 
 # proveflow runtime artifacts (never committed)
 runs/
+# (tool cache lives in the per-user cache dir, never here; see docs/PROCESS_KILL.md §3)
 .proveflow-cache/
 proveflow-fixes/
 

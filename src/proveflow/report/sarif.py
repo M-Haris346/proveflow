@@ -54,6 +54,49 @@ def _message(f: Flow) -> str:
     )
 
 
+EXTRA_RULES: tuple[tuple[str, str, str, str, str], ...] = (
+    (
+        "PF-TOOLCHANGE",
+        "tool_change",
+        "note",
+        "Tool description or schema changed since the last scan",
+        "A server's tools/list differs from the cached previous run (tool added, removed, or "
+        "description/schema changed). This can be a legitimate update or a rug-pull; review it.",
+    ),
+    (
+        "PF-UNPINNED",
+        "unpinned_launch",
+        "note",
+        "Server fetched at launch by npx/uvx/pipx without an exact version",
+        "The server package is resolved at every launch (no version, a dist-tag such as "
+        "@latest, or a range), so its code can change without any config change. Pin an exact "
+        "version. Static check of the config only; see docs/PINNING.md.",
+    ),
+)
+_EXTRA_INDEX = {rid: len(_RULES) + i for i, (rid, *_rest) in enumerate(EXTRA_RULES)}
+
+
+def spec_ident(srv: Any) -> str:
+    return f"{srv.spec.source_file}|{srv.spec.name}"
+
+
+def _extra_result(rule_id: str, text: str, source: Path, props: dict[str, Any]) -> dict[str, Any]:
+    rule = next(r for r in EXTRA_RULES if r[0] == rule_id)
+    locations = (
+        [{"physicalLocation": {"artifactLocation": {"uri": source.as_uri()}}}]
+        if source.is_absolute()
+        else []
+    )
+    return {
+        "ruleId": rule_id,
+        "ruleIndex": _EXTRA_INDEX[rule_id],
+        "level": rule[2],
+        "message": {"text": text},
+        "locations": locations,
+        "properties": props,
+    }
+
+
 def build_sarif(report: ScanReport) -> dict[str, Any]:
     files: dict[tuple[str, str], Path] = {}
     for prof in report.profiles:
@@ -91,6 +134,33 @@ def build_sarif(report: ScanReport) -> dict[str, Any]:
                 },
             }
         )
+    seen_change: set[tuple[str, str, str]] = set()
+    for prof in report.profiles:
+        for srv in prof.servers:
+            for change in srv.changes:
+                ident = (spec_ident(srv), change.tool, change.kind.value)
+                if ident in seen_change:
+                    continue
+                seen_change.add(ident)
+                results.append(
+                    _extra_result(
+                        "PF-TOOLCHANGE",
+                        f"tool {srv.key}/{change.tool}: {change.kind.value} since the last "
+                        "cached tools/list (possible rug-pull; review before trusting)",
+                        srv.spec.source_file,
+                        {"server": srv.key, "tool": change.tool, "change": change.kind.value},
+                    )
+                )
+    for fnd in report.findings:
+        results.append(
+            _extra_result(
+                fnd.rule_id,
+                f"server {fnd.server}: {fnd.launcher} package "
+                f"{fnd.package or '(not determined)'} is {fnd.status}: {fnd.reason}",
+                fnd.source_file,
+                {"server": fnd.server, "launcher": fnd.launcher, "status": fnd.status},
+            )
+        )
     rules = [
         {
             "id": rid,
@@ -100,6 +170,15 @@ def build_sarif(report: ScanReport) -> dict[str, Any]:
             "defaultConfiguration": {"level": level},
         }
         for rid, cls, level, short, full in _RULES
+    ] + [
+        {
+            "id": rid,
+            "name": name,
+            "shortDescription": {"text": short},
+            "fullDescription": {"text": full},
+            "defaultConfiguration": {"level": level},
+        }
+        for rid, name, level, short, full in EXTRA_RULES
     ]
     return {
         "$schema": SARIF_SCHEMA_URI,
@@ -114,6 +193,24 @@ def build_sarif(report: ScanReport) -> dict[str, Any]:
                     }
                 },
                 "results": results,
+                "properties": {
+                    "proveflowMode": report.mode,
+                    # Per server: was a tools/list baseline available? Makes an empty
+                    # PF-TOOLCHANGE list unambiguous (first run vs compared vs no cache).
+                    "proveflowServerBaselines": sorted(
+                        (
+                            {
+                                "profile": prof.id,
+                                "server": srv.key,
+                                "introspection": srv.introspection.value,
+                                "baseline": srv.baseline,
+                            }
+                            for prof in report.profiles
+                            for srv in prof.servers
+                        ),
+                        key=lambda d: (str(d["profile"]), str(d["server"])),
+                    ),
+                },
             }
         ],
     }

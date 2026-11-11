@@ -61,6 +61,9 @@ class ServerSpec(FrozenModel):
     source_file: Path
     scope: ConfigScope = ConfigScope.USER
     project: str | None = None
+    # Variable NAMES referenced in launch values (never defaults/values); see
+    # discover/variables.py. Non-empty => proveflow does not launch the server.
+    variables: tuple[str, ...] = ()
 
 
 class ClientConfig(FrozenModel):

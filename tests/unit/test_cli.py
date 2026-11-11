@@ -58,12 +58,6 @@ def test_tracebacks_never_show_locals() -> None:
     assert app.pretty_exceptions_show_locals is False
 
 
-def test_scan_without_no_launch_is_honest_stub_in_1a() -> None:
-    result = runner.invoke(app, ["scan"])
-    assert result.exit_code == NOT_IMPLEMENTED_EXIT_CODE
-    assert "checkpoint 1b" in plain(result.output)
-
-
 @pytest.fixture
 def setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
     s = full_setup(tmp_path)
@@ -132,3 +126,28 @@ def test_scan_reads_project_toml_by_default(setup) -> None:  # type: ignore[no-u
     result = runner.invoke(app, ["scan", "--no-launch", "--json", "--project", str(setup.project)])
     assert result.exit_code == 0
     assert json.loads(result.stdout)["unused_overrides"] == ["nope/* (no match)"]
+
+
+def test_scan_default_non_interactive_launches_nothing(
+    setup, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """No --yes and no TTY: every stdio server is reported consent_required, none spawned."""
+    from proveflow.introspect import transport
+
+    async def refuse(*_a: object, **_k: object) -> None:
+        raise AssertionError("must not spawn without consent")
+
+    monkeypatch.setattr(transport, "spawn", refuse)
+    result = runner.invoke(
+        app, ["scan", "--json", "--project", str(setup.project), "--cache-dir", str(tmp_path / "c")]
+    )
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["mode"] == "introspect"
+    statuses = {
+        srv["introspection"]
+        for prof in data["profiles"]
+        for srv in prof["servers"]
+        if srv["spec"]["transport"] == "stdio"
+    }
+    assert statuses == {"consent_required"}

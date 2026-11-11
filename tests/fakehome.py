@@ -79,3 +79,47 @@ def full_setup(tmp_path: Path, os_kind: OsKind = OsKind.WINDOWS) -> FakeSetup:
     claude_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
     files.append(claude_json)
     return FakeSetup(host=host, project=project, files=tuple(files))
+
+
+FAKE_SERVER = Path(__file__).parent / "fixtures" / "fake_mcp_server.py"
+
+
+def fake_servers_file(
+    tmp_path: Path,
+    modes: dict[str, str],
+    env: dict[str, str] | None = None,
+    name: str = "servers.json",
+) -> Path:
+    """An explicit ``--servers`` file whose stdio servers run the fake MCP server.
+
+    Each server logs received methods to ``tmp_path/<server>.log``; sleep mode writes
+    child/grandchild pids to ``tmp_path/<server>.pids``.
+    """
+    import sys
+
+    servers = {
+        server: {
+            "command": sys.executable,
+            "args": [
+                str(FAKE_SERVER),
+                "--mode",
+                mode,
+                "--log",
+                str(tmp_path / f"{server}.log"),
+                "--pids",
+                str(tmp_path / f"{server}.pids"),
+                "--desc-file",
+                str(tmp_path / f"{server}.desc"),
+            ],
+            "env": dict(env or {}),
+        }
+        for server, mode in modes.items()
+    }
+    path = tmp_path / name
+    path.write_text(json.dumps({"mcpServers": servers}, indent=2), encoding="utf-8")
+    return path
+
+
+def logged_methods(tmp_path: Path, server: str) -> list[str] | None:
+    log = tmp_path / f"{server}.log"
+    return log.read_text(encoding="utf-8").split() if log.exists() else None

@@ -1,0 +1,25 @@
+{
+  "additionalProperties": false,
+  "description": "One tool as returned by tools/list, already scrubbed of launch secrets.",
+  "properties": {
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "input_schema": {
+      "additionalProperties": true,
+      "title": "Input Schema",
+      "type": "object"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "RawTool",
+  "type": "object"
+}
