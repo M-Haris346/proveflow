@@ -13,12 +13,18 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 ## Status
 
-> **Phase 0 (Foundation) done — nothing usable yet.**
+> **Phase 1 (Find), checkpoint 1a done — config-only scan works; introspection not built yet.**
 >
-> What exists: tooling, CLI skeleton with honest stubs, typed core models with tests
-> [impl][tested], and verified external-fact docs (CLIENT_CONFIGS, DATASETS, provider table).
-> No command does anything beyond printing an honest "not implemented yet" message.
-> No numbers, no results, no releases. Everything else in ARCHITECTURE.md is [planned].
+> - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
+>   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
+>   Secrets are redacted at read time (docs/REDACTION.md). VS Code user-profile config is
+>   reported *unsupported* (path not verified).
+> - `proveflow scan --no-launch` [impl][tested]: static flow map from server names/commands only
+>   (low confidence, no server is started), with `--json` and `--sarif` (SARIF 2.1.0, validated
+>   against the official OASIS schemas in tests). Every flow is THEORETICAL.
+> - `proveflow scan` without `--no-launch` (tools/list introspection) is [planned], checkpoint 1b.
+> - Role-classifier precision/recall: **not measured yet** (checkpoint 1b). No numbers exist.
+> - Everything from Phase 2 on is [planned]. No releases.
 
 This repo is currently local-only (no GitHub remote). The CI workflow in
 `.github/workflows/ci.yml` is written but has **never run**; the identical checks are run

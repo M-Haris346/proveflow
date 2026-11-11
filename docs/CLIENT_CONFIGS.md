@@ -205,3 +205,24 @@ Remote servers use `serverUrl` (the docs mention `url` as an alternative). Env i
 - Secrets appear in `env`, `headers`, and sometimes inside `args` — all three must be redacted.
 - Open items marked [research] above: Cursor per-tool permission syntax; VS Code user-profile
   mcp.json exact per-OS path.
+
+## Phase 1a research notes (2026-11-10)
+
+- **VS Code** — <https://code.visualstudio.com/docs/copilot/reference/mcp-configuration>
+  (accessed 2026-11-10): `servers` top-level key confirmed; `type` values `stdio`, `http`, `sse`
+  ("first tries the HTTP Stream transport and falls back to SSE"); `envFile` "is supported in the
+  VS Code format, not in portable `.mcp.json`"; `inputs` array for sensitive values. The page
+  **does not say** whether comments (JSONC) are allowed, so the reader parses strict JSON and a
+  file with comments is reported `parse_error`. It gives **no per-OS user-profile path**, so the
+  user config stays [research] and is reported `unsupported`. The experimental workspace
+  `.mcp.json` format is not verified either and is reported `unsupported`.
+- **Claude Code `projects` keys** — the key format in `~/.claude.json` (slash direction, case on
+  Windows) is not documented. proveflow normalizes it (slashes unified, trailing slash dropped,
+  case-folded on Windows) before matching `--project`. On Haris's machine the observed key
+  used forward slashes and a lowercase drive letter (`d:/...`). [research: interpretation]
+- **`~`** in all docs is read as `Path.home()` (USERPROFILE on Windows). [interpretation]
+- **Precedence** is documented only for Claude Code. For Cursor (user vs project) and Windsurf
+  (new vs legacy file) it is not, so proveflow keeps all entries (Cursor) or makes one profile
+  per file (Windsurf) instead of guessing. [research]
+- **Env interpolation** (`${env:VAR}` Windsurf, `${input:...}` VS Code) is not resolved in 1a;
+  values are fully redacted either way.
