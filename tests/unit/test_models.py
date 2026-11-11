@@ -12,7 +12,10 @@ from proveflow.core import (
     ExfilGoal,
     Flow,
     FlowClass,
+    Granularity,
     RoleEvidence,
+    SinkSeverity,
+    ToolRef,
     Verdict,
 )
 
@@ -63,21 +66,54 @@ def test_invalid_canary_rejected() -> None:
         )
 
 
+FLOW_COMMON = {
+    "id": "F",
+    "profile": "p",
+    "cross_server": True,
+    "sink_severity": SinkSeverity.NETWORK_EGRESS,
+    "confidence": 0.5,
+    "granularity": Granularity.TOOL,
+    "sink": ToolRef(server="b", tool="send"),
+}
+
+
 def test_exfil_flow_requires_source_and_private() -> None:
     with pytest.raises(ValidationError):
-        Flow(id="F", flow_class=FlowClass.EXFIL, sink_tool="send", cross_server=True)
+        Flow(flow_class=FlowClass.EXFIL, **FLOW_COMMON)  # type: ignore[arg-type]
+
+
+def test_action_flow_rejects_private() -> None:
+    with pytest.raises(ValidationError):
+        Flow(
+            flow_class=FlowClass.ACTION,
+            source=ToolRef(server="a", tool="fetch"),
+            private=ToolRef(server="a", tool="db"),
+            **FLOW_COMMON,  # type: ignore[arg-type]
+        )
 
 
 def test_leak_flow_rejects_source() -> None:
     with pytest.raises(ValidationError):
         Flow(
-            id="F",
             flow_class=FlowClass.LEAK,
-            source_tool="fetch",
-            private_tool="db",
-            sink_tool="send",
-            cross_server=False,
+            source=ToolRef(server="a", tool="fetch"),
+            private=ToolRef(server="a", tool="db"),
+            **FLOW_COMMON,  # type: ignore[arg-type]
         )
+
+
+def test_confidence_bounds() -> None:
+    with pytest.raises(ValidationError):
+        Flow(
+            flow_class=FlowClass.LEAK,
+            private=ToolRef(server="a", tool="db"),
+            **{**FLOW_COMMON, "confidence": 1.5},  # type: ignore[arg-type]
+        )
+
+
+def test_tool_ref_label() -> None:
+    assert ToolRef(server="gh").label == "gh/*"
+    assert ToolRef(server="gh", tool="x").label == "gh/x"
 
 
 def test_negative_tokens_rejected() -> None:

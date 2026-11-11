@@ -1,0 +1,35 @@
+{
+  "numStartups": 12,
+  "someUnrelatedSetting": "PLANTEDunrelatedValue01",
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.example.com/mcp/?access_token=PLANTEDccUserQuery001",
+      "headers": { "Authorization": "Bearer PLANTEDccUserHeader01" }
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "slack-mcp", "-e", "SLACK_BOT_TOKEN=PLANTEDccEnvStyle0001"],
+      "env": { "SLACK_TEAM_ID": "PLANTEDccUserEnv00001" }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://app:PLANTEDccUserInfo0001@db.local/app"]
+    }
+  },
+  "projects": {
+    "D:/work/demo": {
+      "allowedTools": [],
+      "mcpServers": {
+        "fetch": { "command": "uvx", "args": ["mcp-server-fetch"] },
+        "slack": { "command": "node", "args": ["local-slack.js"], "env": { "X": "PLANTEDccLocalEnv0001" } }
+      }
+    },
+    "D:/work/other": {
+      "mcpServers": {
+        "linear": { "type": "sse", "url": "https://mcp.linear.example/sse", "oauth": { "clientId": "PLANTEDccOauthValue01" } }
+      }
+    },
+    "D:/work/empty": { "mcpServers": {} }
+  }
+}

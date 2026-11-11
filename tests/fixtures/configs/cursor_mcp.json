@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "notion": {
+      "command": "python",
+      "args": ["notion-mcp.py"],
+      "env": { "API_KEY": "PLANTEDcursorEnv00001" },
+      "envFile": ".env"
+    },
+    "remote-example": {
+      "url": "http://localhost:3000/mcp?token=PLANTEDcursorQuery001",
+      "headers": { "API_KEY": "PLANTEDcursorHeader01" }
+    }
+  }
+}

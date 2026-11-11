@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Users\\example\\Desktop"]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search", "--api-key=PLANTEDdesktopArgEq01"],
+      "env": { "BRAVE_API_KEY": "PLANTEDdesktopEnv0001" }
+    },
+    "gmail": {
+      "command": "uvx",
+      "args": ["gmail-mcp", "--token", "PLANTEDdesktopNext001", "serve", "PLANTEDx9Kq2mZ7vR4tY8wB3nL6pD1sF5hJ0"],
+      "env": { "GMAIL_CLIENT_SECRET": "PLANTEDdesktopEnv0002", "DEBUG": "1" }
+    }
+  }
+}

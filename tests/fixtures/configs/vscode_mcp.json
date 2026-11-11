@@ -1,0 +1,7 @@
+{
+  "inputs": [{ "type": "promptString", "id": "api-key", "password": true }],
+  "servers": {
+    "playwright": { "command": "npx", "args": ["-y", "@playwright/mcp@latest"], "env": {} },
+    "context7": { "type": "http", "url": "https://mcp.context7.example/mcp", "headers": { "CONTEXT7_KEY": "PLANTEDvscodeHeader01" } }
+  }
+}

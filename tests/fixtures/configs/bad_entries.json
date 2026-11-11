@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "good": { "command": "npx", "args": ["-y", "pkg"] },
+    "bad-args": { "command": "npx", "args": "PLANTEDbadEntryArgs01" },
+    "bad-env": { "command": "npx", "env": { "K": { "nested": "PLANTEDbadEntryEnv001" } } },
+    "no-command": { "env": { "K": "PLANTEDbadEntryEnv002" } },
+    "not-object": "PLANTEDbadEntryStr001"
+  }
+}
