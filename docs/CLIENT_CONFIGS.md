@@ -218,11 +218,28 @@ Remote servers use `serverUrl` (the docs mention `url` as an alternative). Env i
   `.mcp.json` format is not verified either and is reported `unsupported`.
 - **Claude Code `projects` keys** — the key format in `~/.claude.json` (slash direction, case on
   Windows) is not documented. proveflow normalizes it (slashes unified, trailing slash dropped,
-  case-folded on Windows) before matching `--project`. On Haris's machine the observed key
-  used forward slashes and a lowercase drive letter (`d:/...`). [research: interpretation]
+  case-folded on Windows) before matching `--project`. [research: interpretation]
 - **`~`** in all docs is read as `Path.home()` (USERPROFILE on Windows). [interpretation]
 - **Precedence** is documented only for Claude Code. For Cursor (user vs project) and Windsurf
   (new vs legacy file) it is not, so proveflow keeps all entries (Cursor) or makes one profile
   per file (Windsurf) instead of guessing. [research]
-- **Env interpolation** (`${env:VAR}` Windsurf, `${input:...}` VS Code) is not resolved in 1a;
-  values are fully redacted either way.
+- **Variables** (accessed 2026-11-11; code: `src/proveflow/discover/variables.py`). proveflow
+  never expands them, and a server whose launch values reference any variable is **not
+  launched** (`unresolved_variables`):
+  - Claude Code (<https://code.claude.com/docs/en/mcp>): `${VAR}` and `${VAR:-default}` in
+    `command`, `args`, `env`, `url`, `headers`. When unset without a default, "the config still
+    loads ... and uses the unexpanded `${VAR}` text as-is".
+  - Cursor (<https://cursor.com/docs/context/mcp>): `${env:NAME}`, `${userHome}`,
+    `${workspaceFolder}`, `${workspaceFolderBasename}`, `${pathSeparator}`, `${/}` in `command`,
+    `args`, `env`, `url`, `headers`.
+  - VS Code (<https://code.visualstudio.com/docs/copilot/reference/mcp-configuration>):
+    `${input:...}` (prompted on first start), `${env:...}`, predefined variables such as
+    `${workspaceFolder}`/`${userHome}`, and `${NAME}` / `${NAME:-default}` in portable files.
+    Unresolvable variables: not stated.
+  - Windsurf (<https://docs.devin.ai/windsurf/plugins/cascade/mcp>): `${env:VAR}` in `command`,
+    `args`, `env`, `serverUrl`, `url`, `headers`.
+  - Claude Desktop (<https://modelcontextprotocol.io/quickstart/user>): no expansion is
+    documented. Any `${...}` is reported as `<undocumented ${...} syntax>` and is not launched
+    (fail safe), as for `--servers` files.
+- **cwd for stdio servers**: only VS Code documents one (the workspace folder). See
+  docs/PROCESS_KILL.md §4 for proveflow's choice (an empty temp dir) and the gap.

@@ -26,3 +26,22 @@ implementation time and recorded here.
   before writing its loader; record the per-task decision in this table. [research]
 - LLMail-Inject: dataset is split across phases/scenarios; choose the stratified sample and
   revision pin in Phase 6. [research]
+
+## Role-classifier eval set (Phase 1b): tool metadata, not attack data [planned]
+
+This is our own labeled set: tool names, descriptions and input schemas taken from `tools/list`
+of pinned public MCP servers (or, for pg-mcp-guard, from its source). It is **not** an attack
+corpus. Haris approved committing it on 2026-11-11, only from sources with a confirmed
+permissive license and with attribution. Server table: docs/eval/SERVERS.md.
+
+| Source | License (as recorded) | Attribution |
+|---|---|---|
+| modelcontextprotocol/servers reference servers (fetch, filesystem, git, memory, sequential-thinking, time) | **MIT OR Apache-2.0** (repo LICENSE @ `6b36e3c`: the project is moving from MIT to Apache-2.0; contributions are under one or the other, both permissive). PyPI packages (fetch, git, time) state `License: MIT` | "Model Context Protocol servers, Copyright (c) 2024 Anthropic, PBC, and contributors, <https://github.com/modelcontextprotocol/servers>" |
+| microsoft/playwright-mcp (`@playwright/mcp@0.0.83`) | Apache-2.0 (LICENSE in tarball) | "Playwright MCP, Microsoft Corporation, <https://github.com/microsoft/playwright-mcp>" |
+| ChromeDevTools/chrome-devtools-mcp (`chrome-devtools-mcp@1.12.0`) | Apache-2.0 (LICENSE in tarball) | "Chrome DevTools MCP, Google LLC, <https://github.com/ChromeDevTools/chrome-devtools-mcp>" |
+| pg-mcp-guard @ `b7a6dce` (Haris's own) | MIT (repo LICENSE) | "pg-mcp-guard, Copyright (c) 2026 Muhammad Haris" |
+
+The full LICENSE text of each source goes into `data/eval/roles/NOTICE.md` when the set is
+collected (step 4d). Sources added from the MCP Registry (docs/eval/SERVERS.md §Registry) get a
+row here only after their license is verified from the package itself.
+
