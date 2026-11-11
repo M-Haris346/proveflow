@@ -29,12 +29,20 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class _CurrentStderrHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """Always writes to the *current* ``sys.stderr`` (survives stream swaps in tests)."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.stream = sys.stderr
+        super().emit(record)
+
+
 def configure(level: str = "WARNING") -> None:
     """Configure the root ``proveflow`` logger to emit JSON lines on stderr."""
     logger = logging.getLogger("proveflow")
     logger.setLevel(level.upper())
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stderr)
+        handler = _CurrentStderrHandler(sys.stderr)
         handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
     logger.propagate = False
