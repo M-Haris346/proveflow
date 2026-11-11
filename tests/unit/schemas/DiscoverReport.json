@@ -1,0 +1,320 @@
+{
+  "$defs": {
+    "ClientConfig": {
+      "additionalProperties": false,
+      "description": "One discovered MCP client config location (one file, or one scope inside a file).",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "entry_errors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Entry Errors",
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/ClientKind"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Path"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project"
+        },
+        "scope": {
+          "$ref": "#/$defs/ConfigScope"
+        },
+        "servers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ServerSpec"
+          },
+          "title": "Servers",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/ConfigStatus",
+          "default": "found"
+        }
+      },
+      "required": [
+        "kind",
+        "scope",
+        "path"
+      ],
+      "title": "ClientConfig",
+      "type": "object"
+    },
+    "ClientKind": {
+      "enum": [
+        "claude_desktop",
+        "claude_code",
+        "cursor",
+        "vscode",
+        "windsurf",
+        "explicit_file"
+      ],
+      "title": "ClientKind",
+      "type": "string"
+    },
+    "ConfigScope": {
+      "enum": [
+        "user",
+        "project",
+        "local",
+        "explicit"
+      ],
+      "title": "ConfigScope",
+      "type": "string"
+    },
+    "ConfigStatus": {
+      "enum": [
+        "found",
+        "not_found",
+        "parse_error",
+        "unreadable",
+        "unsupported"
+      ],
+      "title": "ConfigStatus",
+      "type": "string"
+    },
+    "RedactedText": {
+      "additionalProperties": false,
+      "description": "Text whose secret segments are stored only as ``RedactedValue``.",
+      "properties": {
+        "parts": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/RedactedValue"
+              }
+            ]
+          },
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "title": "RedactedText",
+      "type": "object"
+    },
+    "RedactedValue": {
+      "additionalProperties": false,
+      "description": "Irreversible fingerprint of a secret: sha256 prefix + length, nothing else.",
+      "properties": {
+        "length": {
+          "minimum": 0,
+          "title": "Length",
+          "type": "integer"
+        },
+        "sha256_prefix": {
+          "pattern": "^[0-9a-f]{12}$",
+          "title": "Sha256 Prefix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256_prefix",
+        "length"
+      ],
+      "title": "RedactedValue",
+      "type": "object"
+    },
+    "ServerSpec": {
+      "additionalProperties": false,
+      "description": "One configured MCP server. Every env/header value is redacted at read time;\nargs, url, command, and envFile path are redacted by pattern (docs/REDACTION.md).",
+      "properties": {
+        "args": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RedactedText"
+          },
+          "title": "Args",
+          "type": "array"
+        },
+        "auth_hint": {
+          "default": false,
+          "title": "Auth Hint",
+          "type": "boolean"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "declared_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Declared Type"
+        },
+        "env": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RedactedValue"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "env_file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "headers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RedactedValue"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "ignored_keys": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Ignored Keys",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project"
+        },
+        "scope": {
+          "$ref": "#/$defs/ConfigScope",
+          "default": "user"
+        },
+        "source_file": {
+          "format": "path",
+          "title": "Source File",
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportKind"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "transport",
+        "source_file"
+      ],
+      "title": "ServerSpec",
+      "type": "object"
+    },
+    "TransportKind": {
+      "enum": [
+        "stdio",
+        "http",
+        "sse",
+        "ws",
+        "unknown"
+      ],
+      "title": "TransportKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "configs": {
+      "items": {
+        "$ref": "#/$defs/ClientConfig"
+      },
+      "title": "Configs",
+      "type": "array"
+    },
+    "project": {
+      "title": "Project",
+      "type": "string"
+    },
+    "proveflow_version": {
+      "title": "Proveflow Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "proveflow_version",
+    "project",
+    "configs"
+  ],
+  "title": "DiscoverReport",
+  "type": "object"
+}

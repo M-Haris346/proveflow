@@ -1,15 +1,39 @@
 {
   "$defs": {
+    "Granularity": {
+      "description": "``server``: inferred from server name/command only (tools unknown) \u2014 low confidence.",
+      "enum": [
+        "tool",
+        "server"
+      ],
+      "title": "Granularity",
+      "type": "string"
+    },
     "RoleEvidence": {
       "additionalProperties": false,
       "description": "Why a tool was assigned a role; provenance is always recorded.",
       "properties": {
+        "granularity": {
+          "$ref": "#/$defs/Granularity",
+          "default": "tool"
+        },
         "reason": {
           "title": "Reason",
           "type": "string"
         },
         "role": {
           "$ref": "#/$defs/ToolRole"
+        },
+        "sink_severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SinkSeverity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "source": {
           "$ref": "#/$defs/RoleSource"
@@ -39,6 +63,16 @@
       "title": "RoleSource",
       "type": "string"
     },
+    "SinkSeverity": {
+      "description": "Ordered worst-first (ARCHITECTURE \u00a75.3: external network > write > local).",
+      "enum": [
+        "network_egress",
+        "remote_write",
+        "local_write"
+      ],
+      "title": "SinkSeverity",
+      "type": "string"
+    },
     "ToolRole": {
       "enum": [
         "untrusted_source",
@@ -50,7 +84,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "One tool exposed by a server, with its classified roles.",
+  "description": "One tool exposed by a server, with its classified roles.\n\n``name == \"*\"`` with server-granularity evidence stands for \"all tools of this\nserver\" when tools are unknown (``scan --no-launch``).",
   "properties": {
     "description": {
       "default": "",

@@ -8,11 +8,72 @@
       ],
       "title": "FlowClass",
       "type": "string"
+    },
+    "FlowVerdictKind": {
+      "enum": [
+        "CONFIRMED",
+        "NOT_REPRODUCED",
+        "THEORETICAL"
+      ],
+      "title": "FlowVerdictKind",
+      "type": "string"
+    },
+    "Granularity": {
+      "description": "``server``: inferred from server name/command only (tools unknown) \u2014 low confidence.",
+      "enum": [
+        "tool",
+        "server"
+      ],
+      "title": "Granularity",
+      "type": "string"
+    },
+    "SinkSeverity": {
+      "description": "Ordered worst-first (ARCHITECTURE \u00a75.3: external network > write > local).",
+      "enum": [
+        "network_egress",
+        "remote_write",
+        "local_write"
+      ],
+      "title": "SinkSeverity",
+      "type": "string"
+    },
+    "ToolRef": {
+      "additionalProperties": false,
+      "description": "A tool on a server inside one agent profile. ``tool is None``: server-level.",
+      "properties": {
+        "server": {
+          "title": "Server",
+          "type": "string"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        }
+      },
+      "required": [
+        "server"
+      ],
+      "title": "ToolRef",
+      "type": "object"
     }
   },
   "additionalProperties": false,
-  "description": "Ordered path source \u2192 (private) \u2192 sink, possibly across servers.",
+  "description": "Ordered path source \u2192 (private) \u2192 sink inside one agent profile.",
   "properties": {
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
     "cross_server": {
       "title": "Cross Server",
       "type": "boolean"
@@ -20,44 +81,59 @@
     "flow_class": {
       "$ref": "#/$defs/FlowClass"
     },
+    "granularity": {
+      "$ref": "#/$defs/Granularity"
+    },
     "id": {
       "title": "Id",
       "type": "string"
     },
-    "private_tool": {
+    "private": {
       "anyOf": [
         {
-          "type": "string"
+          "$ref": "#/$defs/ToolRef"
         },
         {
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Private Tool"
+      "default": null
     },
-    "sink_tool": {
-      "title": "Sink Tool",
+    "profile": {
+      "title": "Profile",
       "type": "string"
     },
-    "source_tool": {
+    "sink": {
+      "$ref": "#/$defs/ToolRef"
+    },
+    "sink_severity": {
+      "$ref": "#/$defs/SinkSeverity"
+    },
+    "source": {
       "anyOf": [
         {
-          "type": "string"
+          "$ref": "#/$defs/ToolRef"
         },
         {
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Source Tool"
+      "default": null
+    },
+    "verdict": {
+      "$ref": "#/$defs/FlowVerdictKind",
+      "default": "THEORETICAL"
     }
   },
   "required": [
     "id",
+    "profile",
     "flow_class",
-    "sink_tool",
-    "cross_server"
+    "sink",
+    "cross_server",
+    "sink_severity",
+    "confidence",
+    "granularity"
   ],
   "title": "Flow",
   "type": "object"

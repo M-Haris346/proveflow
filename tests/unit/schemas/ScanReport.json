@@ -1,0 +1,584 @@
+{
+  "$defs": {
+    "ClientKind": {
+      "enum": [
+        "claude_desktop",
+        "claude_code",
+        "cursor",
+        "vscode",
+        "windsurf",
+        "explicit_file"
+      ],
+      "title": "ClientKind",
+      "type": "string"
+    },
+    "ConfigScope": {
+      "enum": [
+        "user",
+        "project",
+        "local",
+        "explicit"
+      ],
+      "title": "ConfigScope",
+      "type": "string"
+    },
+    "Flow": {
+      "additionalProperties": false,
+      "description": "Ordered path source \u2192 (private) \u2192 sink inside one agent profile.",
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "cross_server": {
+          "title": "Cross Server",
+          "type": "boolean"
+        },
+        "flow_class": {
+          "$ref": "#/$defs/FlowClass"
+        },
+        "granularity": {
+          "$ref": "#/$defs/Granularity"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "private": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "profile": {
+          "title": "Profile",
+          "type": "string"
+        },
+        "sink": {
+          "$ref": "#/$defs/ToolRef"
+        },
+        "sink_severity": {
+          "$ref": "#/$defs/SinkSeverity"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "verdict": {
+          "$ref": "#/$defs/FlowVerdictKind",
+          "default": "THEORETICAL"
+        }
+      },
+      "required": [
+        "id",
+        "profile",
+        "flow_class",
+        "sink",
+        "cross_server",
+        "sink_severity",
+        "confidence",
+        "granularity"
+      ],
+      "title": "Flow",
+      "type": "object"
+    },
+    "FlowClass": {
+      "enum": [
+        "exfil",
+        "action",
+        "leak"
+      ],
+      "title": "FlowClass",
+      "type": "string"
+    },
+    "FlowVerdictKind": {
+      "enum": [
+        "CONFIRMED",
+        "NOT_REPRODUCED",
+        "THEORETICAL"
+      ],
+      "title": "FlowVerdictKind",
+      "type": "string"
+    },
+    "Granularity": {
+      "description": "``server``: inferred from server name/command only (tools unknown) \u2014 low confidence.",
+      "enum": [
+        "tool",
+        "server"
+      ],
+      "title": "Granularity",
+      "type": "string"
+    },
+    "IntrospectionStatus": {
+      "enum": [
+        "skipped_no_launch",
+        "remote_not_introspected",
+        "auth_required"
+      ],
+      "title": "IntrospectionStatus",
+      "type": "string"
+    },
+    "ProfileReport": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "$ref": "#/$defs/ClientKind"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "notes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "servers": {
+          "items": {
+            "$ref": "#/$defs/ServerReport"
+          },
+          "title": "Servers",
+          "type": "array"
+        },
+        "shadowed": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Shadowed",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "client",
+        "servers"
+      ],
+      "title": "ProfileReport",
+      "type": "object"
+    },
+    "RedactedText": {
+      "additionalProperties": false,
+      "description": "Text whose secret segments are stored only as ``RedactedValue``.",
+      "properties": {
+        "parts": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/RedactedValue"
+              }
+            ]
+          },
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "title": "RedactedText",
+      "type": "object"
+    },
+    "RedactedValue": {
+      "additionalProperties": false,
+      "description": "Irreversible fingerprint of a secret: sha256 prefix + length, nothing else.",
+      "properties": {
+        "length": {
+          "minimum": 0,
+          "title": "Length",
+          "type": "integer"
+        },
+        "sha256_prefix": {
+          "pattern": "^[0-9a-f]{12}$",
+          "title": "Sha256 Prefix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256_prefix",
+        "length"
+      ],
+      "title": "RedactedValue",
+      "type": "object"
+    },
+    "RoleEvidence": {
+      "additionalProperties": false,
+      "description": "Why a tool was assigned a role; provenance is always recorded.",
+      "properties": {
+        "granularity": {
+          "$ref": "#/$defs/Granularity",
+          "default": "tool"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/ToolRole"
+        },
+        "sink_severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SinkSeverity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "$ref": "#/$defs/RoleSource"
+        },
+        "weight": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "role",
+        "source",
+        "reason",
+        "weight"
+      ],
+      "title": "RoleEvidence",
+      "type": "object"
+    },
+    "RoleSource": {
+      "enum": [
+        "heuristic",
+        "override",
+        "llm_confirmed"
+      ],
+      "title": "RoleSource",
+      "type": "string"
+    },
+    "ServerReport": {
+      "additionalProperties": false,
+      "properties": {
+        "introspection": {
+          "$ref": "#/$defs/IntrospectionStatus"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "spec": {
+          "$ref": "#/$defs/ServerSpec"
+        },
+        "tools": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolSpec"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "spec",
+        "introspection"
+      ],
+      "title": "ServerReport",
+      "type": "object"
+    },
+    "ServerSpec": {
+      "additionalProperties": false,
+      "description": "One configured MCP server. Every env/header value is redacted at read time;\nargs, url, command, and envFile path are redacted by pattern (docs/REDACTION.md).",
+      "properties": {
+        "args": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RedactedText"
+          },
+          "title": "Args",
+          "type": "array"
+        },
+        "auth_hint": {
+          "default": false,
+          "title": "Auth Hint",
+          "type": "boolean"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "declared_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Declared Type"
+        },
+        "env": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RedactedValue"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "env_file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "headers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RedactedValue"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "ignored_keys": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Ignored Keys",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project"
+        },
+        "scope": {
+          "$ref": "#/$defs/ConfigScope",
+          "default": "user"
+        },
+        "source_file": {
+          "format": "path",
+          "title": "Source File",
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportKind"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "transport",
+        "source_file"
+      ],
+      "title": "ServerSpec",
+      "type": "object"
+    },
+    "SinkSeverity": {
+      "description": "Ordered worst-first (ARCHITECTURE \u00a75.3: external network > write > local).",
+      "enum": [
+        "network_egress",
+        "remote_write",
+        "local_write"
+      ],
+      "title": "SinkSeverity",
+      "type": "string"
+    },
+    "ToolRef": {
+      "additionalProperties": false,
+      "description": "A tool on a server inside one agent profile. ``tool is None``: server-level.",
+      "properties": {
+        "server": {
+          "title": "Server",
+          "type": "string"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        }
+      },
+      "required": [
+        "server"
+      ],
+      "title": "ToolRef",
+      "type": "object"
+    },
+    "ToolRole": {
+      "enum": [
+        "untrusted_source",
+        "private_data",
+        "sink"
+      ],
+      "title": "ToolRole",
+      "type": "string"
+    },
+    "ToolSpec": {
+      "additionalProperties": false,
+      "description": "One tool exposed by a server, with its classified roles.\n\n``name == \"*\"`` with server-granularity evidence stands for \"all tools of this\nserver\" when tools are unknown (``scan --no-launch``).",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": true,
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "roles": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RoleEvidence"
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "server": {
+          "title": "Server",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "server"
+      ],
+      "title": "ToolSpec",
+      "type": "object"
+    },
+    "TransportKind": {
+      "enum": [
+        "stdio",
+        "http",
+        "sse",
+        "ws",
+        "unknown"
+      ],
+      "title": "TransportKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "flows": {
+      "items": {
+        "$ref": "#/$defs/Flow"
+      },
+      "title": "Flows",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "mode": {
+      "const": "no_launch",
+      "title": "Mode",
+      "type": "string"
+    },
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/ProfileReport"
+      },
+      "title": "Profiles",
+      "type": "array"
+    },
+    "project": {
+      "title": "Project",
+      "type": "string"
+    },
+    "proveflow_version": {
+      "title": "Proveflow Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "unused_overrides": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Unused Overrides",
+      "type": "array"
+    }
+  },
+  "required": [
+    "proveflow_version",
+    "project",
+    "mode",
+    "profiles",
+    "flows",
+    "limitations"
+  ],
+  "title": "ScanReport",
+  "type": "object"
+}

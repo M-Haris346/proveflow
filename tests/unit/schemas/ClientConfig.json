@@ -16,10 +16,45 @@
       "enum": [
         "user",
         "project",
+        "local",
         "explicit"
       ],
       "title": "ConfigScope",
       "type": "string"
+    },
+    "ConfigStatus": {
+      "enum": [
+        "found",
+        "not_found",
+        "parse_error",
+        "unreadable",
+        "unsupported"
+      ],
+      "title": "ConfigStatus",
+      "type": "string"
+    },
+    "RedactedText": {
+      "additionalProperties": false,
+      "description": "Text whose secret segments are stored only as ``RedactedValue``.",
+      "properties": {
+        "parts": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/RedactedValue"
+              }
+            ]
+          },
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "title": "RedactedText",
+      "type": "object"
     },
     "RedactedValue": {
       "additionalProperties": false,
@@ -45,17 +80,33 @@
     },
     "ServerSpec": {
       "additionalProperties": false,
-      "description": "One configured MCP server. Env/header values are redacted at read time.",
+      "description": "One configured MCP server. Every env/header value is redacted at read time;\nargs, url, command, and envFile path are redacted by pattern (docs/REDACTION.md).",
       "properties": {
         "args": {
           "default": [],
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/RedactedText"
           },
           "title": "Args",
           "type": "array"
         },
+        "auth_hint": {
+          "default": false,
+          "title": "Auth Hint",
+          "type": "boolean"
+        },
         "command": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "declared_type": {
           "anyOf": [
             {
               "type": "string"
@@ -65,7 +116,7 @@
             }
           ],
           "default": null,
-          "title": "Command"
+          "title": "Declared Type"
         },
         "env": {
           "additionalProperties": {
@@ -74,6 +125,17 @@
           "title": "Env",
           "type": "object"
         },
+        "env_file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RedactedText"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "headers": {
           "additionalProperties": {
             "$ref": "#/$defs/RedactedValue"
@@ -81,9 +143,33 @@
           "title": "Headers",
           "type": "object"
         },
+        "ignored_keys": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Ignored Keys",
+          "type": "array"
+        },
         "name": {
           "title": "Name",
           "type": "string"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project"
+        },
+        "scope": {
+          "$ref": "#/$defs/ConfigScope",
+          "default": "user"
         },
         "source_file": {
           "format": "path",
@@ -96,14 +182,13 @@
         "url": {
           "anyOf": [
             {
-              "type": "string"
+              "$ref": "#/$defs/RedactedText"
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Url"
+          "default": null
         }
       },
       "required": [
@@ -117,22 +202,64 @@
     "TransportKind": {
       "enum": [
         "stdio",
-        "http"
+        "http",
+        "sse",
+        "ws",
+        "unknown"
       ],
       "title": "TransportKind",
       "type": "string"
     }
   },
   "additionalProperties": false,
-  "description": "One discovered MCP client config file.",
+  "description": "One discovered MCP client config location (one file, or one scope inside a file).",
   "properties": {
+    "detail": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    },
+    "entry_errors": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Entry Errors",
+      "type": "array"
+    },
     "kind": {
       "$ref": "#/$defs/ClientKind"
     },
     "path": {
-      "format": "path",
-      "title": "Path",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Path"
+    },
+    "project": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project"
     },
     "scope": {
       "$ref": "#/$defs/ConfigScope"
@@ -144,6 +271,10 @@
       },
       "title": "Servers",
       "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/ConfigStatus",
+      "default": "found"
     }
   },
   "required": [

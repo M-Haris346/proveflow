@@ -1,5 +1,38 @@
 {
   "$defs": {
+    "ConfigScope": {
+      "enum": [
+        "user",
+        "project",
+        "local",
+        "explicit"
+      ],
+      "title": "ConfigScope",
+      "type": "string"
+    },
+    "RedactedText": {
+      "additionalProperties": false,
+      "description": "Text whose secret segments are stored only as ``RedactedValue``.",
+      "properties": {
+        "parts": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/RedactedValue"
+              }
+            ]
+          },
+          "title": "Parts",
+          "type": "array"
+        }
+      },
+      "title": "RedactedText",
+      "type": "object"
+    },
     "RedactedValue": {
       "additionalProperties": false,
       "description": "Irreversible fingerprint of a secret: sha256 prefix + length, nothing else.",
@@ -25,24 +58,43 @@
     "TransportKind": {
       "enum": [
         "stdio",
-        "http"
+        "http",
+        "sse",
+        "ws",
+        "unknown"
       ],
       "title": "TransportKind",
       "type": "string"
     }
   },
   "additionalProperties": false,
-  "description": "One configured MCP server. Env/header values are redacted at read time.",
+  "description": "One configured MCP server. Every env/header value is redacted at read time;\nargs, url, command, and envFile path are redacted by pattern (docs/REDACTION.md).",
   "properties": {
     "args": {
       "default": [],
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/RedactedText"
       },
       "title": "Args",
       "type": "array"
     },
+    "auth_hint": {
+      "default": false,
+      "title": "Auth Hint",
+      "type": "boolean"
+    },
     "command": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RedactedText"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "declared_type": {
       "anyOf": [
         {
           "type": "string"
@@ -52,7 +104,7 @@
         }
       ],
       "default": null,
-      "title": "Command"
+      "title": "Declared Type"
     },
     "env": {
       "additionalProperties": {
@@ -61,6 +113,17 @@
       "title": "Env",
       "type": "object"
     },
+    "env_file": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RedactedText"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "headers": {
       "additionalProperties": {
         "$ref": "#/$defs/RedactedValue"
@@ -68,9 +131,33 @@
       "title": "Headers",
       "type": "object"
     },
+    "ignored_keys": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Ignored Keys",
+      "type": "array"
+    },
     "name": {
       "title": "Name",
       "type": "string"
+    },
+    "project": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project"
+    },
+    "scope": {
+      "$ref": "#/$defs/ConfigScope",
+      "default": "user"
     },
     "source_file": {
       "format": "path",
@@ -83,14 +170,13 @@
     "url": {
       "anyOf": [
         {
-          "type": "string"
+          "$ref": "#/$defs/RedactedText"
         },
         {
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Url"
+      "default": null
     }
   },
   "required": [

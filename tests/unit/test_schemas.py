@@ -22,21 +22,26 @@ from proveflow.core import (
     Flow,
     Mitigation,
     Payload,
+    RedactedText,
     RedactedValue,
     RoleEvidence,
     RunMeta,
     ServerSpec,
+    ToolRef,
     ToolSpec,
     Trial,
     Verdict,
 )
+from proveflow.report.models import DiscoverReport, ScanReport
 
 MODELS: list[type[BaseModel]] = [
     RedactedValue,
+    RedactedText,
     ServerSpec,
     ClientConfig,
     RoleEvidence,
     ToolSpec,
+    ToolRef,
     Flow,
     Payload,
     Attack,
@@ -44,6 +49,8 @@ MODELS: list[type[BaseModel]] = [
     Verdict,
     RunMeta,
     Mitigation,
+    DiscoverReport,
+    ScanReport,
 ]
 
 SNAPSHOT_DIR = Path(__file__).parent / "schemas"
@@ -67,10 +74,26 @@ def test_schema_matches_snapshot(model: type[BaseModel]) -> None:
     )
 
 
+def write_snapshots(directory: Path) -> list[Path]:
+    """Write every snapshot with LF line endings (never CRLF, even on Windows)."""
+    directory.mkdir(parents=True, exist_ok=True)
+    written = []
+    for m in MODELS:
+        path = directory / f"{m.__name__}.json"
+        path.write_text(_schema_json(m), encoding="utf-8", newline="\n")
+        written.append(path)
+    return written
+
+
+def test_write_snapshots_uses_lf(tmp_path: Path) -> None:
+    for path in write_snapshots(tmp_path):
+        data = path.read_bytes()
+        assert b"\r\n" not in data
+        assert data.endswith(b"\n")
+
+
 if __name__ == "__main__":
     if "--update" not in sys.argv:
         sys.exit("usage: python tests/unit/test_schemas.py --update")
-    SNAPSHOT_DIR.mkdir(exist_ok=True)
-    for m in MODELS:
-        (SNAPSHOT_DIR / f"{m.__name__}.json").write_text(_schema_json(m), encoding="utf-8")
-        print(f"wrote {m.__name__}.json")
+    for p in write_snapshots(SNAPSHOT_DIR):
+        print(f"wrote {p.name}")

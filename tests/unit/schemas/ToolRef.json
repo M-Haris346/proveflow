@@ -1,0 +1,27 @@
+{
+  "additionalProperties": false,
+  "description": "A tool on a server inside one agent profile. ``tool is None``: server-level.",
+  "properties": {
+    "server": {
+      "title": "Server",
+      "type": "string"
+    },
+    "tool": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool"
+    }
+  },
+  "required": [
+    "server"
+  ],
+  "title": "ToolRef",
+  "type": "object"
+}
