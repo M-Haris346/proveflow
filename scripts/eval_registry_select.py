@@ -2,57 +2,91 @@
 
 Usage:  uv run python scripts/eval_registry_select.py <out_dir>
 
-Not part of proveflow (it makes network calls). It lists every server of the official
-registry (GET https://registry.modelcontextprotocol.io/v0/servers?limit=100&cursor=...),
-applies the rule below to the registry metadata, and then checks the license of each
-survivor's package in its own package registry (npm / PyPI JSON).
+Not part of proveflow (it makes network calls). Nothing downloaded is executed or extracted
+to disk: tarballs/sdists are read in memory only, to look at LICENSE and README files.
 
-Rule (Haris, 2026-11-11; schema: static.modelcontextprotocol.io/schemas/2025-12-11):
+Listing (registry OpenAPI, accessed 2026-11-12, GET /v0/servers): "Use version=latest to
+return only the latest version of each matching server." Query: limit=100, cursor, version=latest.
+
+Rule (Haris, 2026-11-11/12; schema: static.modelcontextprotocol.io/schemas/2025-12-11):
   R1  registry status "active" and isLatest
   R2  published (registry publishedAt) on or before CUTOFF (>= 14 days old)
   R3  a package with transport.type == "stdio" and registryType in {npm, pypi}
-      (launchable with npx/uvx; oci/docker, nuget, cargo, mcpb are not run by proveflow)
-  R4  no environment variable with isRequired true and no default, and none with isSecret
-      true and isRequired true (no credential or required setting to supply)
-  R5  no package argument with isRequired true and no default/value
-  R6  package license (npm `license` / PyPI license_expression or license) is one of
-      PERMISSIVE; anything else (missing, unclear, copyleft) -> excluded
-Output: candidates.json + a markdown table. Tool counts are NOT known before collection.
+  R4  no environment variable that is required without a default, and no required secret
+  R5  no package argument that is required without a default/value
+  S   deterministic random sample of at most SAMPLE_MAX survivors (seed SEED, input sorted
+      by registry name): random.Random(SEED).sample(sorted_survivors, k)
+  L   license verified from the LICENSE file inside the pinned npm tarball / PyPI sdist
+      (or wheel): the text must match a PERMISSIVE license; metadata alone is not enough
+  T   README of the same package grepped for telemetry / analytics / usage statistics
+Output: <out_dir>/selection.json and selection.md.
 """
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
+import random
+import re
 import sys
+import tarfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 REGISTRY = "https://registry.modelcontextprotocol.io/v0/servers"
 CUTOFF = datetime(2026, 10, 28, tzinfo=UTC)
-PERMISSIVE = {"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD", "Unlicense"}
+SEED = 20261111
+SAMPLE_MAX = 8
+MAX_ARCHIVE = 50 * 1024 * 1024
 UA = {"User-Agent": "proveflow-eval-selection (dev script)"}
+TELEMETRY = re.compile(
+    r"telemetry|analytics|usage[ -]statistic|usage data|tracking|posthog|mixpanel|segment\.io|"
+    r"google analytics|opt[ -]?out",
+    re.IGNORECASE,
+)
+# License text signatures (the license texts themselves, not metadata).
+LICENSE_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Apache-2.0", ("apache license", "version 2.0")),
+    ("MIT", ("permission is hereby granted, free of charge",)),
+    ("ISC", ("permission to use, copy, modify, and/or distribute this software for any purpose",)),
+    ("BSD-3-Clause", ("redistribution and use in source and binary forms", "neither the name")),
+    ("BSD-2-Clause", ("redistribution and use in source and binary forms",)),
+    ("Unlicense", ("this is free and unencumbered software released into the public domain",)),
+)
 
 
-def get_json(url: str, attempts: int = 6) -> Any:
-    """GET with retries and exponential backoff (the registry drops idle connections)."""
+def get_bytes(url: str, attempts: int = 6) -> bytes:
+    """GET with retries (5xx / network only; a 4xx is final)."""
     last: Exception | None = None
     for i in range(attempts):
         try:
             req = urllib.request.Request(url, headers=UA)  # noqa: S310 - fixed https hosts
             with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
-                return json.loads(resp.read().decode("utf-8"))
-        except (OSError, ValueError) as exc:
+                return bytes(resp.read(MAX_ARCHIVE + 1))
+        except urllib.error.HTTPError as exc:
+            if exc.code < 500:
+                raise
             last = exc
-            time.sleep(min(30.0, 1.5 * 2**i))
+        except OSError as exc:
+            last = exc
+        time.sleep(min(30.0, 1.5 * 2**i))
     raise RuntimeError(f"GET failed after {attempts} attempts: {url}") from last
 
 
-def all_servers(cache_dir: Path) -> list[dict[str, Any]]:
-    """All registry entries; every page is cached so an interrupted run resumes."""
+def get_json(url: str) -> Any:
+    return json.loads(get_bytes(url).decode("utf-8"))
+
+
+def all_latest_servers(cache_dir: Path) -> list[dict[str, Any]]:
+    """Every server's latest version; pages are cached so an interrupted run resumes."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     out: list[dict[str, Any]] = []
     cursor: str | None = None
@@ -61,7 +95,9 @@ def all_servers(cache_dir: Path) -> list[dict[str, Any]]:
         if page_file.exists():
             page = json.loads(page_file.read_text(encoding="utf-8"))
         else:
-            q = "?limit=100" + (f"&cursor={urllib.parse.quote(cursor)}" if cursor else "")
+            q = "?limit=100&version=latest"
+            if cursor:
+                q += f"&cursor={urllib.parse.quote(cursor)}"
             page = get_json(REGISTRY + q)
             page_file.write_text(json.dumps(page), encoding="utf-8")
             time.sleep(0.2)
@@ -106,69 +142,136 @@ def rule_filter(entry: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
     return None, "R3 no npm/pypi stdio package"
 
 
-def package_license(pkg: dict[str, Any]) -> str | None:
-    ident, version = pkg["identifier"], pkg.get("version")
+def sample(survivors: list[dict[str, Any]], k: int = SAMPLE_MAX, seed: int = SEED) -> list[Any]:
+    ordered = sorted(survivors, key=lambda c: c["name"])
+    return random.Random(seed).sample(ordered, min(k, len(ordered)))  # noqa: S311 - not crypto
+
+
+def classify_license(text: str) -> str | None:
+    low = " ".join(text.lower().split())
+    for spdx, needles in LICENSE_SIGNATURES:
+        if all(n in low for n in needles):
+            return spdx
+    return None
+
+
+def _archive_members(data: bytes) -> dict[str, bytes]:
+    """name -> bytes for LICENSE*/README* files at depth <= 2, read in memory only."""
+    wanted = re.compile(r"^(licen[cs]e|copying|readme)", re.IGNORECASE)
+    out: dict[str, bytes] = {}
+    if data[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            for name in zf.namelist():
+                base = name.rsplit("/", 1)[-1]
+                if wanted.match(base) and name.count("/") <= 3:
+                    out[name] = zf.read(name)[:2_000_000]
+        return out
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as tf:
+        for member in tf.getmembers():
+            base = member.name.rsplit("/", 1)[-1]
+            if member.isfile() and wanted.match(base) and member.name.count("/") <= 2:
+                fh = tf.extractfile(member)
+                if fh is not None:
+                    out[member.name] = fh.read(2_000_000)
+    return out
+
+
+def package_archive(pkg: dict[str, Any]) -> tuple[str, bytes]:
+    ident, version = pkg["identifier"], str(pkg.get("version"))
+    if pkg["registryType"] == "npm":
+        manifest = get_json(
+            f"https://registry.npmjs.org/{urllib.parse.quote(ident, safe='@')}/"
+            f"{urllib.parse.quote(version)}"
+        )
+        url = manifest["dist"]["tarball"]
+        return url, get_bytes(url)
+    data = get_json(f"https://pypi.org/pypi/{ident}/{version}/json")
+    files = data.get("urls") or []
+    pick = next((f for f in files if f["packagetype"] == "sdist"), None) or next(
+        (f for f in files if f["packagetype"] == "bdist_wheel"), None
+    )
+    if pick is None:
+        raise RuntimeError("no sdist or wheel")
+    return pick["url"], get_bytes(pick["url"])
+
+
+def inspect(candidate: dict[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {k: candidate[k] for k in ("name", "repo", "published")}
+    pkg = candidate["pkg"]
+    row["package"] = f"{pkg['registryType']}:{pkg['identifier']}@{pkg.get('version')}"
     try:
-        if pkg["registryType"] == "npm":
-            # Per-version manifest (small) instead of the full packument.
-            name = urllib.parse.quote(ident, safe="@")
-            ver = get_json(f"https://registry.npmjs.org/{name}/{urllib.parse.quote(str(version))}")
-            lic = ver.get("license")
-            return lic if isinstance(lic, str) else None
-        data = get_json(f"https://pypi.org/pypi/{ident}/{version}/json")
-        info = data.get("info") or {}
-        lic = info.get("license_expression") or info.get("license")
-        return lic.strip() if isinstance(lic, str) and len(lic) < 40 else None
-    except Exception:
-        return None
+        url, data = package_archive(pkg)
+    except Exception as exc:
+        row.update(decision="exclude", reason=f"archive not readable: {type(exc).__name__}")
+        return row
+    row["archive"] = url
+    row["archive_sha256"] = hashlib.sha256(data).hexdigest()
+    members = _archive_members(data)
+    licenses = {
+        n: b for n, b in members.items() if not n.rsplit("/", 1)[-1].lower().startswith("readme")
+    }
+    readmes = {
+        n: b for n, b in members.items() if n.rsplit("/", 1)[-1].lower().startswith("readme")
+    }
+    found = {n: classify_license(b.decode("utf-8", "replace")) for n, b in licenses.items()}
+    row["license_files"] = {n: (spdx or "unrecognized") for n, spdx in sorted(found.items())}
+    spdx_ids = {s for s in found.values() if s}
+    telemetry: list[str] = []
+    for name, body in sorted(readmes.items()):
+        for i, line in enumerate(body.decode("utf-8", "replace").splitlines(), 1):
+            if TELEMETRY.search(line):
+                telemetry.append(f"{name}:{i}: {line.strip()[:160]}")
+    row["telemetry_hits"] = telemetry
+    if not licenses:
+        row.update(decision="exclude", reason="no LICENSE file in the package")
+    elif len(spdx_ids) != 1 or any(s is None for s in found.values()):
+        row.update(
+            decision="exclude", reason="LICENSE text not recognized as one permissive license"
+        )
+    elif telemetry:
+        row.update(
+            license=spdx_ids.pop(),
+            decision="ask",
+            reason="README mentions telemetry/analytics: needs a documented opt-out",
+        )
+    else:
+        row.update(
+            license=spdx_ids.pop(),
+            decision="propose",
+            reason="license verified from file; no telemetry mention",
+        )
+    return row
 
 
 def main() -> int:
     out_dir = Path(sys.argv[1])
     out_dir.mkdir(parents=True, exist_ok=True)
-    entries = all_servers(out_dir / "pages")
-    reasons: dict[str, int] = {}
-    passed: list[dict[str, Any]] = []
+    entries = all_latest_servers(out_dir / "pages-latest")
+    reasons: Counter[str] = Counter()
+    survivors: list[dict[str, Any]] = []
     for e in entries:
         pkg, reason = rule_filter(e)
-        reasons[reason] = reasons.get(reason, 0) + 1
+        reasons[reason.split(" ")[0]] += 1
         if pkg is not None:
-            passed.append(
-                {
-                    "name": e["server"]["name"],
-                    "pkg": pkg,
-                    "repo": (e["server"].get("repository") or {}).get("url"),
-                    "published": e["_meta"]["io.modelcontextprotocol.registry/official"][
-                        "publishedAt"
-                    ],
-                }
-            )
-    rows = []
-    for c in passed:
-        lic = package_license(c["pkg"])
-        ok = lic in PERMISSIVE
-        reasons["R6 license not permissive/unknown" if not ok else "selected"] = (
-            reasons.get("R6 license not permissive/unknown" if not ok else "selected", 0) + 1
-        )
-        if ok:
-            reasons["ok"] -= 1
-            rows.append({**c, "license": lic})
-        else:
-            reasons["ok"] -= 1
-        time.sleep(0.1)
-    rows.sort(key=lambda r: r["name"])
-    (out_dir / "candidates.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
-    print(f"registry entries: {len(entries)}")
-    for k in sorted(reasons):
-        print(f"  {k}: {reasons[k]}")
-    print("| registry name | package | version | license | repo | published |")
-    print("|---|---|---|---|---|---|")
+            meta = e["_meta"]["io.modelcontextprotocol.registry/official"]
+            survivors.append({"name": e["server"]["name"], "pkg": pkg,
+                              "repo": (e["server"].get("repository") or {}).get("url"),
+                              "published": meta["publishedAt"]})  # fmt: skip
+    picked = sample(survivors)
+    rows = [inspect(c) for c in picked]
+    result = {
+        "entries": len(entries),
+        "reasons": dict(sorted(reasons.items())),
+        "survivors": len(survivors),
+        "seed": SEED,
+        "sample_max": SAMPLE_MAX,
+        "rows": rows,
+    }
+    (out_dir / "selection.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({k: v for k, v in result.items() if k != "rows"}, indent=2))
     for r in rows:
-        p = r["pkg"]
-        print(
-            f"| {r['name']} | {p['registryType']}:{p['identifier']} | {p.get('version')} | "
-            f"{r['license']} | {r['repo']} | {r['published'][:10]} |"
-        )
+        print(f"- {r['name']} | {r['package']} | {r.get('license', '-')} | {r['decision']}: "
+              f"{r['reason']} | telemetry hits: {len(r.get('telemetry_hits', []))}")  # fmt: skip
     return 0
 
 
