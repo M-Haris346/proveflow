@@ -1,0 +1,61 @@
+tool_id,server_id,tool_name,proposal_untrusted_source,proposal_private_data,proposal_sink,proposal_uncertain,proposal_reason,proposer
+t-e6046dae99f1,chrome-devtools,close_page,no,no,yes,no,closes a browser page: local state change (guide row 6),claude-proposed
+t-e31c80e49496,chrome-devtools,drag,yes,no,yes,yes,drag is a browser action (sink); optional includeSnapshot returns site-authored page text (source),claude-proposed
+t-376bf2c1c804,chrome-devtools,emulate,no,no,yes,no,changes page emulation and injects agent-chosen HTTP headers into every request the page makes,claude-proposed
+t-1c62323edda0,chrome-devtools,fill,yes,no,yes,yes,types agent text into a page input (sink); optional includeSnapshot returns page text (source),claude-proposed
+t-d804cb76b529,chrome-devtools,get_css_styles,yes,no,no,yes,returns CSS rules/custom properties authored by the website; read-only; CSS is weak free text,claude-proposed
+t-cf5f5972051b,chrome-devtools,handle_dialog,no,no,yes,no,accepts/dismisses a page dialog and can enter prompt text: browser action,claude-proposed
+t-d47bdc728797,chrome-devtools,hover,yes,no,yes,yes,hover is a page interaction (sink); optional includeSnapshot returns page text (source),claude-proposed
+t-9c17d8a6b637,chrome-devtools,list_network_requests,yes,no,no,yes,lists the page's network requests (URLs chosen by the site's author); read-only,claude-proposed
+t-f721b3ac7b31,chrome-devtools,list_pages,yes,no,no,yes,"lists open pages; titles/URLs are site-authored, but output format is not described",claude-proposed
+t-3e4efe6a72a2,chrome-devtools,performance_analyze_insight,no,no,no,no,"returns computed performance-insight analysis of a trace; no effect, no private data",claude-proposed
+t-eb91d802efc2,chrome-devtools,performance_stop_trace,no,no,yes,no,stops a trace and saves raw trace data to an agent-chosen file path: local write,claude-proposed
+t-4243b74ad9b5,chrome-devtools,screencast_start,no,no,yes,no,starts recording a video written to an agent-chosen file path: local write,claude-proposed
+t-ab10946f36eb,chrome-devtools,take_screenshot,yes,no,yes,yes,"screenshot shows site-authored content (image, not text); can save to an agent-chosen path",claude-proposed
+t-7cbd5ef2ce79,chrome-devtools,take_snapshot,yes,no,yes,no,returns a text snapshot of the web page (source); can save it to an agent-chosen path (local write),claude-proposed
+t-a0c7602d7d31,chrome-devtools,wait_for,no,no,no,no,waits for text to appear; output is not described as containing page content (rule 6),claude-proposed
+t-3b9de28c2328,git,git_add,no,no,yes,no,stages files: changes repository index (local write),claude-proposed
+t-f8fb99947248,git,git_branch,no,yes,no,no,lists branches of the user's repository (guide row 10),claude-proposed
+t-2a709e1a53ed,git,git_checkout,no,no,yes,no,switches branches: changes the working tree,claude-proposed
+t-cd998b093379,git,git_commit,no,no,yes,no,records a commit: local write,claude-proposed
+t-cde0d194baa0,git,git_create_branch,no,no,yes,no,creates a branch: local write,claude-proposed
+t-3596491e6b00,git,git_diff,no,yes,no,no,returns diffs of the user's repository contents (guide row 10),claude-proposed
+t-75abd0223445,git,git_diff_staged,no,yes,no,no,returns staged changes of the user's repository (guide row 10),claude-proposed
+t-421bd99ecf8a,git,git_diff_unstaged,no,yes,no,no,returns unstaged working-directory changes (guide row 10),claude-proposed
+t-6e9690020e69,git,git_log,no,yes,no,no,returns commit log of the user's repository (guide row 10),claude-proposed
+t-4cae8bf1c6de,git,git_reset,no,no,yes,no,unstages all staged changes: changes repository index,claude-proposed
+t-281a0c10a5bd,git,git_show,no,yes,no,no,returns commit or file contents from the user's repository (guide row 10),claude-proposed
+t-11e7243917a4,git,git_status,no,yes,no,no,returns working-tree status (file names of the user's repository),claude-proposed
+t-51fef0754aa2,grok-mcp,grok_challenge,no,no,yes,yes,"sends agent-chosen code to xAI (data reaches a third party); reply is from the fixed operator's model, so not source",claude-proposed
+t-7e0c5f36ec6e,grok-mcp,grok_chat,no,no,yes,yes,sends an agent-chosen prompt to xAI; reply from fixed operator's model (source debatable),claude-proposed
+t-7e455d08c0a5,grok-mcp,grok_consult,no,no,yes,yes,sends agent-supplied conversation history to xAI; reply from fixed operator's model (source debatable),claude-proposed
+t-b39ba8e9ee53,grok-mcp,grok_review,no,yes,yes,yes,runs git diff on a local repo and sends it to xAI (sink); review can quote the user's code (private),claude-proposed
+t-43045c7fba9d,marketplace-mcp,agent_categories,no,no,no,no,category slugs and counts from one fixed public service; read-only,claude-proposed
+t-058100e42378,marketplace-mcp,agent_detail,yes,no,no,no,"returns an agent's description, system prompt and greeting written by third-party authors; read-only",claude-proposed
+t-0d579c228a50,marketplace-mcp,browse_agents,yes,no,no,no,returns public agent cards with names/descriptions written by third-party authors; read-only,claude-proposed
+t-70e167a91b27,marketplace-mcp,browse_skills,yes,no,no,no,returns public skill descriptions and content previews written by third-party authors; read-only,claude-proposed
+t-b5b1d73f68f5,marketplace-mcp,skill_categories,no,no,no,no,"skill category slugs/labels and counts; structured, read-only",claude-proposed
+t-672fed60d8c2,pg-mcp-guard,describe_table,no,yes,no,yes,"returns columns/types of the organization's DB table: schema metadata, not rows",claude-proposed
+t-dceb70c4c450,pg-mcp-guard,list_tables,no,yes,no,yes,"lists the organization's tables and readable columns: schema metadata, not rows",claude-proposed
+t-703dca827d7a,pg-mcp-guard,run_query,yes,yes,no,yes,read-only SELECT on the shop DB (private); text says results are UNTRUSTED DATA (outside-authored),claude-proposed
+t-0f0160552d0a,playwright,browser_console_messages,yes,no,yes,no,returns console messages produced by page scripts (source); can save them to a file (local write),claude-proposed
+t-04a0a4315287,playwright,browser_drag,no,no,yes,no,drag and drop between page elements: browser action,claude-proposed
+t-c954970edfdd,playwright,browser_drop,no,no,yes,no,drops local files or agent-chosen data onto a page: data reaches the website,claude-proposed
+t-49a703a7cc9a,playwright,browser_file_upload,no,no,yes,no,uploads local files to the page: data reaches the website,claude-proposed
+t-422e74e47c0d,playwright,browser_fill_form,no,no,yes,no,fills page form fields with agent-chosen values: browser action,claude-proposed
+t-e2455763a84c,playwright,browser_handle_dialog,no,no,yes,no,"accepts/dismisses a dialog, can enter prompt text: browser action",claude-proposed
+t-9a2a5f96944a,playwright,browser_hover,no,no,yes,no,hover is a page interaction: browser action,claude-proposed
+t-3b99e774d261,playwright,browser_navigate,no,no,yes,yes,navigates to an agent-chosen URL (sink); description does not say page content is returned,claude-proposed
+t-11e15ce16a49,playwright,browser_navigate_back,no,no,yes,no,navigates back in history: browser action (guide row 6),claude-proposed
+t-5693473cd1eb,playwright,browser_network_requests,yes,no,yes,yes,lists request URLs chosen by the site's author (weak source); can save to a file (local write),claude-proposed
+t-2a501dc02e24,playwright,browser_press_key,no,no,yes,no,presses a key in the page: browser action,claude-proposed
+t-c7f0355a52ea,playwright,browser_resize,no,no,yes,yes,"resizes the browser window: local state change, but trivial",claude-proposed
+t-d5a7920a0fc6,playwright,browser_run_code_unsafe,yes,yes,yes,yes,arbitrary JS / RCE-equivalent (sink); return value not described but can read page and local data (rule 5),claude-proposed
+t-e2190a296f9b,playwright,browser_snapshot,yes,no,yes,no,returns an accessibility snapshot of the web page (source); can save it to a file (local write),claude-proposed
+t-803df9daf428,playwright,browser_tabs,yes,no,yes,yes,new/close/select tabs incl. opening an agent-chosen URL (sink); list returns site-authored titles (source),claude-proposed
+t-e1bd544e40ba,tickerrisk-mcp,compare_tickers,no,no,no,no,public catalyst-risk scores from one fixed service; read-only,claude-proposed
+t-7a8428ceb39c,tickerrisk-mcp,find_covered_calls,no,no,no,no,public option screener results from one fixed service; no holdings input,claude-proposed
+t-f1f31e5df41b,tickerrisk-mcp,find_wheel_candidates,no,no,no,no,public option screener results from one fixed service; read-only,claude-proposed
+t-0be2b8319b13,tickerrisk-mcp,scan_ticker,no,no,no,yes,"public risk score plus events (filings, FDA, SEC): may carry third-party-authored text",claude-proposed
+t-4ae42cdf5bfb,time,convert_time,no,no,no,no,pure computation: timezone conversion (rule 3),claude-proposed
+t-8b5af4dc05e3,time,get_current_time,no,no,no,no,returns public current time (rule 3),claude-proposed
