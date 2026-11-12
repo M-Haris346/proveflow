@@ -1,6 +1,9 @@
-# NOTE: this repo has no remote yet — this workflow has NEVER run.
-# It is kept ready for the day the repo is pushed to GitHub.
-# Until then the same checks run locally; see README.
+# CI for ubuntu + windows. Expected skips on ubuntu (printed by -rs): the 5 Windows Job
+# Object tests (tests/safety/test_winjob.py) and the 9 cmd.exe-quoting tests
+# (tests/unit/test_introspect_units.py); nothing is skipped on windows.
+# Actions are pinned by full commit SHA (tag in the comment, verified 2026-11-12 via the
+# GitHub releases API); runner images are pinned to explicit labels from
+# https://github.com/actions/runner-images (ubuntu-latest = 24.04, windows-latest = 2025).
 name: CI
 
 on:
@@ -8,18 +11,23 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
 
@@ -36,4 +44,5 @@ jobs:
         run: uv run mypy src
 
       - name: Tests
-        run: uv run pytest --cov
+        # -rs: print the reason for every skipped test, so CI shows exactly what did not run.
+        run: uv run pytest --cov -rs
