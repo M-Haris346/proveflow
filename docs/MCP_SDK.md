@@ -59,10 +59,14 @@ waits for the caller. Test: `tests/safety/test_review_4a_fixes.py::test_sdk_auto
 | `discover_silent` (no reply to discover) | **timeout** (whole budget used) | discover |
 | `exit_unknown` (exits on discover) | **failed** ("Connection closed") | discover |
 
-`discover_silent` is plausible for real servers that drop requests sent before `initialize`;
-`exit_unknown` is plausible for minimal/strict servers. **Proposed fix (not implemented,
-awaiting approval):** if the only request written was `server/discover` and nothing came back
-(no reply within a short probe budget, or the connection closed), relaunch the server **once**
-with `mode="legacy"` inside the same overall timeout. Cost: the server's code runs twice under
-the same consent, and that would be stated in `detail`.
+**Implemented (Haris, 2026-11-12):**
+- If the connection **closed** after only `server/discover` was written and nothing came back,
+  proveflow relaunches the server **once** with `mode="legacy"`, under the same consent and the
+  same overall deadline. `detail` says "relaunched once with --protocol legacy … (its code ran
+  twice)". `exit_unknown` therefore ends `ok`.
+- **Silent** servers (`discover_silent`) are **not** relaunched. They time out, and the timeout
+  `detail` suggests `--protocol legacy`.
+- `scan --protocol legacy` sends only the `initialize` handshake.
+
+Tests: `tests/safety/test_review_round3.py`.
 
