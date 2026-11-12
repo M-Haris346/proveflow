@@ -1,0 +1,156 @@
+{
+  "cap": 15,
+  "capped_out": {
+    "chrome-devtools": [
+      "click",
+      "evaluate_script",
+      "fill_form",
+      "get_console_message",
+      "get_network_request",
+      "lighthouse_audit",
+      "list_console_messages",
+      "navigate_page",
+      "new_page",
+      "performance_start_trace",
+      "press_key",
+      "resize_page",
+      "screencast_stop",
+      "select_page",
+      "take_heapsnapshot",
+      "type_text",
+      "upload_file"
+    ],
+    "flagquantum-mcp-server": [
+      "describe_gate_set_tool",
+      "describe_topology_tool",
+      "emit_openqasm_tool",
+      "estimate_capability_tool",
+      "evolve_dynamics_tool",
+      "execute_local_capability_tool",
+      "import_openqasm_tool",
+      "inspect_parameters_tool",
+      "route_circuit_tool",
+      "serialize_circuit_tool",
+      "train_parameters_tool",
+      "validate_capability_input_tool"
+    ],
+    "playwright": [
+      "browser_click",
+      "browser_close",
+      "browser_emulate_media",
+      "browser_evaluate",
+      "browser_find",
+      "browser_network_request",
+      "browser_select_option",
+      "browser_take_screenshot",
+      "browser_type",
+      "browser_wait_for"
+    ]
+  },
+  "dev_groups": [
+    "chrome-devtools",
+    "git",
+    "grok-mcp",
+    "marketplace-mcp",
+    "pg-mcp-guard",
+    "playwright",
+    "tickerrisk-mcp",
+    "time"
+  ],
+  "dev_tools": 60,
+  "feasible_subsets": 3669,
+  "forced_dev": [
+    "pg-mcp-guard"
+  ],
+  "group_sizes_after_cap": {
+    "chrome-devtools": 15,
+    "fetch": 1,
+    "filesystem": 14,
+    "flagquantum-mcp-server": 15,
+    "git": 12,
+    "grok-mcp": 4,
+    "marketplace-mcp": 5,
+    "memory": 9,
+    "pg-mcp-guard": 3,
+    "playwright": 15,
+    "sequential-thinking": 1,
+    "tickerrisk-mcp": 4,
+    "time": 2
+  },
+  "groups": {
+    "chrome-devtools": [
+      "chrome-devtools"
+    ],
+    "fetch": [
+      "fetch"
+    ],
+    "filesystem": [
+      "filesystem"
+    ],
+    "flagquantum-mcp-server": [
+      "flagquantum-mcp-server"
+    ],
+    "git": [
+      "git"
+    ],
+    "grok-mcp": [
+      "grok-mcp"
+    ],
+    "marketplace-mcp": [
+      "marketplace-mcp"
+    ],
+    "memory": [
+      "memory"
+    ],
+    "pg-mcp-guard": [
+      "pg-mcp-guard"
+    ],
+    "playwright": [
+      "playwright"
+    ],
+    "sequential-thinking": [
+      "sequential-thinking"
+    ],
+    "tickerrisk-mcp": [
+      "tickerrisk-mcp"
+    ],
+    "time": [
+      "time"
+    ]
+  },
+  "inputs": {
+    "pg-mcp-guard.json": "57d8e5cb3ba0a38f3eedcb6367f3b2e8a1878ac5cd0ba1d319782db3d57408dc",
+    "tools.jsonl": "168ed70771f3d2856e1afd54de234c1f368f8dc48987d3c331782f7c93da385b"
+  },
+  "jaccard_threshold": 0.3,
+  "max_group_share": 0.5,
+  "max_group_share_dev": 0.25,
+  "max_group_share_test": 0.375,
+  "per_source": {
+    "dev": {
+      "own": 3,
+      "popular": 30,
+      "reference": 14,
+      "registry": 13
+    },
+    "test": {
+      "reference": 25,
+      "registry": 15
+    }
+  },
+  "proveflow_version": "0.0.1.dev0",
+  "schema_version": 1,
+  "seed": 20261111,
+  "test_groups": [
+    "fetch",
+    "filesystem",
+    "flagquantum-mcp-server",
+    "memory",
+    "sequential-thinking"
+  ],
+  "test_share": 0.4,
+  "test_share_target": 0.4,
+  "test_tools": 40,
+  "tools_after_cap": 100,
+  "tools_before_cap": 139
+}

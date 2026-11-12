@@ -1,0 +1,125 @@
+{
+  "collected_at": "2026-11-12T19:02:48+00:00",
+  "ignore_scripts": true,
+  "mcp_sdk_version": "2.3.0",
+  "no_build": true,
+  "protocol": "auto",
+  "proveflow_version": "0.0.1.dev0",
+  "schema_version": 1,
+  "servers": [
+    {
+      "detail": null,
+      "protocol_version": "2025-11-25",
+      "server_id": "chrome-devtools",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 32
+    },
+    {
+      "detail": "no tools/list answer within 180s; a first run may still be downloading the package (npx/uvx/pipx fetch it on first launch) - retry with a larger --timeout",
+      "protocol_version": null,
+      "server_id": "deliverd-screen",
+      "status": "timeout",
+      "stderr_tail": null,
+      "tools": 0
+    },
+    {
+      "detail": null,
+      "protocol_version": "2026-07-28",
+      "server_id": "fetch",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 1
+    },
+    {
+      "detail": null,
+      "protocol_version": "2026-07-28",
+      "server_id": "filesystem",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 14
+    },
+    {
+      "detail": null,
+      "protocol_version": "2025-11-25",
+      "server_id": "flagquantum-mcp-server",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 27
+    },
+    {
+      "detail": null,
+      "protocol_version": "2026-07-28",
+      "server_id": "git",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 12
+    },
+    {
+      "detail": "MCPError: Connection closed; relaunched once with --protocol legacy: the server closed the connection after server/discover without answering (its code ran twice)",
+      "protocol_version": null,
+      "server_id": "global-sentinel-mcp",
+      "status": "failed",
+      "stderr_tail": "Traceback (most recent call last):\n  File \"/home/runner/.<redacted:sha256-1f069116819e>\", line 6, in <module>\n    from global_sentinel_mcp.server import main\n  File \"/home/runner/.<redacted:sha256-010006bc4597>.<redacted:sha256-c85aaace3303>.py\", line 20, in <module>\n    from mcp.server.fastmcp import FastMCP\n  File \"/home/runner/.<redacted:sha256-010006bc4597>.<redacted:sha256-44414329a3b2>.py\", line 16, in <module>\n    raise ModuleNotFoundError(_MESSAGE, name=__name__)\nModuleNotFoundError: No module named 'mcp.server.fastmcp'. This is mcp 2.x, where FastMCP was renamed to MCPServer (from mcp.server.mcpserver import MCPServer) and other APIs changed; see the migration guide at https://py.sdk.modelcontextprotocol.io/v2/migration/#fastmcp-renamed-to-mcpserver or pin 'mcp<2' to keep running v1 code.",
+      "tools": 0
+    },
+    {
+      "detail": null,
+      "protocol_version": "2025-11-25",
+      "server_id": "grok-mcp",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 4
+    },
+    {
+      "detail": null,
+      "protocol_version": "2025-11-25",
+      "server_id": "marketplace-mcp",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 5
+    },
+    {
+      "detail": null,
+      "protocol_version": "2026-07-28",
+      "server_id": "memory",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 9
+    },
+    {
+      "detail": null,
+      "protocol_version": "2025-11-25",
+      "server_id": "playwright",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 25
+    },
+    {
+      "detail": null,
+      "protocol_version": "2026-07-28",
+      "server_id": "sequential-thinking",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 1
+    },
+    {
+      "detail": null,
+      "protocol_version": "2025-11-25",
+      "server_id": "tickerrisk-mcp",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 4
+    },
+    {
+      "detail": null,
+      "protocol_version": "2026-07-28",
+      "server_id": "time",
+      "status": "ok",
+      "stderr_tail": null,
+      "tools": 2
+    }
+  ],
+  "timeout_s": 180.0,
+  "tools_total": 136
+}
