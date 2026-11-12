@@ -156,7 +156,9 @@ def test_baseline_states(tmp_path: Path) -> None:
         ("discover_error", IntrospectionStatus.OK,
          ["server/discover", "initialize", "notifications/initialized", "tools/list"]),
         ("discover_silent", IntrospectionStatus.TIMEOUT, ["server/discover"]),
-        ("exit_unknown", IntrospectionStatus.FAILED, ["server/discover"]),
+        # exit_unknown: now relaunched once with legacy -> see test_review_round3.py
+        ("exit_unknown", IntrospectionStatus.OK,
+         ["server/discover", "initialize", "notifications/initialized", "tools/list"]),
     ],
 )  # fmt: skip
 def test_sdk_auto_mode_fallback_behaviour(

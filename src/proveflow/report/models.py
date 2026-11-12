@@ -119,6 +119,9 @@ class ServerReport(FrozenModel):
     detail: str | None = None
     changes: tuple[ToolChange, ...] = ()
     baseline: Literal["first_seen", "compared", "cache_disabled"] | None = None
+    # Segments of tool metadata replaced by the pattern layer (introspect/scrub.py). Non-zero
+    # means descriptions were altered (secret-shaped text, or a known false positive).
+    pattern_redactions: int = 0
     stderr_tail: str | None = None
     tools: tuple[ToolSpec, ...] = ()
 

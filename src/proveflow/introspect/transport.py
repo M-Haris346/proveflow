@@ -66,6 +66,7 @@ class TransportState:
     stderr_truncated: bool = False
     blocked: list[str] = field(default_factory=list)
     sent_methods: list[str] = field(default_factory=list)
+    received: int = 0  # JSON-RPC messages read from the server's stdout
 
 
 @asynccontextmanager
@@ -124,6 +125,7 @@ async def proveflow_stdio(
                         except ValueError as exc:
                             await read_w.send(exc)
                             continue
+                        state.received += 1
                         await read_w.send(SessionMessage(msg))
 
     async def stderr_reader() -> None:

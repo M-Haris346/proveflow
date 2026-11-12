@@ -400,6 +400,11 @@
           "title": "Key",
           "type": "string"
         },
+        "pattern_redactions": {
+          "default": 0,
+          "title": "Pattern Redactions",
+          "type": "integer"
+        },
         "protocol_version": {
           "anyOf": [
             {

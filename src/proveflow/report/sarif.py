@@ -204,6 +204,7 @@ def build_sarif(report: ScanReport) -> dict[str, Any]:
                                 "server": srv.key,
                                 "introspection": srv.introspection.value,
                                 "baseline": srv.baseline,
+                                "patternRedactions": srv.pattern_redactions,
                             }
                             for prof in report.profiles
                             for srv in prof.servers

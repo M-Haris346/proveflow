@@ -177,6 +177,7 @@ def _introspect(
     timeout: float,
     cache_dir: Path | None,
     write_cache: bool,
+    protocol: Literal["auto", "legacy"],
 ) -> dict[str, IntrospectionResult]:
     # Lazy: the MCP SDK is imported only when servers are actually launched.
     from proveflow.introspect.cache import ToolCache, default_cache_dir
@@ -191,6 +192,7 @@ def _introspect(
         timeout=timeout,
         cache=cache,
         untrusted_dirs=[project],
+        protocol=protocol,
     )
 
 
@@ -240,6 +242,15 @@ def scan(
             "--cache-dir", help="Tool cache dir (default: per-user cache dir).", file_okay=False
         ),
     ] = None,
+    protocol: Annotated[
+        str,
+        typer.Option(
+            "--protocol",
+            help="auto: send the 2026 server/discover probe, fall back to initialize "
+            "(SDK default); legacy: initialize handshake only.",
+            case_sensitive=False,
+        ),
+    ] = "auto",
     no_cache_write: Annotated[
         bool, typer.Option("--no-cache-write", help="Compare with the cache but do not update it.")
     ] = False,
@@ -250,6 +261,10 @@ def scan(
     tools/list only - never tools/call. --no-launch never starts anything.
     """
     console = _console()
+    protocol = protocol.lower()
+    if protocol not in ("auto", "legacy"):
+        console.print(Text("error: --protocol must be 'auto' or 'legacy'", style="red"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
     proj = _project(project)
     cfg_path = config if config is not None else proj / DEFAULT_CONFIG_NAME
     try:
@@ -271,6 +286,7 @@ def scan(
             proj,
             yes=yes,
             yes_project=yes_project,
+            protocol="legacy" if protocol == "legacy" else "auto",
             timeout=timeout,
             cache_dir=cache_dir,
             write_cache=not no_cache_write,

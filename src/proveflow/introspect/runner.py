@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,6 +24,7 @@ from proveflow.discover.redact_rules import redact_text
 from proveflow.introspect.cache import ToolCache, spec_key
 from proveflow.introspect.launchspec import (
     ConfigChangedError,
+    LaunchSpec,
     LaunchSpecError,
     build_launch_spec,
 )
@@ -42,6 +44,7 @@ PAGE_CAP = 100
 DEFAULT_TIMEOUT = 20.0
 
 Consent = Literal["yes", "no", "unavailable"]
+Protocol = Literal["auto", "legacy"]
 
 
 def _leaves(exc: BaseException) -> list[BaseException]:
@@ -70,12 +73,49 @@ PROJECT_CONSENT_DETAIL = (
 )
 
 
+@dataclass
+class _Attempt:
+    state: TransportState
+    version: str | None = None
+    tools: list[Any] = field(default_factory=list)
+    error: BaseException | None = None
+
+
+async def _attempt(
+    launch: LaunchSpec,
+    protocol: Protocol,
+    deadline: float,
+    parent_env: Mapping[str, str],
+    untrusted_dirs: Sequence[Path],
+) -> _Attempt:
+    """One launch: connect (``mode=protocol``), page through tools/list, kill the tree."""
+    result = _Attempt(state=TransportState())
+    try:
+        with anyio.fail_after(max(0.0, deadline - anyio.current_time())):
+            transport = proveflow_stdio(launch, result.state, dict(parent_env), untrusted_dirs)
+            async with Client(transport, mode=protocol) as client:
+                result.version = client.protocol_version
+                cursor: str | None = None
+                for _ in range(PAGE_CAP):
+                    page = await client.list_tools(cursor=cursor)
+                    result.tools.extend(page.tools)
+                    cursor = page.next_cursor
+                    if cursor is None:
+                        break
+    except TimeoutError as exc:
+        result.error = exc
+    except Exception as exc:
+        result.error = exc
+    return result
+
+
 async def introspect_one(
     spec: ServerSpec,
     *,
     timeout: float,
     parent_env: Mapping[str, str],
     untrusted_dirs: Sequence[Path] = (),
+    protocol: Protocol = "auto",
 ) -> IntrospectionResult:
     if spec.variables:
         return IntrospectionResult(
@@ -90,31 +130,41 @@ async def introspect_one(
         return IntrospectionResult(status=IntrospectionStatus.FAILED, detail=str(exc))
     with launch:
         secrets = launch.secret_values()
-        state = TransportState()
-        version: str | None = None
-        tools: list[Any] = []
-        try:
-            with anyio.fail_after(timeout):
-                transport = proveflow_stdio(launch, state, dict(parent_env), untrusted_dirs)
-                async with Client(transport, mode="auto") as client:
-                    version = client.protocol_version
-                    cursor: str | None = None
-                    for _ in range(PAGE_CAP):
-                        page = await client.list_tools(cursor=cursor)
-                        tools.extend(page.tools)
-                        cursor = page.next_cursor
-                        if cursor is None:
-                            break
-        except TimeoutError:
+        deadline = anyio.current_time() + timeout
+        notes: list[str] = []
+        attempt = await _attempt(launch, protocol, deadline, parent_env, untrusted_dirs)
+        if (
+            protocol == "auto"
+            and isinstance(attempt.error, Exception)
+            and not isinstance(attempt.error, TimeoutError)
+            and attempt.state.sent_methods == ["server/discover"]
+            and attempt.state.received == 0
+        ):
+            # The server closed the connection on the discover probe without answering
+            # (docs/MCP_SDK.md): relaunch ONCE with the handshake, same consent, same
+            # overall deadline. Silent servers (timeout) are not relaunched.
+            notes.append(
+                "relaunched once with --protocol legacy: the server closed the connection "
+                "after server/discover without answering (its code ran twice)"
+            )
+            attempt = await _attempt(launch, "legacy", deadline, parent_env, untrusted_dirs)
+        state, version, tools = attempt.state, attempt.version, attempt.tools
+        if isinstance(attempt.error, TimeoutError):
+            hint = TIMEOUT_HINT
+            if protocol == "auto" and state.sent_methods == ["server/discover"]:
+                hint += (
+                    "; only server/discover was sent and never answered - if this server "
+                    "does not support the 2026 discover probe, retry with --protocol legacy"
+                )
             return IntrospectionResult(
                 status=IntrospectionStatus.TIMEOUT,
-                detail=f"no tools/list answer within {timeout:g}s{TIMEOUT_HINT}",
+                detail="; ".join([f"no tools/list answer within {timeout:g}s{hint}", *notes]),
                 stderr_tail=scrub_stderr(bytes(state.stderr), secrets) or None,
             )
-        except Exception as exc:
+        if attempt.error is not None:
             return IntrospectionResult(
                 status=IntrospectionStatus.FAILED,
-                detail=_describe(exc, secrets),
+                detail="; ".join([_describe(attempt.error, secrets), *notes]),
                 stderr_tail=scrub_stderr(bytes(state.stderr), secrets) or None,
             )
         scrubber = Scrubber(secrets)
@@ -133,6 +183,7 @@ async def introspect_one(
             status=IntrospectionStatus.OK,
             protocol_version=version,
             era=era,
+            detail="; ".join(notes) or None,
             tools=raw_tools,
             pattern_redactions=scrubber.pattern_redactions,
         )
@@ -146,6 +197,7 @@ def introspect_specs(
     cache: ToolCache | None = None,
     parent_env: Mapping[str, str] | None = None,
     untrusted_dirs: Sequence[Path] = (),
+    protocol: Protocol = "auto",
 ) -> dict[str, IntrospectionResult]:
     """Introspect stdio servers one at a time. Keys are ``cache.spec_key(spec)``.
 
@@ -158,7 +210,7 @@ def introspect_specs(
             continue
         if spec.variables:
             # Never prompt for a server proveflow will not launch anyway.
-            results[key] = anyio.run(_run_one, spec, timeout, env, untrusted_dirs)
+            results[key] = anyio.run(_run_one, spec, timeout, env, untrusted_dirs, protocol)
             continue
         answer = consent(spec)
         if answer == "no":
@@ -171,7 +223,7 @@ def introspect_specs(
             )
             continue
         logger.info("introspecting server %s", spec.name)
-        result = anyio.run(_run_one, spec, timeout, env, untrusted_dirs)
+        result = anyio.run(_run_one, spec, timeout, env, untrusted_dirs, protocol)
         if result.status is IntrospectionStatus.OK:
             if cache is None:
                 result = result.model_copy(update={"baseline": "cache_disabled"})
@@ -186,8 +238,12 @@ def introspect_specs(
 
 
 async def _run_one(
-    spec: ServerSpec, timeout: float, env: dict[str, str], untrusted_dirs: Sequence[Path]
+    spec: ServerSpec,
+    timeout: float,
+    env: dict[str, str],
+    untrusted_dirs: Sequence[Path],
+    protocol: Protocol,
 ) -> IntrospectionResult:
     return await introspect_one(
-        spec, timeout=timeout, parent_env=env, untrusted_dirs=untrusted_dirs
+        spec, timeout=timeout, parent_env=env, untrusted_dirs=untrusted_dirs, protocol=protocol
     )

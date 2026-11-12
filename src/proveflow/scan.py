@@ -152,6 +152,7 @@ def build_scan(
                     detail=result.detail if result else None,
                     changes=result.changes if result else (),
                     baseline=result.baseline if result else None,
+                    pattern_redactions=result.pattern_redactions if result else 0,
                     stderr_tail=result.stderr_tail if result else None,
                     tools=tuple(member_tools),
                 )

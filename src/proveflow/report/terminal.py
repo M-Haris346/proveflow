@@ -99,7 +99,16 @@ def render_discover(report: DiscoverReport, console: Console) -> None:
 def render_scan(report: ScanReport, console: Console, limit: int) -> None:
     for prof in report.profiles:
         table = Table(title=f"Profile {prof.id}")
-        for col in ("server", "transport", "introspection", "era", "tools", "baseline", "roles"):
+        for col in (
+            "server",
+            "transport",
+            "introspection",
+            "era",
+            "tools",
+            "baseline",
+            "redacted",
+            "roles",
+        ):
             table.add_column(col)
         for srv in prof.servers:
             roles = sorted({_ROLE_SHORT[e.role] for t in srv.tools for e in t.roles})
@@ -111,6 +120,7 @@ def render_scan(report: ScanReport, console: Console, limit: int) -> None:
                 Text(srv.era or "-"),
                 Text("-" if server_level else str(len(srv.tools))),
                 Text(_BASELINE_TEXT.get(srv.baseline or "", "-")),
+                Text(str(srv.pattern_redactions) if srv.introspection == "ok" else "-"),
                 Text((", ".join(roles) or "-") + (" (server-level guess)" if server_level else "")),
             )
         console.print(table)
