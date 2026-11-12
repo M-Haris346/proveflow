@@ -26,6 +26,7 @@ runs/
 # (tool cache lives in the per-user cache dir, never here; see docs/PROCESS_KILL.md §3)
 .proveflow-cache/
 proveflow-fixes/
+out/
 
 # OS / editor
 .DS_Store
