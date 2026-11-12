@@ -13,8 +13,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 ## Status
 
-> **Phase 1 (Find): checkpoint 1a done; checkpoint 1b introspection built, classifier eval not
-> started. Not released.**
+> **Phase 1 (Find): checkpoint 1a done; checkpoint 1b introspection built, classifier eval run
+> once (LLM-labeled, see below). Not released.**
 >
 > - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
 >   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
@@ -32,8 +32,14 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 >   - servers with unresolved variables are not launched
 >   - tool-change detection against a per-user cache; PF-UNPINNED notes
 >   - **It has not yet been run against your own real servers (step 1b exit).**
-> - Role-classifier precision/recall: **not measured yet**. The eval server set is proposed in
->   docs/eval/SERVERS.md; nothing has been collected or labeled. No numbers exist.
+> - Role-classifier precision/recall [measured, once]: results are in
+>   [docs/eval/RESULTS.md](docs/eval/RESULTS.md). Test N = 40, dev N = 60 tools, from 13
+>   servers (12 of 14 planned collected).
+>   - The labels are LLM labels reviewed by the author. There is no independent human second
+>     labeler, so no kappa.
+>   - Test has only 1 `untrusted_source` positive.
+>   - Test and dev differ sharply. For example, sink recall is 10/11 on test and 8/27 on dev.
+>   - Read the caveats in RESULTS.md before quoting any number.
 > - Everything from Phase 2 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:

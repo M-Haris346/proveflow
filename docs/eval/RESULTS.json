@@ -1,0 +1,643 @@
+{
+  "dev": {
+    "by_source": {
+      "own": {
+        "n": 3,
+        "private_data": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "tn": 0,
+          "tp": 3
+        },
+        "sink": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 3,
+          "tp": 0
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 1,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "tn": 2,
+          "tp": 0
+        }
+      },
+      "popular": {
+        "n": 30,
+        "private_data": {
+          "f1": null,
+          "fn": 3,
+          "fp": 0,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 3,
+            "value": 0.0
+          },
+          "tn": 27,
+          "tp": 0
+        },
+        "sink": {
+          "f1": 0.4444444444444444,
+          "fn": 12,
+          "fp": 3,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 6,
+            "n": 9,
+            "value": 0.6666666666666666
+          },
+          "recall": {
+            "ci": [
+              0.1627877475083369,
+              0.5625053270405489
+            ],
+            "ci_note": null,
+            "k": 6,
+            "n": 18,
+            "value": 0.3333333333333333
+          },
+          "tn": 9,
+          "tp": 6
+        },
+        "untrusted_source": {
+          "f1": 0.23529411764705882,
+          "fn": 11,
+          "fp": 2,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 2,
+            "n": 4,
+            "value": 0.5
+          },
+          "recall": {
+            "ci": [
+              0.043258178358081184,
+              0.4223463101948254
+            ],
+            "ci_note": null,
+            "k": 2,
+            "n": 13,
+            "value": 0.15384615384615385
+          },
+          "tn": 15,
+          "tp": 2
+        }
+      },
+      "reference": {
+        "n": 14,
+        "private_data": {
+          "f1": null,
+          "fn": 7,
+          "fp": 1,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 7,
+            "value": 0.0
+          },
+          "tn": 6,
+          "tp": 0
+        },
+        "sink": {
+          "f1": 0.5714285714285715,
+          "fn": 3,
+          "fp": 0,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 2,
+            "n": 2,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 2,
+            "n": 5,
+            "value": 0.4
+          },
+          "tn": 9,
+          "tp": 2
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 14,
+          "tp": 0
+        }
+      },
+      "registry": {
+        "n": 13,
+        "private_data": {
+          "f1": null,
+          "fn": 1,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "tn": 12,
+          "tp": 0
+        },
+        "sink": {
+          "f1": null,
+          "fn": 4,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 4,
+            "value": 0.0
+          },
+          "tn": 9,
+          "tp": 0
+        },
+        "untrusted_source": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "tn": 10,
+          "tp": 3
+        }
+      }
+    },
+    "n": 60,
+    "pooled": {
+      "private_data": {
+        "f1": 0.3333333333333333,
+        "fn": 11,
+        "fp": 1,
+        "n": 60,
+        "precision": {
+          "ci": null,
+          "ci_note": "N < 10, not reported",
+          "k": 3,
+          "n": 4,
+          "value": 0.75
+        },
+        "recall": {
+          "ci": [
+            0.07571386712693184,
+            0.47589230586600295
+          ],
+          "ci_note": null,
+          "k": 3,
+          "n": 14,
+          "value": 0.21428571428571427
+        },
+        "tn": 45,
+        "tp": 3
+      },
+      "sink": {
+        "f1": 0.42105263157894735,
+        "fn": 19,
+        "fp": 3,
+        "n": 60,
+        "precision": {
+          "ci": [
+            0.43435469882387084,
+            0.902539407099751
+          ],
+          "ci_note": null,
+          "k": 8,
+          "n": 11,
+          "value": 0.7272727272727273
+        },
+        "recall": {
+          "ci": [
+            0.1585304046977976,
+            0.4848068296414814
+          ],
+          "ci_note": null,
+          "k": 8,
+          "n": 27,
+          "value": 0.2962962962962963
+        },
+        "tn": 30,
+        "tp": 8
+      },
+      "untrusted_source": {
+        "f1": 0.4166666666666667,
+        "fn": 12,
+        "fp": 2,
+        "n": 60,
+        "precision": {
+          "ci": null,
+          "ci_note": "N < 10, not reported",
+          "k": 5,
+          "n": 7,
+          "value": 0.7142857142857143
+        },
+        "recall": {
+          "ci": [
+            0.1327998961029523,
+            0.5313311006653985
+          ],
+          "ci_note": null,
+          "k": 5,
+          "n": 17,
+          "value": 0.29411764705882354
+        },
+        "tn": 41,
+        "tp": 5
+      }
+    },
+    "uncertain_rows": 24
+  },
+  "metadata": {
+    "classifier_sha256": "08deee09cb4feb3cf388b93c263dbcdc6f95165cba1678a6305680b5b60f4a16",
+    "generated_at": "2026-11-12T21:45:03+00:00",
+    "git_commit": "28d51650edb15f42c10cf133c9a4888744114d64",
+    "labels_sha256": "286d16bba8854716e317e661155c6e6aad2766708680454f8f109ca508c1c61a",
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 154 Stepping 4, GenuineIntel",
+    "proveflow_version": "0.0.1.dev0",
+    "python": "3.12.10",
+    "split_cap": 15,
+    "split_inputs": {
+      "pg-mcp-guard.json": "57d8e5cb3ba0a38f3eedcb6367f3b2e8a1878ac5cd0ba1d319782db3d57408dc",
+      "tools.jsonl": "168ed70771f3d2856e1afd54de234c1f368f8dc48987d3c331782f7c93da385b"
+    },
+    "split_seed": 20261111,
+    "test_evaluations": 1
+  },
+  "schema_version": 1,
+  "test": {
+    "by_source": {
+      "reference": {
+        "n": 25,
+        "private_data": {
+          "f1": 0.888888888888889,
+          "fn": 2,
+          "fp": 1,
+          "n": 25,
+          "precision": {
+            "ci": [
+              0.6668604907890041,
+              0.9862895787574435
+            ],
+            "ci_note": null,
+            "k": 12,
+            "n": 13,
+            "value": 0.9230769230769231
+          },
+          "recall": {
+            "ci": [
+              0.6005862050302965,
+              0.9599060787285351
+            ],
+            "ci_note": null,
+            "k": 12,
+            "n": 14,
+            "value": 0.8571428571428571
+          },
+          "tn": 10,
+          "tp": 12
+        },
+        "sink": {
+          "f1": 0.9523809523809523,
+          "fn": 1,
+          "fp": 0,
+          "n": 25,
+          "precision": {
+            "ci": [
+              0.7224672001371107,
+              0.9999999999999999
+            ],
+            "ci_note": null,
+            "k": 10,
+            "n": 10,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": [
+              0.6226415635484043,
+              0.9837678271141151
+            ],
+            "ci_note": null,
+            "k": 10,
+            "n": 11,
+            "value": 0.9090909090909091
+          },
+          "tn": 14,
+          "tp": 10
+        },
+        "untrusted_source": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 25,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 1,
+            "n": 1,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 1,
+            "n": 1,
+            "value": 1.0
+          },
+          "tn": 24,
+          "tp": 1
+        }
+      },
+      "registry": {
+        "n": 15,
+        "private_data": {
+          "f1": null,
+          "fn": 0,
+          "fp": 1,
+          "n": 15,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 14,
+          "tp": 0
+        },
+        "sink": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 15,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 15,
+          "tp": 0
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 15,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 15,
+          "tp": 0
+        }
+      }
+    },
+    "kappa": {
+      "private_data": {
+        "kappa": null,
+        "n": 0,
+        "note": "labeler B labels missing"
+      },
+      "sink": {
+        "kappa": null,
+        "n": 0,
+        "note": "labeler B labels missing"
+      },
+      "untrusted_source": {
+        "kappa": null,
+        "n": 0,
+        "note": "labeler B labels missing"
+      }
+    },
+    "n": 40,
+    "pooled": {
+      "private_data": {
+        "f1": 0.8571428571428571,
+        "fn": 2,
+        "fp": 2,
+        "n": 40,
+        "precision": {
+          "ci": [
+            0.6005862050302965,
+            0.9599060787285351
+          ],
+          "ci_note": null,
+          "k": 12,
+          "n": 14,
+          "value": 0.8571428571428571
+        },
+        "recall": {
+          "ci": [
+            0.6005862050302965,
+            0.9599060787285351
+          ],
+          "ci_note": null,
+          "k": 12,
+          "n": 14,
+          "value": 0.8571428571428571
+        },
+        "tn": 24,
+        "tp": 12
+      },
+      "sink": {
+        "f1": 0.9523809523809523,
+        "fn": 1,
+        "fp": 0,
+        "n": 40,
+        "precision": {
+          "ci": [
+            0.7224672001371107,
+            0.9999999999999999
+          ],
+          "ci_note": null,
+          "k": 10,
+          "n": 10,
+          "value": 1.0
+        },
+        "recall": {
+          "ci": [
+            0.6226415635484043,
+            0.9837678271141151
+          ],
+          "ci_note": null,
+          "k": 10,
+          "n": 11,
+          "value": 0.9090909090909091
+        },
+        "tn": 29,
+        "tp": 10
+      },
+      "untrusted_source": {
+        "f1": 1.0,
+        "fn": 0,
+        "fp": 0,
+        "n": 40,
+        "precision": {
+          "ci": null,
+          "ci_note": "N < 10, not reported",
+          "k": 1,
+          "n": 1,
+          "value": 1.0
+        },
+        "recall": {
+          "ci": null,
+          "ci_note": "N < 10, not reported",
+          "k": 1,
+          "n": 1,
+          "value": 1.0
+        },
+        "tn": 39,
+        "tp": 1
+      }
+    },
+    "uncertain_rows": 6,
+    "unresolved_rows": 0
+  }
+}

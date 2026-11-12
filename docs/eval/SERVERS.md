@@ -1,6 +1,7 @@
 # Classifier eval: servers
 
-> Nothing has been collected or launched for the eval yet.
+> Collected 2026-11-12 (GitHub Actions run `43285294552`): 12 of 14 planned servers; see
+> [Collection attrition](#collection-attrition) and docs/eval/RESULTS.md.
 >
 > Every column comes from the pinned package itself or its official page:
 > - versions and dates: the npm registry / PyPI JSON
@@ -44,6 +45,22 @@
 
 Confirmed: 1 + 14 + 12 + 9 + 1 + 2 + 25 + 3 = **67** tools, plus Chrome DevTools (counted at
 collection).
+
+## Collection attrition
+
+Run `43285294552` (workflow `eval-collect`, 2026-11-12, `--timeout 180 --ignore-scripts
+--no-build`). Planned: 14 servers (`data/eval/roles/servers.json`). Collected: **12**
+(136 tools). Neither failure was retried or replaced.
+
+| Server | Status | Cause (from the run summary) |
+|---|---|---|
+| deliverd-screen | timeout | no `tools/list` answer within 180 s |
+| global-sentinel-mcp | failed | unpinned `mcp` dependency resolved to `mcp` 2.x → `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` (the SDK's error text: "pin 'mcp<2' to keep running v1 code") |
+
+Collected tool counts: chrome-devtools 32, fetch 1, filesystem 14, flagquantum-mcp-server 27,
+git 12, grok-mcp 4, marketplace-mcp 5, memory 9, playwright 25, sequential-thinking 1,
+tickerrisk-mcp 4, time 2. Add pg-mcp-guard's 3 tools (in-process): 13 servers and 139 tools
+before CAP, 100 after CAP 15 (dev 60 / test 40).
 
 ### pg-mcp-guard: in-process list_tools (run 2026-11-12, real output)
 
