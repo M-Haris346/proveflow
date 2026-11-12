@@ -71,7 +71,7 @@ principal source is called only for `tools/call` (`app/server.py:251`).
 
 `git status --porcelain` in pg-mcp-guard afterwards printed 0 lines.
 
-## Registry additions: sample of ≤ 8 (awaiting your approval)
+## Registry additions (Haris, 2026-11-12: include all 6 licensed candidates)
 
 Listing: `GET /v0/servers?limit=100&version=latest`. Registry OpenAPI
 (<https://registry.modelcontextprotocol.io/openapi.yaml>, accessed 2026-11-12): "Use
@@ -94,18 +94,23 @@ Rule: `scripts/eval_registry_select.py` (R1–R5 unit-tested in
 
 Sample: `random.Random(20261111).sample(sorted_by_name, 8)`. License comes only from a LICENSE
 file in the pinned tarball/sdist (read in memory, never extracted or executed). Telemetry is
-the README grep above.
+the README grep above. **Attrition: 8 sampled, 2 dropped (no LICENSE file); not resampled.**
 
-| Registry name | Package @ version (published) | LICENSE file (archive sha256 prefix) | Telemetry grep | Proposal |
-|---|---|---|---|---|
-| io.github.mrfentmen/waqi-mcp | npm `waqi-mcp@1.0.0` (2026-09-21) | **none in package** (`9ab51998dd397d3c`) | 0 | **exclude** (no LICENSE file) |
-| io.github.joepangallo/mcp-server-security-audit | npm `mcp-server-security-audit@1.0.3` (2026-03-01) | **none in package** (`c708bc69f274d2ea`) | 0 | **exclude** (no LICENSE file) |
-| io.github.deliverd-dev/deliverd-screen | npm `@deliverd/screen@0.2.0` (2026-10-26) | MIT, `package/LICENSE` (`636a2e90385203f5`) | 0 | propose |
-| io.github.PasiutusVovere/tickerrisk-mcp | PyPI `tickerrisk-mcp==0.1.3` (2026-09-27) | MIT, sdist `LICENSE` (`081ea6f90dc9d702`) | 0 | propose |
-| io.github.howardpen9/grok-mcp | npm `grok-cli-mcp@0.2.0` (2026-06-10) | MIT, `package/LICENSE` (`d61f2b14599762e6`) | 0 | propose |
-| io.github.FlagQuantum/flagquantum-mcp-server | PyPI `flagquantum-mcp-server==0.3.2` (2026-10-27) | Apache-2.0, sdist `LICENSE` (`3f52453418e11391`) | 0 | propose |
-| io.github.nirholas/marketplace-mcp | npm `@three-ws/marketplace-mcp@0.1.3` (2026-10-10) | Apache-2.0, `package/LICENSE` (`41c3a2df65459bed`) | 1: `examples/README.md:90: - whale-wallet-tracking [analysis] 10 installs, free`, a listed skill, not product telemetry (my reading) | **ask** |
-| io.github.ykshah1309/global-sentinel-mcp | PyPI `global-sentinel-mcp==0.1.1` (2026-04-20) | MIT, sdist `LICENSE` (`d227e244fcd2d3c4`) | 5: e.g. `README.md:6: … internet-infrastructure telemetry** into one alternative-data layer`, `README.md:191: Internet-infrastructure telemetry from Cloudflare's global network`. These are about the **data it serves**, not telemetry it sends (my reading) | **ask** |
+Wheels: collection runs with `UV_NO_BUILD=1` (no sdist builds). PyPI JSON for each pinned
+version, 2026-11-12: all three PyPI candidates publish a `py3-none-any` wheel, so the package
+itself installs without a build. Their **dependencies** are only resolved at collection time;
+a dependency that is sdist-only makes that server fail, and the failure will be reported.
+
+| Registry name | Package @ version (published) | Wheel for pinned version | LICENSE file (archive sha256 prefix) | Telemetry grep | Decision |
+|---|---|---|---|---|---|
+| io.github.mrfentmen/waqi-mcp | npm `waqi-mcp@1.0.0` (2026-09-21) | n/a (npm) | **none in package** (`9ab51998dd397d3c`) | 0 | **dropped** (no LICENSE file) |
+| io.github.joepangallo/mcp-server-security-audit | npm `mcp-server-security-audit@1.0.3` (2026-03-01) | n/a (npm) | **none in package** (`c708bc69f274d2ea`) | 0 | **dropped** (no LICENSE file) |
+| io.github.deliverd-dev/deliverd-screen | npm `@deliverd/screen@0.2.0` (2026-10-26) | n/a (npm) | MIT, `package/LICENSE` (`636a2e90385203f5`) | 0 | **include** (ephemeral runner only) |
+| io.github.howardpen9/grok-mcp | npm `grok-cli-mcp@0.2.0` (2026-06-10) | n/a (npm) | MIT, `package/LICENSE` (`d61f2b14599762e6`) | 0 | **include** (ephemeral runner only) |
+| io.github.nirholas/marketplace-mcp | npm `@three-ws/marketplace-mcp@0.1.3` (2026-10-10) | n/a (npm) | Apache-2.0, `package/LICENSE` (`41c3a2df65459bed`) | 1 (`examples/README.md:90`): **telemetry grep hits manually reviewed: data/feature mentions, not product telemetry; collected only in the ephemeral runner** | **include** (ephemeral runner only) |
+| io.github.PasiutusVovere/tickerrisk-mcp | PyPI `tickerrisk-mcp==0.1.3` (2026-09-27) | yes: `tickerrisk_mcp-0.1.3-py3-none-any.whl` | MIT, sdist `LICENSE` (`081ea6f90dc9d702`) | 0 | **include** (ephemeral runner only) |
+| io.github.ykshah1309/global-sentinel-mcp | PyPI `global-sentinel-mcp==0.1.1` (2026-04-20) | yes: `global_sentinel_mcp-0.1.1-py3-none-any.whl` | MIT, sdist `LICENSE` (`d227e244fcd2d3c4`) | 5 (`README.md:6,22,29,182,191`): **telemetry grep hits manually reviewed: data/feature mentions, not product telemetry; collected only in the ephemeral runner** | **include** (ephemeral runner only) |
+| io.github.FlagQuantum/flagquantum-mcp-server | PyPI `flagquantum-mcp-server==0.3.2` (2026-10-27) | yes: `flagquantum_mcp_server-0.3.2-py3-none-any.whl` | Apache-2.0, sdist `LICENSE` (`3f52453418e11391`) | 0 | **include** (ephemeral runner only) |
 
 Limits, stated:
 - A README without a telemetry mention does not prove the server sends none.
@@ -139,3 +144,41 @@ Limits, stated:
 5. **Reporting:** per-role precision/recall/F1 with Wilson 95% CIs **only where the relevant
    denominator is ≥ 10** (TP+FP for precision, TP+FN for recall). Otherwise the cell says
    "N < 10, not reported".
+
+### 4b feasibility (computed 2026-11-12 from KNOWN counts only; no split file exists)
+
+Script: scratch calculation that implements rule 3 above exactly. Chrome DevTools and the 6
+registry servers have **no counts until collection**, so this is conditional.
+
+**Proposed CAP = 15 tools per server.** Playwright (25) is capped to 15. With a total of about
+70 known tools, 15 keeps any one server at about 20% or less of all rows.
+
+Per-group counts after CAP (variant A: one group per server, grouping only by tool-name Jaccard
+≥ 0.3; the overlaps can only be computed after collection):
+
+| Group | Tools (capped) |
+|---|---|
+| fetch | 1 |
+| filesystem | 14 |
+| git | 12 |
+| memory | 9 |
+| sequential-thinking | 1 |
+| time | 2 |
+| Playwright | 15 (25 → CAP) |
+| Chrome DevTools | unknown (scenarios below) |
+| pg-mcp-guard | 3 (forced dev) |
+| 6 registry servers | unknown |
+
+| Chrome DevTools count | Variant A (Jaccard-only grouping) | Variant B (also "same upstream repo": 6 reference servers = one group of 39) |
+|---|---|---|
+| 10 | **feasible**: test = chrome-devtools, fetch, git, sequential-thinking, time = 26/67 (0.388); max group share test 0.462, dev 0.366 | **infeasible** (no subset satisfies ≤ 50% per group + ≥ 2 groups per side) |
+| ≥ 15 (capped) | **feasible**: test = filesystem, git, sequential-thinking, time = 29/72 (0.403); max group share test 0.483, dev 0.349 | feasible only as test = Playwright + Chrome DevTools = 30/72 (0.417); max share test 0.500, **dev 0.929** (one group is almost all of dev) |
+
+**Recommendation:** variant A (drop the "same upstream repo" clause I proposed earlier). Variant
+B turns the 6 reference servers into one 39-tool block, so the split is either impossible or
+puts only two browser-automation servers in test. The cost of variant A: test and dev both
+contain reference servers that share a writing style, which is mild leakage and will be
+stated in the report. The final split is computed only **after** collection, when the
+registry servers' counts and the Jaccard overlaps are known. That split is then shown to you
+before any label exists.
+

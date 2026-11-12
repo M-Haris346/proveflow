@@ -13,6 +13,10 @@
 #   whether this covers npx installs, so the collector also passes --ignore-scripts.
 # - UV_NO_BUILD=1: uv docs, "If set, uv will not build source distributions" (building an
 #   sdist runs its code); wheel-only packages are collected, others fail and are reported
+# - no step saves an Actions cache: setup-uv caching is off (below); the documented inputs of
+#   actions/checkout v7.0.1 and actions/upload-artifact v7.0.2 (their READMEs) have no cache
+#   setting; there is no actions/cache step. The artifact is an output only, and no workflow
+#   downloads it automatically.
 # - proveflow's own guards still apply: tools/list only, method allowlist, job/process-group
 #   kill, empty temp cwd, minimal env
 #
@@ -42,6 +46,15 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
+          # setup-uv v10.3.3 README: enable-cache defaults to "auto" = "enabled on
+          # GitHub-hosted runners except for release, tag push, pull_request_target, and
+          # workflow_run events", so it would be ON for workflow_dispatch. Third-party code
+          # runs in this job: it must not write a cache that CI later restores. The README
+          # does not say whether enable-cache=false also covers saving/restoring, so all
+          # three documented switches are off.
+          enable-cache: "false"
+          save-cache: "false"
+          restore-cache: "false"
 
       - name: Sync dependencies
         run: uv sync --locked
