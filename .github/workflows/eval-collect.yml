@@ -1,27 +1,29 @@
-# PROPOSAL, NOT ACTIVE, NEVER RUN. Lives outside .github/workflows on purpose: moving it
-# there (after Haris approves) makes it dispatchable.
+# Eval collection: MANUAL DISPATCH ONLY (Haris approved the move on 2026-11-12 and triggers
+# it himself). Not run by Claude.
 #
-# Collects tools/list from the REGISTRY-SELECTED third-party servers (docs/eval/SERVERS.md
-# §Registry) in an ephemeral GitHub-hosted runner, never on a developer machine
-# (Haris, 2026-11-12): their publishers are unknown.
+# Collects tools/list from ALL eval servers (reference, Playwright, Chrome DevTools, and the
+# registry-selected ones; data/eval/roles/servers.json) in ONE ephemeral GitHub-hosted runner.
+# Nothing third-party ever runs on a developer laptop. pg-mcp-guard is not collected here:
+# it is Haris's own code, collected in-process by scripts/eval_pg_mcp_guard_list_tools.py.
 #
-# Hardening (each line cites its source in docs/eval/SERVERS.md §Ephemeral collection):
+# Hardening (sources in docs/eval/SERVERS.md §Ephemeral collection):
 # - manual trigger only (workflow_dispatch); read-only token; no secrets referenced
-# - npm_config_ignore_scripts=true: npm docs, ignore-scripts "If true, npm does not run
-#   scripts specified in package.json files"; "environment variables that start with
-#   npm_config_ will be interpreted as a configuration parameter". The npm docs do NOT say
-#   whether this covers npx installs, so the collector also passes --ignore-scripts.
-# - UV_NO_BUILD=1: uv docs, "If set, uv will not build source distributions" (building an
-#   sdist runs its code); wheel-only packages are collected, others fail and are reported
+# - --ignore-scripts / --no-build: the collector puts npm_config_ignore_scripts=true and
+#   UV_NO_BUILD=1 into EVERY SERVER'S OWN env. They cannot be job-level variables: launched
+#   servers get only proveflow's minimal env allow-list plus their configured env
+#   (src/proveflow/introspect/env.py), so a job variable would never reach npx/uvx. A
+#   job-level UV_NO_BUILD would also stop `uv sync` from building proveflow itself.
+#     npm docs: ignore-scripts "If true, npm does not run scripts specified in package.json
+#     files"; "environment variables that start with npm_config_ will be interpreted as a
+#     configuration parameter" (they do not say whether npx honours it).
+#     uv docs: UV_NO_BUILD "If set, uv will not build source distributions".
 # - no step saves an Actions cache: setup-uv caching is off (below); the documented inputs of
 #   actions/checkout v7.0.1 and actions/upload-artifact v7.0.2 (their READMEs) have no cache
 #   setting; there is no actions/cache step. The artifact is an output only, and no workflow
 #   downloads it automatically.
 # - proveflow's own guards still apply: tools/list only, method allowlist, job/process-group
 #   kill, empty temp cwd, minimal env
-#
-# KNOWN GAP: `python -m proveflow.eval.collect` lands in step 4d. Until then this job fails.
-name: eval-collect-registry
+name: eval-collect
 
 on:
   workflow_dispatch:
@@ -32,10 +34,8 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 75
     env:
-      npm_config_ignore_scripts: "true"
-      UV_NO_BUILD: "1"
       CI: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,18 +59,22 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
-      - name: Collect tools/list (registry-selected servers only)
+      - name: Collect tools/list (all eval servers in data/eval/roles/servers.json)
         # Node.js comes preinstalled on the ubuntu-24.04 image (actions/runner-images).
+        # Whether Chrome DevTools MCP needs a browser just to answer tools/list is not
+        # documented; a failure is reported in the summary, not hidden.
         run: >
           uv run python -m proveflow.eval.collect
-          --servers data/eval/roles/registry_servers.json
-          --yes --timeout 180 --ignore-scripts
-          --out out/registry-tools.jsonl
+          --servers data/eval/roles/servers.json
+          --yes --timeout 180 --ignore-scripts --no-build
+          --out out/tools.jsonl
 
       - name: Upload collected tool metadata
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: registry-tools
-          path: out/registry-tools.jsonl
+          name: eval-tools
+          path: |
+            out/tools.jsonl
+            out/tools.jsonl.summary.json
           retention-days: 7
           if-no-files-found: error
