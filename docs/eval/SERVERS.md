@@ -26,7 +26,9 @@
 | pg-mcp-guard | **in-process `list_tools`, stub executor** (below). Dev split only (Haris knows these tools; not blind) |
 | GitHub MCP | **exclude**: needs `GITHUB_PERSONAL_ACCESS_TOKEN`, and the README does not say that startup skips validation |
 
-## Servers in the set (collected on Haris's machine in step 4d, after approval)
+## Servers in the set
+
+**Where collected (Haris, 2026-11-12):** servers 1-8 below **and** the registry servers are all collected in **one ephemeral GitHub Actions job**: one reproducible artifact, and nothing third-party runs on the laptop. The workflow is `.github/workflows/eval-collect.yml` (manual `workflow_dispatch` only; moved there with Haris's approval on 2026-11-12; Haris triggers it). The launch specs are `data/eval/roles/servers.json`, run by `python -m proveflow.eval.collect`. pg-mcp-guard (row 9) stays the in-process script on Haris's machine (his own code).
 
 | # | Server | Package @ version (published) | License (how verified) | Tools (how counted) | Telemetry (pinned README) | Launch / provenance | Split |
 |---|---|---|---|---|---|---|---|
@@ -96,7 +98,7 @@ Sample: `random.Random(20261111).sample(sorted_by_name, 8)`. License comes only 
 file in the pinned tarball/sdist (read in memory, never extracted or executed). Telemetry is
 the README grep above. **Attrition: 8 sampled, 2 dropped (no LICENSE file); not resampled.**
 
-Wheels: collection runs with `UV_NO_BUILD=1` (no sdist builds). PyPI JSON for each pinned
+Wheels: collection runs with `--no-build` (`UV_NO_BUILD=1` in each server's env, so no sdist builds). PyPI JSON for each pinned
 version, 2026-11-12: all three PyPI candidates publish a `py3-none-any` wheel, so the package
 itself installs without a build. Their **dependencies** are only resolved at collection time;
 a dependency that is sdist-only makes that server fail, and the failure will be reported.
@@ -118,14 +120,21 @@ Limits, stated:
 - The npm `license` field was **not** used.
 - These 6 candidates come from unknown publishers.
 
-**Collection only in an ephemeral runner:** proposed workflow
-`docs/eval/proposed-workflows/eval-collect-registry.yml`, not active and not run.
+**Collection only in an ephemeral runner (same job as all other eval servers):**
+`.github/workflows/eval-collect.yml` (manual dispatch only; not run by Claude).
 - It uses `workflow_dispatch` on `ubuntu-24.04`, `contents: read`, and no secrets.
-- `npm_config_ignore_scripts=true` (npm config docs; the docs do not say whether npx honours
-  it, so the collector will also pass `--ignore-scripts`).
-- `UV_NO_BUILD=1` (uv docs: "If set, uv will not build source distributions").
-- `CI=true`.
-- The collector it calls (`proveflow.eval.collect`) lands in step 4d.
+- Setup-uv caching is off (`enable-cache`, `save-cache` and `restore-cache` all `"false"`).
+- `CI=true` at job level.
+- The collector runs with `--ignore-scripts --no-build`, which puts
+  `npm_config_ignore_scripts=true` (npm config docs; the docs do not say whether npx honours
+  it) and `UV_NO_BUILD=1` (uv docs: "If set, uv will not build source distributions") into
+  **every server's own env**.
+- **Fixed bug (2026-11-12):** these were first set as job-level env. That never reached the
+  servers, because a launched server gets only proveflow's minimal env allow-list plus its
+  configured env (`src/proveflow/introspect/env.py`). A job-level `UV_NO_BUILD` would also
+  have stopped `uv sync` from building proveflow itself. Tests:
+  `tests/safety/test_eval_collect.py::test_no_build_reaches_child_env` and
+  `test_job_level_env_does_not_reach_child`.
 
 ## Split design (4b, implemented only after approval)
 
@@ -144,6 +153,12 @@ Limits, stated:
 5. **Reporting:** per-role precision/recall/F1 with Wilson 95% CIs **only where the relevant
    denominator is ≥ 10** (TP+FP for precision, TP+FN for recall). Otherwise the cell says
    "N < 10, not reported".
+
+### 4b decisions (Haris, 2026-11-12)
+
+**CAP = 15** and **variant A (Jaccard-only grouping)** are approved. The "same upstream repo" clause is dropped.
+
+**Threat to validity (stated in the eval report):** the six reference servers come from one repository (modelcontextprotocol/servers) and share a writing style and vocabulary for names and descriptions. Under variant A they can land on both sides of the split, so heuristics tuned on dev reference servers may do better on test reference servers than on unseen styles. That would inflate test precision/recall. The report gives per-source results (reference / popular / registry) next to the pooled numbers, so the effect is visible.
 
 ### 4b feasibility (computed 2026-11-12 from KNOWN counts only; no split file exists)
 
