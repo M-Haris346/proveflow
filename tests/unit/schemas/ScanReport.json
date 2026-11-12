@@ -588,6 +588,64 @@
       "title": "SinkSeverity",
       "type": "string"
     },
+    "SkipReason": {
+      "description": "Why a discovered server is in no profile (it was not analyzed at all).\n\nServers that ARE in a profile but were not introspected (remote, unresolved variables,\nconsent declined/required, launch failed or timed out) are not \"skipped\": they keep\nserver-level roles and report the reason in ``ServerReport.introspection``.",
+      "enum": [
+        "out_of_project",
+        "shadowed"
+      ],
+      "title": "SkipReason",
+      "type": "string"
+    },
+    "SkippedServer": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "$ref": "#/$defs/ClientKind"
+        },
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project"
+        },
+        "reason": {
+          "$ref": "#/$defs/SkipReason"
+        },
+        "scope": {
+          "$ref": "#/$defs/ConfigScope"
+        },
+        "server_ref": {
+          "title": "Server Ref",
+          "type": "string"
+        },
+        "source_file": {
+          "format": "path",
+          "title": "Source File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server_ref",
+        "client",
+        "scope",
+        "source_file",
+        "reason",
+        "detail"
+      ],
+      "title": "SkippedServer",
+      "type": "object"
+    },
     "ToolChange": {
       "additionalProperties": false,
       "description": "Difference vs the cached previous tools/list (rug-pull signal, never blocking).",
@@ -704,7 +762,13 @@
     }
   },
   "additionalProperties": false,
+  "description": "Every discovered server is accounted for: it is a member of a profile or listed in\n``skipped`` (THREAT_MODEL T16). The validator refuses a report that drops one.",
   "properties": {
+    "discovered_servers": {
+      "minimum": 0,
+      "title": "Discovered Servers",
+      "type": "integer"
+    },
     "findings": {
       "default": [],
       "items": {
@@ -756,6 +820,14 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "skipped": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SkippedServer"
+      },
+      "title": "Skipped",
+      "type": "array"
+    },
     "unused_overrides": {
       "default": [],
       "items": {
@@ -769,6 +841,7 @@
     "proveflow_version",
     "project",
     "mode",
+    "discovered_servers",
     "profiles",
     "flows",
     "limitations"

@@ -138,6 +138,40 @@ def render_scan(report: ScanReport, console: Console, limit: int) -> None:
                     )
                 )
 
+    if report.skipped:
+        skipped = Table(title=f"Skipped servers ({len(report.skipped)}, NOT analyzed)")
+        for col in ("server", "client", "scope", "reason", "detail"):
+            skipped.add_column(col)
+        for sk in report.skipped:
+            skipped.add_row(
+                Text(sk.server_ref),
+                Text(sk.client.value),
+                Text(sk.scope.value),
+                Text(sk.reason.value),
+                Text(sk.detail),
+            )
+        console.print(skipped)
+    console.print(
+        Text(
+            f"Servers: {report.discovered_servers} discovered, {report.analyzed_servers} "
+            f"analyzed, {len(report.skipped)} skipped",
+            style="yellow" if report.skipped else "",
+        )
+    )
+
+    if not report.profiles:
+        # Never print a bare "0 flows": with nothing analyzed, zero flows means nothing.
+        console.print(
+            Text(
+                f"No servers analyzed: {report.discovered_servers} discovered, "
+                f"{len(report.skipped)} skipped. No flow list was computed; this is NOT a "
+                "clean result.",
+                style="bold yellow",
+            )
+        )
+        _render_tail(report, console)
+        return
+
     flows = Table(title=f"Toxic flows ({len(report.flows)} total, all THEORETICAL)")
     for col in (
         "id",
@@ -168,6 +202,10 @@ def render_scan(report: ScanReport, console: Console, limit: int) -> None:
         console.print(
             Text(f"... {len(report.flows) - limit} more flows (use --limit, --json or --sarif)")
         )
+    _render_tail(report, console)
+
+
+def _render_tail(report: ScanReport, console: Console) -> None:
     if report.findings:
         notes = Table(title="Supply-chain notes (PF-UNPINNED)")
         for col in ("server", "launcher", "package", "status", "reason"):

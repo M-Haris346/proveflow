@@ -10,10 +10,10 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from proveflow.core._base import FrozenModel
-from proveflow.core.client import ClientConfig, ClientKind, ServerSpec
+from proveflow.core.client import ClientConfig, ClientKind, ConfigScope, ServerSpec
 from proveflow.core.flows import Flow
 from proveflow.core.tools import ToolSpec
 
@@ -134,13 +134,53 @@ class ProfileReport(FrozenModel):
     notes: tuple[str, ...] = ()
 
 
+class SkipReason(StrEnum):
+    """Why a discovered server is in no profile (it was not analyzed at all).
+
+    Servers that ARE in a profile but were not introspected (remote, unresolved variables,
+    consent declined/required, launch failed or timed out) are not "skipped": they keep
+    server-level roles and report the reason in ``ServerReport.introspection``.
+    """
+
+    OUT_OF_PROJECT = "out_of_project"  # Claude Code local entry for another project path
+    SHADOWED = "shadowed"  # same name in a higher-precedence Claude Code scope
+
+
+class SkippedServer(FrozenModel):
+    server_ref: str
+    client: ClientKind
+    scope: ConfigScope
+    source_file: Path
+    project: str | None = None
+    reason: SkipReason
+    detail: str
+
+
 class ScanReport(FrozenModel):
+    """Every discovered server is accounted for: it is a member of a profile or listed in
+    ``skipped`` (THREAT_MODEL T16). The validator refuses a report that drops one."""
+
     schema_version: Literal[1] = 1
     proveflow_version: str
     project: str
     mode: Literal["introspect", "no_launch"]
+    discovered_servers: int = Field(ge=0)
     profiles: tuple[ProfileReport, ...]
+    skipped: tuple[SkippedServer, ...] = ()
     flows: tuple[Flow, ...]
     findings: tuple[Finding, ...] = ()
     unused_overrides: tuple[str, ...] = ()
     limitations: tuple[str, ...]
+
+    @property
+    def analyzed_servers(self) -> int:
+        return sum(len(p.servers) for p in self.profiles)
+
+    @model_validator(mode="after")
+    def _every_server_accounted_for(self) -> ScanReport:
+        if self.discovered_servers != self.analyzed_servers + len(self.skipped):
+            raise ValueError(
+                f"server accounting mismatch: {self.discovered_servers} discovered, "
+                f"{self.analyzed_servers} analyzed, {len(self.skipped)} skipped"
+            )
+        return self

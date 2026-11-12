@@ -16,7 +16,7 @@ from proveflow.core.client import ClientConfig, ServerSpec, TransportKind
 from proveflow.core.flows import Flow
 from proveflow.core.tools import ToolSpec
 from proveflow.discover.hostenv import HostEnv
-from proveflow.discover.profiles import Profile, build_profiles
+from proveflow.discover.profiles import Profile, partition_profiles
 from proveflow.flows.graph import apply_override, flows_for_profile, rank_flows
 from proveflow.flows.pinning import check_pinning
 from proveflow.flows.roles import classify_tool
@@ -49,6 +49,13 @@ INTROSPECT_LIMITATION = (
     "server-level, low-confidence roles. Tool roles come from untuned heuristics; their "
     "precision/recall is reported separately."
 )
+
+
+def skipped_limitation(skipped: int, discovered: int) -> str:
+    return (
+        f"{skipped} of {discovered} discovered server(s) were not analyzed (see 'skipped'); "
+        "their tools and flows are not in this report."
+    )
 
 
 def stdio_specs(profiles: Sequence[Profile]) -> list[ServerSpec]:
@@ -131,7 +138,8 @@ def build_scan(
     config: ProveflowConfig,
     introspection: Mapping[str, IntrospectionResult] | None = None,
 ) -> ScanReport:
-    profiles = build_profiles(configs, host, project)
+    profiles, skipped = partition_profiles(configs, host, project)
+    discovered = sum(len(c.servers) for c in configs)
     used: set[int] = set()
     profile_reports: list[ProfileReport] = []
     all_flows: list[Flow] = []
@@ -184,12 +192,15 @@ def build_scan(
         proveflow_version=__version__,
         project=str(project),
         mode=mode,
+        discovered_servers=discovered,
         profiles=tuple(profile_reports),
+        skipped=tuple(skipped),
         flows=tuple(rank_flows(all_flows)),
         findings=pinning_findings(profiles),
         unused_overrides=tuple(unused),
         limitations=(
             COMMON_LIMITATIONS[:1]
+            + ((skipped_limitation(len(skipped), discovered),) if skipped else ())
             + ((INTROSPECT_LIMITATION,) if introspection is not None else (NO_LAUNCH_LIMITATION,))
             + COMMON_LIMITATIONS[1:]
         ),

@@ -195,6 +195,21 @@ def build_sarif(report: ScanReport) -> dict[str, Any]:
                 "results": results,
                 "properties": {
                     "proveflowMode": report.mode,
+                    # Accounting (THREAT_MODEL T16): discovered = analyzed + skipped. An empty
+                    # results list with skipped servers is not a clean result. The other
+                    # project's path (SkippedServer.project) is left out of SARIF on purpose.
+                    "proveflowDiscoveredServers": report.discovered_servers,
+                    "proveflowAnalyzedServers": report.analyzed_servers,
+                    "proveflowSkippedServers": [
+                        {
+                            "server": sk.server_ref,
+                            "client": sk.client.value,
+                            "scope": sk.scope.value,
+                            "reason": sk.reason.value,
+                            "detail": sk.detail,
+                        }
+                        for sk in report.skipped
+                    ],
                     # Per server: was a tools/list baseline available? Makes an empty
                     # PF-TOOLCHANGE list unambiguous (first run vs compared vs no cache).
                     "proveflowServerBaselines": sorted(
