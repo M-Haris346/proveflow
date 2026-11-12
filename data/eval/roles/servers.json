@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "_comment": "Eval servers for the role classifier (docs/eval/SERVERS.md). Collected ONLY in the ephemeral runner (.github/workflows/eval-collect.yml) with `python -m proveflow.eval.collect`. {workdir} is replaced by the collector with a fresh temp dir. pg-mcp-guard is NOT here: it is collected in-process by scripts/eval_pg_mcp_guard_list_tools.py.",
+  "servers": [
+    {
+      "id": "fetch",
+      "source": "reference",
+      "package": {"registry": "pypi", "name": "mcp-server-fetch", "version": "2026.10.24"},
+      "license": "MIT OR Apache-2.0 (repo LICENSE @6b36e3c)",
+      "repo": "https://github.com/modelcontextprotocol/servers",
+      "command": "uvx",
+      "args": ["mcp-server-fetch@2026.10.24"]
+    },
+    {
+      "id": "filesystem",
+      "source": "reference",
+      "package": {"registry": "npm", "name": "@modelcontextprotocol/server-filesystem", "version": "2.0.1"},
+      "license": "MIT OR Apache-2.0 (repo LICENSE @6b36e3c)",
+      "repo": "https://github.com/modelcontextprotocol/servers",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@2.0.1", "{workdir}/fs"],
+      "setup": ["mkdir:fs"]
+    },
+    {
+      "id": "git",
+      "source": "reference",
+      "package": {"registry": "pypi", "name": "mcp-server-git", "version": "2026.10.19"},
+      "license": "MIT OR Apache-2.0 (repo LICENSE @6b36e3c)",
+      "repo": "https://github.com/modelcontextprotocol/servers",
+      "command": "uvx",
+      "args": ["mcp-server-git@2026.10.19", "--repository", "{workdir}/repo"],
+      "setup": ["git-init:repo"]
+    },
+    {
+      "id": "memory",
+      "source": "reference",
+      "package": {"registry": "npm", "name": "@modelcontextprotocol/server-memory", "version": "2.0.0"},
+      "license": "MIT OR Apache-2.0 (repo LICENSE @6b36e3c)",
+      "repo": "https://github.com/modelcontextprotocol/servers",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory@2.0.0"],
+      "env": {"MEMORY_FILE_PATH": "{workdir}/memory/memory.jsonl"},
+      "setup": ["mkdir:memory"]
+    },
+    {
+      "id": "sequential-thinking",
+      "source": "reference",
+      "package": {"registry": "npm", "name": "@modelcontextprotocol/server-sequential-thinking", "version": "2.0.0"},
+      "license": "MIT OR Apache-2.0 (repo LICENSE @6b36e3c)",
+      "repo": "https://github.com/modelcontextprotocol/servers",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking@2.0.0"]
+    },
+    {
+      "id": "time",
+      "source": "reference",
+      "package": {"registry": "pypi", "name": "mcp-server-time", "version": "2026.10.19"},
+      "license": "MIT OR Apache-2.0 (repo LICENSE @6b36e3c)",
+      "repo": "https://github.com/modelcontextprotocol/servers",
+      "command": "uvx",
+      "args": ["mcp-server-time@2026.10.19"]
+    },
+    {
+      "id": "playwright",
+      "source": "popular",
+      "package": {"registry": "npm", "name": "@playwright/mcp", "version": "0.0.83"},
+      "license": "Apache-2.0 (LICENSE in tarball)",
+      "repo": "https://github.com/microsoft/playwright-mcp",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.83", "--headless"]
+    },
+    {
+      "id": "chrome-devtools",
+      "source": "popular",
+      "package": {"registry": "npm", "name": "chrome-devtools-mcp", "version": "1.12.0"},
+      "license": "Apache-2.0 (LICENSE in tarball)",
+      "repo": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+      "command": "npx",
+      "args": ["-y", "-p", "chrome-devtools-mcp@1.12.0", "chrome-devtools-mcp", "--no-usage-statistics"],
+      "env": {"CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1"},
+      "notes": "two bins in package.json; -p + bin name is npx's documented explicit form; usage statistics opt-out (README 1.12.0)"
+    },
+    {
+      "id": "deliverd-screen",
+      "source": "registry",
+      "package": {"registry": "npm", "name": "@deliverd/screen", "version": "0.2.0"},
+      "license": "MIT (package/LICENSE, archive sha256 636a2e90385203f5)",
+      "repo": "https://github.com/deliverd-dev/deliverd-sdk",
+      "command": "npx",
+      "args": ["-y", "@deliverd/screen@0.2.0"]
+    },
+    {
+      "id": "grok-mcp",
+      "source": "registry",
+      "package": {"registry": "npm", "name": "grok-cli-mcp", "version": "0.2.0"},
+      "license": "MIT (package/LICENSE, archive sha256 d61f2b14599762e6)",
+      "repo": "https://github.com/howardpen9/grok-mcp",
+      "command": "npx",
+      "args": ["-y", "-p", "grok-cli-mcp@0.2.0", "grok-cli-mcp"],
+      "notes": "two bins in package.json; -p + bin name"
+    },
+    {
+      "id": "marketplace-mcp",
+      "source": "registry",
+      "package": {"registry": "npm", "name": "@three-ws/marketplace-mcp", "version": "0.1.3"},
+      "license": "Apache-2.0 (package/LICENSE, archive sha256 41c3a2df65459bed)",
+      "repo": "https://github.com/nirholas/three.ws",
+      "command": "npx",
+      "args": ["-y", "@three-ws/marketplace-mcp@0.1.3"],
+      "notes": "telemetry grep hits manually reviewed: data/feature mentions, not product telemetry; collected only in the ephemeral runner"
+    },
+    {
+      "id": "tickerrisk-mcp",
+      "source": "registry",
+      "package": {"registry": "pypi", "name": "tickerrisk-mcp", "version": "0.1.3"},
+      "license": "MIT (sdist LICENSE, archive sha256 081ea6f90dc9d702)",
+      "repo": "https://github.com/Tickerrisk/tickerrisk-mcp",
+      "command": "uvx",
+      "args": ["tickerrisk-mcp@0.1.3"]
+    },
+    {
+      "id": "global-sentinel-mcp",
+      "source": "registry",
+      "package": {"registry": "pypi", "name": "global-sentinel-mcp", "version": "0.1.1"},
+      "license": "MIT (sdist LICENSE, archive sha256 d227e244fcd2d3c4)",
+      "repo": "https://github.com/ykshah1309/global-sentinel-mcp",
+      "command": "uvx",
+      "args": ["global-sentinel-mcp@0.1.1"],
+      "notes": "telemetry grep hits manually reviewed: data/feature mentions, not product telemetry; collected only in the ephemeral runner"
+    },
+    {
+      "id": "flagquantum-mcp-server",
+      "source": "registry",
+      "package": {"registry": "pypi", "name": "flagquantum-mcp-server", "version": "0.3.2"},
+      "license": "Apache-2.0 (sdist LICENSE, archive sha256 3f52453418e11391)",
+      "repo": "https://github.com/FlagQuantum/mcp-servers",
+      "command": "uvx",
+      "args": ["flagquantum-mcp-server@0.3.2"]
+    }
+  ]
+}
