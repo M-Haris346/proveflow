@@ -151,3 +151,38 @@ def test_scan_default_non_interactive_launches_nothing(
         if srv["spec"]["transport"] == "stdio"
     }
     assert statuses == {"consent_required"}
+
+
+class _Stream:
+    def __init__(self, tty: bool) -> None:
+        self._tty = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+
+@pytest.mark.parametrize(
+    ("stdin", "stdout", "stderr", "expected"),
+    [
+        (True, False, True, True),  # scan --json > file: stdout redirected, still prompts
+        (True, True, True, True),
+        (True, True, False, False),  # stderr redirected: prompt would be invisible
+        (False, True, True, False),  # stdin redirected: nobody can answer
+    ],
+)
+def test_interactive_depends_on_stdin_and_stderr_only(
+    monkeypatch: pytest.MonkeyPatch, stdin: bool, stdout: bool, stderr: bool, expected: bool
+) -> None:
+    import sys
+
+    monkeypatch.setattr(sys, "stdin", _Stream(stdin))
+    monkeypatch.setattr(sys, "stdout", _Stream(stdout))
+    monkeypatch.setattr(sys, "stderr", _Stream(stderr))
+    assert cli._interactive() is expected
+
+
+def test_interactive_false_for_stream_without_isatty(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    monkeypatch.setattr(sys, "stdin", object())
+    assert cli._interactive() is False

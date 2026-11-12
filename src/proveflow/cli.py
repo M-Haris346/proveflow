@@ -123,8 +123,18 @@ def discover(
 
 
 def _interactive() -> bool:
-    """Is a human at the keyboard? (tests replace this)."""
-    return sys.stdin.isatty()
+    """Can we ask a human? The prompt is written to STDERR and read from STDIN, so both must
+    be terminals. STDOUT is irrelevant: `scan --json > out.json` still prompts. If stderr
+    is redirected the prompt would be invisible, so we do not ask (consent_required)."""
+    return _isatty(sys.stdin) and _isatty(sys.stderr)
+
+
+def _isatty(stream: object) -> bool:
+    isatty = getattr(stream, "isatty", None)
+    try:
+        return bool(isatty()) if callable(isatty) else False
+    except (ValueError, OSError):  # closed or detached stream
+        return False
 
 
 def consent_prompt_text(spec: ServerSpec) -> str:
