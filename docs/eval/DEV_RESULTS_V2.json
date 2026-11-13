@@ -1,0 +1,471 @@
+{
+  "dev": {
+    "by_source": {
+      "own": {
+        "n": 3,
+        "private_data": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "tn": 0,
+          "tp": 3
+        },
+        "sink": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 3,
+          "tp": 0
+        },
+        "untrusted_source": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 1,
+            "n": 1,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 1,
+            "n": 1,
+            "value": 1.0
+          },
+          "tn": 2,
+          "tp": 1
+        }
+      },
+      "popular": {
+        "n": 30,
+        "private_data": {
+          "f1": 0.5,
+          "fn": 2,
+          "fp": 0,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 1,
+            "n": 1,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 1,
+            "n": 3,
+            "value": 0.3333333333333333
+          },
+          "tn": 27,
+          "tp": 1
+        },
+        "sink": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 30,
+          "precision": {
+            "ci": [
+              0.8241207763533425,
+              1.0
+            ],
+            "ci_note": null,
+            "k": 18,
+            "n": 18,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": [
+              0.8241207763533425,
+              1.0
+            ],
+            "ci_note": null,
+            "k": 18,
+            "n": 18,
+            "value": 1.0
+          },
+          "tn": 12,
+          "tp": 18
+        },
+        "untrusted_source": {
+          "f1": 0.6666666666666667,
+          "fn": 6,
+          "fp": 1,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 7,
+            "n": 8,
+            "value": 0.875
+          },
+          "recall": {
+            "ci": [
+              0.29143795714506004,
+              0.7679393219046169
+            ],
+            "ci_note": null,
+            "k": 7,
+            "n": 13,
+            "value": 0.5384615384615384
+          },
+          "tn": 16,
+          "tp": 7
+        }
+      },
+      "reference": {
+        "n": 14,
+        "private_data": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 7,
+            "n": 7,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 7,
+            "n": 7,
+            "value": 1.0
+          },
+          "tn": 7,
+          "tp": 7
+        },
+        "sink": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tn": 9,
+          "tp": 5
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 14,
+          "tp": 0
+        }
+      },
+      "registry": {
+        "n": 13,
+        "private_data": {
+          "f1": null,
+          "fn": 1,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "tn": 12,
+          "tp": 0
+        },
+        "sink": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 4,
+            "n": 4,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 4,
+            "n": 4,
+            "value": 1.0
+          },
+          "tn": 9,
+          "tp": 4
+        },
+        "untrusted_source": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "tn": 10,
+          "tp": 3
+        }
+      }
+    },
+    "n": 60,
+    "pooled": {
+      "private_data": {
+        "f1": 0.88,
+        "fn": 3,
+        "fp": 0,
+        "n": 60,
+        "precision": {
+          "ci": [
+            0.7411670330319684,
+            1.0
+          ],
+          "ci_note": null,
+          "k": 11,
+          "n": 11,
+          "value": 1.0
+        },
+        "recall": {
+          "ci": [
+            0.524107694133997,
+            0.9242861328730683
+          ],
+          "ci_note": null,
+          "k": 11,
+          "n": 14,
+          "value": 0.7857142857142857
+        },
+        "tn": 46,
+        "tp": 11
+      },
+      "sink": {
+        "f1": 1.0,
+        "fn": 0,
+        "fp": 0,
+        "n": 60,
+        "precision": {
+          "ci": [
+            0.8754449702581328,
+            0.9999999999999998
+          ],
+          "ci_note": null,
+          "k": 27,
+          "n": 27,
+          "value": 1.0
+        },
+        "recall": {
+          "ci": [
+            0.8754449702581328,
+            0.9999999999999998
+          ],
+          "ci_note": null,
+          "k": 27,
+          "n": 27,
+          "value": 1.0
+        },
+        "tn": 33,
+        "tp": 27
+      },
+      "untrusted_source": {
+        "f1": 0.7586206896551724,
+        "fn": 6,
+        "fp": 1,
+        "n": 60,
+        "precision": {
+          "ci": [
+            0.646120088858883,
+            0.9851349055950829
+          ],
+          "ci_note": null,
+          "k": 11,
+          "n": 12,
+          "value": 0.9166666666666666
+        },
+        "recall": {
+          "ci": [
+            0.41300363485218694,
+            0.8269027960275627
+          ],
+          "ci_note": null,
+          "k": 11,
+          "n": 17,
+          "value": 0.6470588235294118
+        },
+        "tn": 42,
+        "tp": 11
+      }
+    },
+    "uncertain_rows": 24
+  },
+  "errors": [
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "grok-mcp",
+      "tool_id": "t-b39ba8e9ee53",
+      "tool_name": "grok_review",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "playwright",
+      "tool_id": "t-c954970edfdd",
+      "tool_name": "browser_drop",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "playwright",
+      "tool_id": "t-49a703a7cc9a",
+      "tool_name": "browser_file_upload",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-e31c80e49496",
+      "tool_name": "drag",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-1c62323edda0",
+      "tool_name": "fill",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-d804cb76b529",
+      "tool_name": "get_css_styles",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-d47bdc728797",
+      "tool_name": "hover",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-9c17d8a6b637",
+      "tool_name": "list_network_requests",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-5693473cd1eb",
+      "tool_name": "browser_network_requests",
+      "uncertain": true
+    },
+    {
+      "kind": "FP",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-3b99e774d261",
+      "tool_name": "browser_navigate",
+      "uncertain": true
+    }
+  ],
+  "metadata": {
+    "classifier_sha256": "db4100d59c74668c594947fd0bf7d52869bfc831778ff24ac2de352f91a78a50",
+    "generated_at": "2026-11-13T11:00:45+00:00",
+    "git_commit": "86157de4aef4410e0451f5826134a74286752359",
+    "labels_sha256": "b9d0e3f2b9a0d8ce7395be0c46ffa5b4763d0efc03a48d28ced9c687a6027711",
+    "mode": "dev_only",
+    "proveflow_version": "0.0.1.dev0",
+    "python": "3.12.10"
+  },
+  "schema_version": 1
+}

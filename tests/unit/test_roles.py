@@ -53,11 +53,12 @@ def test_tool_name_roles(name: str, expected: set[ToolRole], severity: SinkSever
         assert ev.granularity is Granularity.TOOL
 
 
-def test_url_param_makes_source_with_weak_sink_signal() -> None:
+def test_url_param_makes_source_and_sink() -> None:
+    # v2 (C8): an agent-controlled URL is also a sink (LABELING_GUIDE row 3); v1 was weak.
     tool = classify_tool(
         "get_page", "web", "Fetches a web page", {"type": "object", "properties": {"url": {}}}
     )
-    assert S in assigned_roles(tool)
+    assert {S, K} <= assigned_roles(tool)
 
 
 def test_description_alone_needs_two_signals() -> None:
