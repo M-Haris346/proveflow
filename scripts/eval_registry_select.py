@@ -20,6 +20,13 @@ Rule (Haris, 2026-11-11/12; schema: static.modelcontextprotocol.io/schemas/2025-
       (or wheel): the text must match a PERMISSIVE license; metadata alone is not enough
   T   README of the same package grepped for telemetry / analytics / usage statistics
 Output: <out_dir>/selection.json and selection.md.
+
+v2 held-out options (checkpoint 1c Stage C; defaults reproduce the v1 selection):
+  --seed N --cutoff YYYY-MM-DD --sample-max K
+  --exclude servers.json        drop every package already in that eval server set
+  --handpicked FILE             JSON list of {"id", "category", "registryType", "identifier"}:
+                                each is pinned to its newest stable release published on or
+                                before the cutoff and inspected with the same L and T checks
 """
 
 from __future__ import annotations
@@ -117,14 +124,16 @@ def _required_without_default(items: list[dict[str, Any]] | None) -> bool:
     )
 
 
-def rule_filter(entry: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+def rule_filter(
+    entry: dict[str, Any], cutoff: datetime = CUTOFF
+) -> tuple[dict[str, Any] | None, str]:
     """Apply R1-R5 to one registry entry. Returns (package, reason)."""
     server = entry.get("server", {})
     meta = (entry.get("_meta") or {}).get("io.modelcontextprotocol.registry/official", {})
     if meta.get("status") != "active" or not meta.get("isLatest"):
         return None, "R1 not active/latest"
     published = meta.get("publishedAt")
-    if not published or datetime.fromisoformat(published.replace("Z", "+00:00")) > CUTOFF:
+    if not published or datetime.fromisoformat(published.replace("Z", "+00:00")) > cutoff:
         return None, "R2 too new"
     for pkg in server.get("packages") or []:
         if (pkg.get("transport") or {}).get("type") != "stdio":
@@ -243,34 +252,105 @@ def inspect(candidate: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def main() -> int:
-    out_dir = Path(sys.argv[1])
+_STABLE = re.compile(r"^\d+(\.\d+)*$")
+
+
+def newest_stable_before(versions: dict[str, str], cutoff: datetime) -> str | None:
+    """Newest version made only of digits and dots, published on or before ``cutoff``.
+    ``versions`` maps version -> ISO publish time. Pre-releases (rc, beta, dev, ...) never win."""
+    ok = [
+        v for v, t in versions.items()
+        if _STABLE.match(v) and datetime.fromisoformat(t.replace("Z", "+00:00")) <= cutoff
+    ]  # fmt: skip
+    return max(ok, key=lambda v: tuple(int(p) for p in v.split("."))) if ok else None
+
+
+def _release_times(registry_type: str, ident: str) -> dict[str, str]:
+    if registry_type == "npm":
+        doc = get_json(f"https://registry.npmjs.org/{urllib.parse.quote(ident, safe='@')}")
+        times = doc.get("time") or {}
+        return {v: t for v, t in times.items() if v not in ("created", "modified")}
+    doc = get_json(f"https://pypi.org/pypi/{ident}/json")
+    out: dict[str, str] = {}
+    for v, files in (doc.get("releases") or {}).items():
+        times = [f["upload_time_iso_8601"] for f in files if not f.get("yanked")]
+        if times:
+            out[v] = min(times)
+    return out
+
+
+def excluded_packages(path: Path | None) -> set[str]:
+    if path is None:
+        return set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {s["package"]["name"] for s in data["servers"] if s.get("package")}
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="eval_registry_select.py")
+    ap.add_argument("out_dir", type=Path)
+    ap.add_argument("--seed", type=int, default=SEED)
+    ap.add_argument("--cutoff", default=CUTOFF.date().isoformat())
+    ap.add_argument("--sample-max", type=int, default=SAMPLE_MAX)
+    ap.add_argument("--exclude", type=Path, default=None)
+    ap.add_argument("--handpicked", type=Path, default=None)
+    ns = ap.parse_args(argv)
+    cutoff = datetime.fromisoformat(ns.cutoff).replace(tzinfo=UTC)
+    out_dir: Path = ns.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
+    skip = excluded_packages(ns.exclude)
     entries = all_latest_servers(out_dir / "pages-latest")
     reasons: Counter[str] = Counter()
     survivors: list[dict[str, Any]] = []
     for e in entries:
-        pkg, reason = rule_filter(e)
+        pkg, reason = rule_filter(e, cutoff)
+        if pkg is not None and pkg["identifier"] in skip:
+            pkg, reason = None, "X already in the excluded eval set"
         reasons[reason.split(" ")[0]] += 1
         if pkg is not None:
             meta = e["_meta"]["io.modelcontextprotocol.registry/official"]
             survivors.append({"name": e["server"]["name"], "pkg": pkg,
                               "repo": (e["server"].get("repository") or {}).get("url"),
                               "published": meta["publishedAt"]})  # fmt: skip
-    picked = sample(survivors)
+    picked = sample(survivors, k=ns.sample_max, seed=ns.seed)
     rows = [inspect(c) for c in picked]
+    hand_rows: list[dict[str, Any]] = []
+    if ns.handpicked is not None:
+        for h in json.loads(ns.handpicked.read_text(encoding="utf-8")):
+            base = {"id": h["id"], "category": h["category"]}
+            if h["identifier"] in skip:
+                hand_rows.append(base | {"decision": "exclude", "reason": "already in eval set"})
+                continue
+            times = _release_times(h["registryType"], h["identifier"])
+            version = newest_stable_before(times, cutoff)
+            if version is None:
+                reason = "no stable release on or before cutoff"
+                hand_rows.append(base | {"decision": "exclude", "reason": reason})
+                continue
+            pkg = {"registryType": h["registryType"], "identifier": h["identifier"],
+                   "version": version}  # fmt: skip
+            row = inspect({"name": h["identifier"], "repo": h.get("repo"), "published": None,
+                           "pkg": pkg})  # fmt: skip
+            hand_rows.append(base | row)
     result = {
         "entries": len(entries),
         "reasons": dict(sorted(reasons.items())),
         "survivors": len(survivors),
-        "seed": SEED,
-        "sample_max": SAMPLE_MAX,
+        "seed": ns.seed,
+        "cutoff": cutoff.date().isoformat(),
+        "sample_max": ns.sample_max,
+        "excluded_packages": sorted(skip),
         "rows": rows,
+        "handpicked": hand_rows,
     }
     (out_dir / "selection.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({k: v for k, v in result.items() if k != "rows"}, indent=2))
-    for r in rows:
-        print(f"- {r['name']} | {r['package']} | {r.get('license', '-')} | {r['decision']}: "
+    print(json.dumps({k: v for k, v in result.items() if k not in ("rows", "handpicked")},
+                     indent=2))  # fmt: skip
+    for r in rows + hand_rows:
+        print(f"- {r.get('category', 'registry')} | {r.get('name', r.get('id'))} | "
+              f"{r.get('package', '-')} | {r.get('license', '-')} | {r['decision']}: "
               f"{r['reason']} | telemetry hits: {len(r.get('telemetry_hits', []))}")  # fmt: skip
     return 0
 

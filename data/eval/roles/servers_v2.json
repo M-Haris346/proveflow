@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "_comment": "Held-out v2 eval servers (checkpoint 1c Stage C). See docs/eval/SERVERS_V2.md. No real credentials; {workdir} = the collector's temp dir.",
+  "servers": [
+    {
+      "id": "glyphic",
+      "source": "registry",
+      "category": "other",
+      "package": {
+        "registry": "npm",
+        "name": "@glyphicjs/mcp-server",
+        "version": "1.0.2"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 0b5d394e9fb262d0)",
+      "repo": "https://github.com/MS-Teja/Glyphic",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@glyphicjs/mcp-server@1.0.2"
+      ],
+      "notes": "registry name io.github.MS-Teja/glyphic; seed-20261201 registry sample; category 'other' after the label fix after run 3 (run 3 said 'dev-tools' from the 'npm:' prefix); picks unchanged"
+    },
+    {
+      "id": "compound-memory",
+      "source": "registry",
+      "category": "file",
+      "package": {
+        "registry": "pypi",
+        "name": "compound-memory",
+        "version": "0.5.12"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 8ef7d80c94123b2a)",
+      "repo": "https://github.com/chinwe/compound-memory",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "compound-memory==0.5.12",
+        "compound-memory-server"
+      ],
+      "env": {
+        "COMPOUND_MEMORY_ROOT": "{workdir}/compound-memory",
+        "COMPOUND_MEMORY_AGENT_ID": "proveflow-eval"
+      },
+      "setup": [
+        "mkdir:compound-memory"
+      ],
+      "notes": "registry name io.github.chinwe/compound-memory; seed-20261201 registry sample; launch from README ('--from is required'); store in the temp work dir; agent id is a non-secret identifier the registry entry calls required for a multi-agent store"
+    },
+    {
+      "id": "pdf-suite",
+      "source": "registry",
+      "category": "file",
+      "package": {
+        "registry": "npm",
+        "name": "pdf-suite-mcp",
+        "version": "2.1.2"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 adef5f321c31499f)",
+      "repo": "https://github.com/beepboop2025/pdf-suite-mcp",
+      "command": "npx",
+      "args": [
+        "-y",
+        "pdf-suite-mcp@2.1.2"
+      ],
+      "notes": "registry name io.github.beepboop2025/pdf-suite-mcp; seed-20261201 registry sample"
+    },
+    {
+      "id": "wander-agent",
+      "source": "registry",
+      "category": "other",
+      "package": {
+        "registry": "pypi",
+        "name": "wander-agent",
+        "version": "0.1.1"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 65d5e9d6da1e53c5)",
+      "repo": "https://github.com/VirajMishra1/wander-agent",
+      "command": "uvx",
+      "args": [
+        "wander-agent@0.1.1"
+      ],
+      "notes": "registry name io.github.VirajMishra1/wander-agent; seed-20261201 registry sample; optional API keys (README) not set"
+    },
+    {
+      "id": "bankregpulse",
+      "source": "registry",
+      "category": "other",
+      "package": {
+        "registry": "npm",
+        "name": "bankregpulse-mcp-server",
+        "version": "1.3.0"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 ea3457645288ce5a)",
+      "repo": "https://github.com/RRGU26/bankregpulse-mcp-server",
+      "command": "npx",
+      "args": [
+        "-y",
+        "bankregpulse-mcp-server@1.3.0"
+      ],
+      "notes": "registry name io.github.RRGU26/bankregpulse-mcp-server; seed-20261201 registry sample; category 'other' after the label fix after run 3 (run 3 said 'dev-tools' from the 'npm:' prefix); picks unchanged"
+    },
+    {
+      "id": "meok-koikeeper",
+      "source": "registry",
+      "category": "database",
+      "package": {
+        "registry": "pypi",
+        "name": "meok-koikeeper-ai-mcp",
+        "version": "1.0.3"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 22db71b57d186089)",
+      "repo": null,
+      "command": "uvx",
+      "args": [
+        "--from",
+        "meok-koikeeper-ai-mcp==1.0.3",
+        "meok_koikeeper_ai_mcp"
+      ],
+      "notes": "registry name io.github.CSOAI-ORG/meok-koikeeper-ai-mcp; seed-20261201 registry sample; console script from the pinned wheel's entry_points.txt (README uses python -m meok_koikeeper_ai_mcp.server)"
+    },
+    {
+      "id": "a11y-scanner",
+      "source": "popular",
+      "category": "browser",
+      "package": {
+        "registry": "npm",
+        "name": "mcp-accessibility-scanner",
+        "version": "1.1.1"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 fac3144388a14765)",
+      "repo": "https://github.com/JustasMonkev/mcp-accessibility-scanner",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-accessibility-scanner@1.1.1"
+      ],
+      "notes": "registry name io.github.JustasMonkev/mcp-accessibility-scanner; npm last-month downloads 10466 (snapshot); single bin 'mcp-server-playwright'; may need a Playwright browser to start"
+    },
+    {
+      "id": "purmemo",
+      "source": "popular",
+      "category": "llm-proxy",
+      "package": {
+        "registry": "npm",
+        "name": "purmemo-mcp",
+        "version": "12.9.5"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 34ff8263fc849ad8)",
+      "repo": "https://github.com/purmemo-ai/purmemo-mcp",
+      "command": "npx",
+      "args": [
+        "-y",
+        "purmemo-mcp@12.9.5"
+      ],
+      "notes": "registry name io.github.purmemo-ai/purmemo; npm last-month downloads 3424 (snapshot); README configs set PURMEMO_API_KEY; NOT set here (no real credentials); may fail to start"
+    },
+    {
+      "id": "bitbucket",
+      "source": "popular",
+      "category": "vcs-hosting",
+      "package": {
+        "registry": "npm",
+        "name": "bitbucket-mcp",
+        "version": "5.0.5"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 7a6e54d19a73ff33)",
+      "repo": null,
+      "command": "npx",
+      "args": [
+        "-y",
+        "bitbucket-mcp@5.0.5"
+      ],
+      "notes": "registry name io.github.MatanYemini/bitbucket-mcp; npm last-month downloads 24432 (snapshot); README configs set BITBUCKET_USERNAME/BITBUCKET_PASSWORD; NOT set here; may fail to start"
+    },
+    {
+      "id": "mssql-reader",
+      "source": "popular",
+      "category": "database",
+      "package": {
+        "registry": "npm",
+        "name": "@connorbritain/mssql-mcp-reader",
+        "version": "0.3.1"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 910272c5ef6f53c4)",
+      "repo": null,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@connorbritain/mssql-mcp-reader@0.3.1"
+      ],
+      "notes": "registry name io.github.ConnorBritain/mssql-reader; npm last-month downloads 11480 (snapshot); README: SQL_USERNAME/SQL_PASSWORD required for sql/windows modes; NOT set here; may fail to start"
+    },
+    {
+      "id": "emailmd",
+      "source": "popular",
+      "category": "messaging",
+      "package": {
+        "registry": "npm",
+        "name": "emailmd",
+        "version": "0.13.2"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 1d8bdffe052e2600)",
+      "repo": "https://github.com/anypost/emailmd",
+      "command": "npx",
+      "args": [
+        "-y",
+        "emailmd@0.13.2",
+        "mcp"
+      ],
+      "notes": "registry name dev.emailmd/emailmd; npm last-month downloads 19455 (snapshot); MCP mode per README: 'npx emailmd mcp'"
+    },
+    {
+      "id": "perplexity",
+      "source": "popular",
+      "category": "web",
+      "package": {
+        "registry": "npm",
+        "name": "@perplexity-ai/mcp-server",
+        "version": "1.2.1"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 c27b13e95432ad43)",
+      "repo": null,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@perplexity-ai/mcp-server@1.2.1"
+      ],
+      "notes": "registry name ai.perplexity/mcp-server; npm last-month downloads 132575 (snapshot); README configs set PERPLEXITY_API_KEY; NOT set here; may fail to start"
+    },
+    {
+      "id": "tabellio",
+      "source": "popular",
+      "category": "file",
+      "package": {
+        "registry": "npm",
+        "name": "tabellio",
+        "version": "0.1.12"
+      },
+      "license": "MIT (LICENSE file in the pinned package; archive sha256 587cabee19893b59)",
+      "repo": "https://github.com/yffo/tabellio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "-p",
+        "tabellio@0.1.12",
+        "tabellio-mcp"
+      ],
+      "env": {
+        "TABELLIO_STORE": "{workdir}/tabellio"
+      },
+      "setup": [
+        "mkdir:tabellio"
+      ],
+      "notes": "registry name io.github.yffo/tabellio; npm last-month downloads 2932 (snapshot); README names 'tabellio-mcp' as the MCP stdio bin (plain npx would run the 'tabellio' CLI); store in the temp work dir"
+    },
+    {
+      "id": "podman",
+      "source": "popular",
+      "category": "dev-tools",
+      "package": {
+        "registry": "npm",
+        "name": "podman-mcp-server",
+        "version": "0.0.15"
+      },
+      "license": "Apache-2.0 (LICENSE file in the pinned package; archive sha256 e28adbfac9f979f2)",
+      "repo": "https://github.com/manusa/podman-mcp-server",
+      "command": "npx",
+      "args": [
+        "-y",
+        "podman-mcp-server@0.0.15"
+      ],
+      "notes": "registry name io.github.manusa/podman-mcp-server; npm last-month downloads 9383 (snapshot); npm package used (registry also lists PyPI); no Podman/Docker runtime is provided, and whether tools/list needs one is not documented"
+    }
+  ]
+}

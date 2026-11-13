@@ -192,3 +192,39 @@ def test_job_level_env_does_not_reach_child(
     read = next(r for r in rows if r["tool_name"] == "read_inbox")
     keys = {k.lower() for k in read["description"].removeprefix("vars|").split(",")}
     assert "uv_no_build" not in keys
+
+
+def test_category_is_recorded_in_provenance(tmp_path: Path) -> None:
+    spec = _spec(tmp_path, [_server("cat", "legacy", tmp_path, category="messaging")])
+    out = tmp_path / "o.jsonl"
+    assert col.main(["--servers", str(spec), "--out", str(out), "--yes"]) == 0
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert rows and {r["provenance"]["category"] for r in rows} == {"messaging"}
+
+
+def test_heldout_v2_server_set_is_valid_pinned_disjoint_and_credential_free(
+    tmp_path: Path,
+) -> None:
+    """data/eval/roles/servers_v2.json (checkpoint 1c Stage C): valid, exact pins, a category
+    per server, no package shared with the v1 set, at most 2 browser servers, and no env var
+    whose NAME suggests a credential (only store paths / ids are allowed)."""
+    v2 = col.load_server_set(REPO / "data" / "eval" / "roles" / "servers_v2.json")
+    v1 = col.load_server_set(REPO / "data" / "eval" / "roles" / "servers.json")
+    assert len(v2.servers) == 14
+    assert all(s.category for s in v2.servers)
+    assert sum(s.category == "browser" for s in v2.servers) <= 2
+    v1_pkgs = {s.package.name for s in v1.servers if s.package}
+    assert not v1_pkgs & {s.package.name for s in v2.servers if s.package}
+    credential = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASS", "USER", "AUTH", "CREDENTIAL")
+    for s in v2.servers:
+        assert not [k for k in s.env if any(c in k.upper() for c in credential)], s.id
+    concrete = col.materialize(v2.servers, tmp_path, ignore_scripts=True)
+    cfg = tmp_path / "s.json"
+    cfg.write_text(json.dumps({"mcpServers": concrete}), encoding="utf-8")
+    [parsed] = read_explicit(cfg)
+    assert parsed.entry_errors == ()
+    for spec in parsed.servers:
+        assert spec.variables == (), spec.name
+        check = check_pinning(spec)
+        assert check is not None and check.status == "pinned", (spec.name, check)
+    assert all(s.license for s in v2.servers)

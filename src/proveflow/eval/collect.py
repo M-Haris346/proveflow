@@ -75,6 +75,9 @@ class EvalServer(FrozenModel):
     env: dict[str, str] = Field(default_factory=dict)
     setup: tuple[str, ...] = ()
     notes: str | None = None
+    # Held-out v2 (docs/eval/SERVERS_V2.md): file / database / web / browser / messaging /
+    # vcs-hosting / dev-tools / llm-proxy / other. Recorded in each tool's provenance.
+    category: str | None = None
 
 
 class EvalServerSet(FrozenModel):
@@ -163,6 +166,7 @@ def _sdk_version() -> str:
 def records_for(srv: EvalServer, result: IntrospectionResult) -> list[dict[str, Any]]:
     provenance = {
         "source": srv.source,
+        "category": srv.category,
         "package": srv.package.model_dump() if srv.package else None,
         "license": srv.license,
         "repo": srv.repo,

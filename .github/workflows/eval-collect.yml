@@ -23,10 +23,22 @@
 #   downloads it automatically.
 # - proveflow's own guards still apply: tools/list only, method allowlist, job/process-group
 #   kill, empty temp cwd, minimal env
+# - inputs (checkpoint 1c): `servers` picks the server file (default: the v1 set), `out_dir`
+#   the output folder (v2: out/v2). They reach the shell ONLY as env vars (never `${{ }}`
+#   inside a run script) and are checked against fixed patterns before use.
 name: eval-collect
 
 on:
   workflow_dispatch:
+    inputs:
+      servers:
+        description: "Eval server file (data/eval/roles/<name>.json)"
+        required: false
+        default: "data/eval/roles/servers.json"
+      out_dir:
+        description: "Output folder: out or out/<name>"
+        required: false
+        default: "out"
 
 permissions:
   contents: read
@@ -59,22 +71,35 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
-      - name: Collect tools/list (all eval servers in data/eval/roles/servers.json)
+      - name: Validate inputs
+        env:
+          SERVERS: ${{ inputs.servers }}
+          OUT_DIR: ${{ inputs.out_dir }}
+        run: |
+          [[ "$SERVERS" =~ ^data/eval/roles/[A-Za-z0-9_-]+\.json$ ]] || { echo "bad servers input"; exit 1; }
+          [[ "$OUT_DIR" =~ ^out(/[A-Za-z0-9_-]+)?$ ]] || { echo "bad out_dir input"; exit 1; }
+          test -f "$SERVERS" || { echo "servers file not found"; exit 1; }
+
+      - name: Collect tools/list (all eval servers in the chosen server file)
         # Node.js comes preinstalled on the ubuntu-24.04 image (actions/runner-images).
         # Whether Chrome DevTools MCP needs a browser just to answer tools/list is not
         # documented; a failure is reported in the summary, not hidden.
+        env:
+          SERVERS: ${{ inputs.servers }}
+          OUT_DIR: ${{ inputs.out_dir }}
         run: >
           uv run python -m proveflow.eval.collect
-          --servers data/eval/roles/servers.json
+          --servers "$SERVERS"
           --yes --timeout 180 --ignore-scripts --no-build
-          --out out/tools.jsonl
+          --out "$OUT_DIR/tools.jsonl"
 
       - name: Upload collected tool metadata
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: eval-tools
+          # inputs were validated above; `with:` values are not run by a shell
+          name: eval-tools${{ inputs.out_dir != 'out' && '-v2' || '' }}
           path: |
-            out/tools.jsonl
-            out/tools.jsonl.summary.json
+            ${{ inputs.out_dir }}/tools.jsonl
+            ${{ inputs.out_dir }}/tools.jsonl.summary.json
           retention-days: 7
           if-no-files-found: error
