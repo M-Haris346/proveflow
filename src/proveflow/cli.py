@@ -241,7 +241,9 @@ def scan(
         Path | None,
         typer.Option("--sarif", help="Also write SARIF 2.1.0 to this path.", dir_okay=False),
     ] = None,
-    limit: Annotated[int, typer.Option("--limit", min=0, help="Flows shown in the table.")] = 50,
+    limit: Annotated[
+        int, typer.Option("--limit", min=0, help="Flow groups shown in the table.")
+    ] = 50,
     yes: Annotated[
         bool,
         typer.Option(

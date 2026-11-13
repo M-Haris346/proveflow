@@ -17,7 +17,7 @@ from proveflow.core.flows import Flow
 from proveflow.core.tools import ToolSpec
 from proveflow.discover.hostenv import HostEnv
 from proveflow.discover.profiles import Profile, partition_profiles
-from proveflow.flows.graph import apply_override, flows_for_profile, rank_flows
+from proveflow.flows.graph import apply_override, flows_for_profile, group_flows, rank_flows
 from proveflow.flows.pinning import check_pinning
 from proveflow.flows.roles import classify_tool
 from proveflow.flows.server_roles import SERVER_TOOL_NAME, classify_server
@@ -188,6 +188,7 @@ def build_scan(
         if i not in used
     )
     mode = "introspect" if introspection is not None else "no_launch"
+    ranked = rank_flows(all_flows)
     return ScanReport(
         proveflow_version=__version__,
         project=str(project),
@@ -195,7 +196,8 @@ def build_scan(
         discovered_servers=discovered,
         profiles=tuple(profile_reports),
         skipped=tuple(skipped),
-        flows=tuple(rank_flows(all_flows)),
+        flows=tuple(ranked),
+        groups=tuple(group_flows(ranked)),
         findings=pinning_findings(profiles),
         unused_overrides=tuple(unused),
         limitations=(

@@ -8,7 +8,7 @@ from rich.table import Table
 from rich.text import Text
 
 from proveflow.core.client import ConfigStatus, ServerSpec
-from proveflow.core.tools import ToolRole
+from proveflow.core.tools import Granularity, ToolRole
 from proveflow.report.models import DiscoverReport, ScanReport
 
 _STATUS_STYLE = {
@@ -172,35 +172,43 @@ def render_scan(report: ScanReport, console: Console, limit: int) -> None:
         _render_tail(report, console)
         return
 
-    flows = Table(title=f"Toxic flows ({len(report.flows)} total, all THEORETICAL)")
+    # One row per flow GROUP (ARCHITECTURE §5.3): grouping reduces table rows, not the
+    # number of tool paths; every member flow is in --json / --sarif.
+    groups = Table(
+        title=f"Toxic flows: {len(report.groups)} groups ({len(report.flows)} flows), "
+        "all THEORETICAL"
+    )
     for col in (
         "id",
         "class",
-        "profile",
         "source",
         "private",
         "sink",
         "cross",
-        "sink kind",
-        "conf",
+        "worst sink kind",
+        "max conf",
+        "#flows",
+        "#profiles",
     ):
-        flows.add_column(col)
-    for f in report.flows[:limit]:
-        flows.add_row(
-            Text(f.id),
-            Text(f.flow_class.value),
-            Text(f.profile),
-            Text(f.source.label if f.source else "-"),
-            Text(f.private.label if f.private else "-"),
-            Text(f.sink.label),
-            Text("yes" if f.cross_server else "no"),
-            Text(f.sink_severity.value),
-            Text(f"{f.confidence:.2f}" + (" (server)" if f.granularity == "server" else "")),
+        groups.add_column(col)
+    for g in report.groups[:limit]:
+        server_only = tuple(g.granularities) == (Granularity.SERVER,)
+        groups.add_row(
+            Text(g.id),
+            Text(g.flow_class.value),
+            Text(g.source_server or "-"),
+            Text(g.private_server or "-"),
+            Text(g.sink_server),
+            Text("yes" if g.cross_server else "no"),
+            Text(g.worst_sink_severity.value),
+            Text(f"{g.max_confidence:.2f}" + (" (server)" if server_only else "")),
+            Text(str(len(g.member_ids))),
+            Text(str(len(g.profiles))),
         )
-    console.print(flows)
-    if len(report.flows) > limit:
+    console.print(groups)
+    if len(report.groups) > limit:
         console.print(
-            Text(f"... {len(report.flows) - limit} more flows (use --limit, --json or --sarif)")
+            Text(f"... {len(report.groups) - limit} more groups (use --limit, --json or --sarif)")
         )
     _render_tail(report, console)
 

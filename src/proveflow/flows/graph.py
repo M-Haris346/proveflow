@@ -13,7 +13,16 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from proveflow.core.flows import Flow, FlowClass, ToolRef
+from proveflow.core.flows import (
+    Flow,
+    FlowClass,
+    FlowGroup,
+    GroupKey,
+    ToolRef,
+    group_attributes,
+    group_id,
+    group_key,
+)
 from proveflow.core.tools import (
     Granularity,
     RoleEvidence,
@@ -119,6 +128,47 @@ def rank_key(f: Flow) -> tuple[object, ...]:
 
 def rank_flows(flows: Sequence[Flow]) -> list[Flow]:
     return sorted(flows, key=rank_key)
+
+
+# --- flow grouping (ARCHITECTURE §5.3) -----------------------------------------------------
+
+
+def group_rank_key(g: FlowGroup) -> tuple[object, ...]:
+    """rank_key's criteria on group attributes (no profile; '' for a missing server)."""
+    return (
+        not g.cross_server,
+        g.worst_sink_severity.rank,
+        _CLASS_RANK[g.flow_class],
+        -g.max_confidence,
+        g.source_server or "",
+        g.private_server or "",
+        g.sink_server,
+    )
+
+
+def group_flows(flows: Sequence[Flow]) -> list[FlowGroup]:
+    """Group flows by (class, source server, private server, sink server) across profiles.
+    Members are sorted by rank_key here (input order does not matter); groups are sorted by
+    group_rank_key. Every flow lands in exactly one group."""
+    buckets: dict[GroupKey, list[Flow]] = {}
+    for f in flows:
+        buckets.setdefault(group_key(f), []).append(f)
+    groups: list[FlowGroup] = []
+    for key, members in buckets.items():
+        ranked = sorted(members, key=rank_key)
+        cls, src, prv, snk = key
+        groups.append(
+            FlowGroup(
+                id=group_id(key),
+                flow_class=cls,
+                source_server=src,
+                private_server=prv,
+                sink_server=snk,
+                member_ids=tuple(f.id for f in ranked),
+                **group_attributes(ranked),
+            )
+        )
+    return sorted(groups, key=group_rank_key)
 
 
 def apply_override(

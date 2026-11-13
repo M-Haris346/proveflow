@@ -103,6 +103,7 @@ def build_sarif(report: ScanReport) -> dict[str, Any]:
         for srv in prof.servers:
             files[(prof.id, srv.key)] = srv.spec.source_file
 
+    group_of = {mid: g.id for g in report.groups for mid in g.member_ids}
     results: list[dict[str, Any]] = []
     for f in report.flows:
         rule_id, _, level, _, _ = _RULES[_RULE_INDEX[f.flow_class]]
@@ -124,6 +125,9 @@ def build_sarif(report: ScanReport) -> dict[str, Any]:
                 "partialFingerprints": {"proveflowFlowId/v1": f.id},
                 "properties": {
                     "flowId": f.id,
+                    # one SARIF result per FLOW; the group is a property (one result per
+                    # group is deferred: ARCHITECTURE §5.3 "Flow grouping")
+                    "groupId": group_of[f.id],
                     "profile": f.profile,
                     "flowClass": f.flow_class.value,
                     "crossServer": f.cross_server,

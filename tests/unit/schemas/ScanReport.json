@@ -162,6 +162,94 @@
       "title": "FlowClass",
       "type": "string"
     },
+    "FlowGroup": {
+      "additionalProperties": false,
+      "description": "Flows with the same (class, source server, private server, sink server), across\nprofiles. Grouping reduces table rows, not the number of tool paths: every member flow\nstays in the report and per-path triage is Prove (Phase 7).",
+      "properties": {
+        "cross_server": {
+          "title": "Cross Server",
+          "type": "boolean"
+        },
+        "flow_class": {
+          "$ref": "#/$defs/FlowClass"
+        },
+        "granularities": {
+          "items": {
+            "$ref": "#/$defs/Granularity"
+          },
+          "title": "Granularities",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "max_confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Max Confidence",
+          "type": "number"
+        },
+        "member_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Member Ids",
+          "type": "array"
+        },
+        "private_server": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Private Server"
+        },
+        "profiles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Profiles",
+          "type": "array"
+        },
+        "sink_server": {
+          "title": "Sink Server",
+          "type": "string"
+        },
+        "source_server": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Server"
+        },
+        "worst_sink_severity": {
+          "$ref": "#/$defs/SinkSeverity"
+        }
+      },
+      "required": [
+        "id",
+        "flow_class",
+        "sink_server",
+        "cross_server",
+        "worst_sink_severity",
+        "max_confidence",
+        "profiles",
+        "member_ids",
+        "granularities"
+      ],
+      "title": "FlowGroup",
+      "type": "object"
+    },
     "FlowVerdictKind": {
       "enum": [
         "CONFIRMED",
@@ -762,7 +850,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Every discovered server is accounted for: it is a member of a profile or listed in\n``skipped`` (THREAT_MODEL T16). The validator refuses a report that drops one.",
+  "description": "Every discovered server is accounted for: it is a member of a profile or listed in\n``skipped`` (THREAT_MODEL T16). Every flow is in exactly one group, and every group's\nkey and derived fields match its member flows. The validators refuse any other report.\n\nschema_version 2 (2026-11-14): added ``groups`` (flow grouping, ARCHITECTURE \u00a75.3).",
   "properties": {
     "discovered_servers": {
       "minimum": 0,
@@ -782,6 +870,14 @@
         "$ref": "#/$defs/Flow"
       },
       "title": "Flows",
+      "type": "array"
+    },
+    "groups": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FlowGroup"
+      },
+      "title": "Groups",
       "type": "array"
     },
     "limitations": {
@@ -815,8 +911,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": 1,
-      "default": 1,
+      "const": 2,
+      "default": 2,
       "title": "Schema Version",
       "type": "integer"
     },

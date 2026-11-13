@@ -50,8 +50,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 >   - servers discovered but in no profile (e.g. another project's Claude Code local entry)
 >     are now listed as `skipped` with a reason, no longer dropped silently (THREAT_MODEL T16)
 >   - `--json` is written as UTF-8 on Windows whatever the console code page
-> - **Next:** flow grouping (one real server produced several hundred theoretical flows, too
->   many to review one by one), then Phase 2 (Proxy).
+> - Flow grouping [impl][tested] (scan report schema 2): the table shows one row per group of
+>   flows with the same (class, source server, private server, sink server) across profiles;
+>   `--limit` counts groups. **Grouping reduces table rows, not the number of tool paths**:
+>   every flow is still in `--json` and `--sarif`, and per-path triage is Prove (Phase 7).
+>   Rules and limitations: docs/ARCHITECTURE.md §5.3.
+> - **Next:** Phase 2 (Proxy).
 > - Everything from Phase 2 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:

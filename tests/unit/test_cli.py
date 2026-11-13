@@ -104,7 +104,7 @@ def test_scan_table_limit(setup) -> None:  # type: ignore[no-untyped-def]
     )
     assert result.exit_code == 0, result.output
     out = plain(result.output)
-    assert "more flows" in out
+    assert "more groups" in out  # --limit counts flow groups (schema 2)
     assert "THEORETICAL" in out
     assert "limitation:" in out
 

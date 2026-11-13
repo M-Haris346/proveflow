@@ -14,7 +14,7 @@ from pydantic import Field, model_validator
 
 from proveflow.core._base import FrozenModel
 from proveflow.core.client import ClientConfig, ClientKind, ConfigScope, ServerSpec
-from proveflow.core.flows import Flow
+from proveflow.core.flows import Flow, FlowGroup, group_attributes, group_id, group_key
 from proveflow.core.tools import ToolSpec
 
 REPORT_SCHEMA_VERSION = 1
@@ -158,9 +158,12 @@ class SkippedServer(FrozenModel):
 
 class ScanReport(FrozenModel):
     """Every discovered server is accounted for: it is a member of a profile or listed in
-    ``skipped`` (THREAT_MODEL T16). The validator refuses a report that drops one."""
+    ``skipped`` (THREAT_MODEL T16). Every flow is in exactly one group, and every group's
+    key and derived fields match its member flows. The validators refuse any other report.
 
-    schema_version: Literal[1] = 1
+    schema_version 2 (2026-11-14): added ``groups`` (flow grouping, ARCHITECTURE §5.3)."""
+
+    schema_version: Literal[2] = 2
     proveflow_version: str
     project: str
     mode: Literal["introspect", "no_launch"]
@@ -168,6 +171,7 @@ class ScanReport(FrozenModel):
     profiles: tuple[ProfileReport, ...]
     skipped: tuple[SkippedServer, ...] = ()
     flows: tuple[Flow, ...]
+    groups: tuple[FlowGroup, ...] = ()
     findings: tuple[Finding, ...] = ()
     unused_overrides: tuple[str, ...] = ()
     limitations: tuple[str, ...]
@@ -183,4 +187,33 @@ class ScanReport(FrozenModel):
                 f"server accounting mismatch: {self.discovered_servers} discovered, "
                 f"{self.analyzed_servers} analyzed, {len(self.skipped)} skipped"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _groups_match_flows(self) -> ScanReport:
+        flows = {f.id: f for f in self.flows}
+        if len(flows) != len(self.flows):
+            raise ValueError("duplicate flow ids")
+        group_ids = [g.id for g in self.groups]
+        if len(set(group_ids)) != len(group_ids):
+            raise ValueError("duplicate group ids")
+        seen: dict[str, str] = {}
+        for g in self.groups:
+            if g.id != group_id(g.key):
+                raise ValueError(f"group {g.id}: id does not match its key")
+            for mid in g.member_ids:
+                if mid not in flows:
+                    raise ValueError(f"group {g.id}: member {mid} is not a flow in this report")
+                if mid in seen:
+                    raise ValueError(f"flow {mid} is in groups {seen[mid]} and {g.id}")
+                seen[mid] = g.id
+                if group_key(flows[mid]) != g.key:
+                    raise ValueError(f"group {g.id}: member {mid} has a different key")
+            derived = group_attributes([flows[m] for m in g.member_ids])
+            for name, value in derived.items():
+                if getattr(g, name) != value:
+                    raise ValueError(f"group {g.id}: {name} does not match its members")
+        missing = set(flows) - set(seen)
+        if missing:
+            raise ValueError(f"{len(missing)} flow(s) are in no group")
         return self
