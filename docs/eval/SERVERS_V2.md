@@ -205,6 +205,22 @@ recorded attrition. RESULTS_V2 reports per-rule exposure on the
 held-out set (how many held-out tools each v1/v2 rule fired on);
 a rule with zero exposure is reported as untested, not as passing.
 
+## Failure classification (written before reading stderr)
+
+Each failed v2 server is classified from its stderr_tail and, if
+needed, by launching it locally with the same command (tools/list
+only, no tools/call):
+- Collector-caused: our launch command or client is wrong (wrong bin
+  or module name, wrong --from/-p form, a protocol-negotiation bug in
+  our collector, a setup step we declared but did not perform). These
+  are fixed and the WHOLE v2 set is re-collected once (run recorded).
+- Server-caused: the package itself fails (import error, missing
+  credential, crash, requires install scripts or a source build that
+  our safety flags --ignore-scripts/--no-build forbid, needs a runtime
+  the v1 collection also did not provide). These stay attrition, as in v1.
+No server is added, swapped or dropped. The safety flags are not relaxed.
+The classification of each server and its evidence line are recorded here.
+
 ## Final set (14 servers; collected by the author, not yet)
 
 | id | source | category (after label fix) | package @ pinned version | license (file) | npm downloads (snapshot) | launch | env |
