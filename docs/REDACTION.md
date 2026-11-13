@@ -77,3 +77,26 @@ without a citation. `R-ENTROPY` covers long random tokens regardless of their pr
 - Typer tracebacks never render local variables (`pretty_exceptions_show_locals=False`, set
   explicitly; Typer docs say that has been the default since 0.23.0:
   <https://typer.tiangolo.com/tutorial/exceptions/>, accessed 2026-11-10).
+
+## 5. leak_check review hints
+
+`scripts/leak_check.py` lists "suspicious tokens" for human review: letter+digit runs of 16 or
+more characters that are still visible in the output. It prints locations only, never the
+token. These are hints, not findings. The redaction rules above do not change because of them.
+
+**Known benign shape, not reported:** a string that is *exactly* a JSON-Schema meta-schema
+URI. Many servers put one in each tool's `inputSchema.$schema`, and its path part (e.g.
+`org/draft-07/schema`, 19 characters) looks like a token. The forms come from the official
+meta-schema files, accessed 2026-11-13:
+- draft-04: `"$schema": "http://json-schema.org/draft-04/schema#"`
+  (<https://json-schema.org/draft-04/schema>)
+- draft-07: `"$schema": "http://json-schema.org/draft-07/schema#"`
+  (<https://json-schema.org/draft-07/schema>)
+- 2019-09: `"$schema": "https://json-schema.org/draft/2019-09/schema"`
+  (<https://json-schema.org/draft/2019-09/schema>)
+- 2020-12: `"$schema": "https://json-schema.org/draft/2020-12/schema"`
+  (<https://json-schema.org/draft/2020-12/schema>)
+
+Either scheme and an optional trailing `#` are accepted. A string with anything else in it,
+in `$schema` or elsewhere, is still reported. draft-03 and draft-06 were not checked, so they
+are not in the list.

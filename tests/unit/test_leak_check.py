@@ -109,6 +109,43 @@ def test_suspicious_tool_tokens_reports_locations_only(setup) -> None:  # type: 
     assert token not in json.dumps(result["suspicious_tool_tokens"])
 
 
+def _scan_json_with_schema(schema_value: str) -> str:
+    doc = json.loads(_scan_json("Send an email."))
+    doc["profiles"][0]["servers"][0]["tools"][0]["input_schema"]["$schema"] = schema_value
+    return json.dumps(doc)
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "http://json-schema.org/draft-07/schema#",
+        "http://json-schema.org/draft-04/schema#",
+        "https://json-schema.org/draft/2019-09/schema",
+        "https://json-schema.org/draft/2020-12/schema",
+        "https://json-schema.org/draft-07/schema",  # scheme / '#' variants
+    ],
+)
+def test_meta_schema_uri_is_not_a_review_hit(setup, uri: str) -> None:  # type: ignore[no-untyped-def]
+    s, outputs, cache = setup
+    (outputs / "scan.json").write_text(_scan_json_with_schema(uri), encoding="utf-8")
+    assert lc.check_files(s.host, s.project, outputs, cache)["suspicious_tool_tokens"] == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://json-schema.org/draft-07/schema#Zq8xK2mP9vR4tY7wB3nL",  # extra text after it
+        "http://evil.example/org/draft-07/schema#",  # same token, other host
+        "Zq8xK2mP9vR4tY7wB3nL",  # a token directly in $schema
+    ],
+)
+def test_anything_else_in_schema_is_still_reported(setup, value: str) -> None:  # type: ignore[no-untyped-def]
+    s, outputs, cache = setup
+    (outputs / "scan.json").write_text(_scan_json_with_schema(value), encoding="utf-8")
+    hits = lc.check_files(s.host, s.project, outputs, cache)["suspicious_tool_tokens"]
+    assert hits and all("send_email / schema" in h for h in hits)
+
+
 def test_cli_exit_codes(setup, monkeypatch: pytest.MonkeyPatch, capsys) -> None:  # type: ignore[no-untyped-def]
     s, outputs, cache = setup
     monkeypatch.setattr(lc.HostEnv, "current", staticmethod(lambda: s.host))

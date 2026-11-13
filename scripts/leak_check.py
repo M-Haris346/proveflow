@@ -49,6 +49,14 @@ from proveflow.scan import build_scan
 MIN_CHECK_LEN = 6  # shorter values ("1", "true") cannot be meaningfully searched for
 SUSPICIOUS_LEN = 16
 _TOKEN = re.compile(rf"[A-Za-z0-9_+/=-]{{{SUSPICIOUS_LEN},}}")
+# Meta-schema URIs as written in the official meta-schema files ("$schema"/"$id"; see
+# docs/REDACTION.md §leak_check review hints): draft-04 and draft-07 use
+# http://json-schema.org/draft-0N/schema#, 2019-09 and 2020-12 use
+# https://json-schema.org/draft/YYYY-MM/schema. Scheme and trailing '#' are allowed either
+# way because servers vary; nothing else may be in the string.
+_META_SCHEMA_URL = re.compile(
+    r"https?://json-schema\.org/(?:draft-0[47]/schema|draft/20(?:19-09|20-12)/schema)#?"
+)
 MAX_FILE = 64 * 1024 * 1024
 
 
@@ -149,11 +157,17 @@ def suspicious_config_tokens(report: Any) -> list[str]:
 
 
 def suspicious_tool_tokens(scan_json: dict[str, Any], source: str) -> list[str]:
-    """Same check over introspected tool metadata (name, description, schema strings)."""
+    """Same check over introspected tool metadata (name, description, schema strings).
+
+    A string that is exactly a public JSON-Schema meta-schema URL (e.g. the ``$schema``
+    value ``http://json-schema.org/draft-07/schema#``, whose ``org/draft-07/schema`` part
+    is a 19-char letter+digit token) is not a review hit. Only that exact shape is
+    skipped; any other text in ``$schema`` is still checked."""
 
     def strings(value: Any) -> Iterable[str]:
         if isinstance(value, str):
-            yield value
+            if not _META_SCHEMA_URL.fullmatch(value):
+                yield value
         elif isinstance(value, list):
             for v in value:
                 yield from strings(v)
