@@ -19,6 +19,18 @@ Rules (fixed BEFORE any label exists):
 
 Input: collector JSONL (``proveflow.eval.collect``) and/or the pg-mcp-guard in-process JSON
 (``scripts/eval_pg_mcp_guard_list_tools.py``). No network, no server is launched.
+
+Held-out v2 (checkpoint 1c Stage D, docs/eval/SERVERS_V2.md):
+
+    python -m proveflow.eval.split --heldout --tools out/v2/tools.jsonl \\
+        --out-dir data/eval/roles/heldout_v2
+
+Same code path as the v1 split (load_tools -> apply_cap -> _row/_csv with TEST_COLUMNS, rows
+sorted by tool_id), CAP 15, seed HELDOUT_SEED = 20261201 (pre-registered in the Stage D
+plan). No grouping or dev/test assignment: every kept tool is a held-out row. No extra
+redaction here (as in v1): records were scrubbed at collection. Writes
+labels_heldout_v2.csv (blind: TEST_COLUMNS, every label cell empty), heldout_tools.jsonl,
+heldout.json, and metrics_runs.json with heldout_evaluations = 0 (created once, never reset).
 """
 
 from __future__ import annotations
@@ -48,6 +60,9 @@ TEST_SHARE_TARGET = 0.40
 MAX_GROUP_SHARE = 0.50
 FORCED_DEV_DEFAULT = ("pg-mcp-guard",)
 ROLES = ("untrusted_source", "private_data", "sink")
+HELDOUT_SEED = 20261201
+HELDOUT_CSV = "labels_heldout_v2.csv"
+HELDOUT_COUNTER_KEY = "heldout_evaluations"
 
 DEV_COLUMNS = [
     "tool_id", "server_id", "tool_name", "description", "input_schema",
@@ -299,6 +314,70 @@ def make_split(
     return meta
 
 
+LABEL_COLUMNS = [c for c in TEST_COLUMNS if c not in ("tool_id", "tool_name", "description",
+                                                     "input_schema")]  # fmt: skip
+
+
+def _has_any_label(csv_path: Path) -> bool:
+    with csv_path.open(encoding="utf-8", newline="") as fh:
+        return any(row.get(c, "").strip() for row in csv.DictReader(fh) for c in LABEL_COLUMNS)
+
+
+def make_heldout(
+    inputs: Sequence[Path], out_dir: Path, cap: int = CAP, seed: int = HELDOUT_SEED
+) -> dict[str, Any]:
+    """Blind held-out label sheet from collected tools (same rules as the v1 test CSV)."""
+    tools = load_tools(inputs)
+    if not tools:
+        raise SplitError("no tools in inputs")
+    csv_path = out_dir / HELDOUT_CSV
+    if csv_path.exists() and _has_any_label(csv_path):
+        raise SplitError(f"{csv_path} already contains labels; refusing to overwrite")
+    kept, capped_out = apply_cap(tools, cap=cap, seed=seed)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    body = _csv([_row(t, dev=False) for t in sorted(kept, key=lambda t: t.tool_id)],
+                TEST_COLUMNS)  # fmt: skip
+    csv_path.write_text(body, encoding="utf-8", newline="\n")
+    (out_dir / "heldout_tools.jsonl").write_text(
+        "".join(
+            json.dumps({**t.record, "tool_id": t.tool_id, "source": t.source}, sort_keys=True,
+                       ensure_ascii=False) + "\n"
+            for t in kept
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )  # fmt: skip
+    counter = out_dir / "metrics_runs.json"
+    if not counter.exists():  # created once; never reset
+        counter.write_text(
+            json.dumps({HELDOUT_COUNTER_KEY: 0}, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
+    categories = {
+        t.server_id: str((t.record.get("provenance") or {}).get("category")) for t in kept
+    }
+    meta = {
+        "schema_version": 1,
+        "proveflow_version": __version__,
+        "kind": "heldout_v2",
+        "seed": seed,
+        "cap": cap,
+        "inputs": {p.name: _sha256(p) for p in inputs},
+        "tools_before_cap": len(tools),
+        "tools_after_cap": len(kept),
+        "capped_out": capped_out,
+        "per_server": dict(sorted(_count_by(kept, "server_id").items())),
+        "per_category": dict(sorted(
+            {c: sum(1 for t in kept if categories[t.server_id] == c)
+             for c in set(categories.values())}.items())),
+        "labels_csv": HELDOUT_CSV,
+        "labels_csv_sha256": _sha256(csv_path),
+    }  # fmt: skip
+    (out_dir / "heldout.json").write_text(
+        json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
+    return meta
+
+
 def _count_by(rows: Sequence[Tool], attr: str) -> dict[str, int]:
     out: dict[str, int] = {}
     for t in rows:
@@ -313,7 +392,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--tools", type=Path, action="append", required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--force-dev", action="append", default=None)
+    parser.add_argument("--heldout", action="store_true", help="build the blind held-out sheet")
     ns = parser.parse_args(argv)
+    if ns.heldout:
+        try:
+            hm = make_heldout(ns.tools, ns.out_dir)
+        except SplitError as exc:
+            console.print(Text(f"error: {exc}", style="red"))
+            return 1
+        console.print(Text(f"held-out {hm['tools_after_cap']} rows (of {hm['tools_before_cap']}) "
+                           f"-> {ns.out_dir / HELDOUT_CSV}"))  # fmt: skip
+        return 0
     try:
         meta = make_split(
             ns.tools, ns.out_dir, tuple(ns.force_dev) if ns.force_dev else FORCED_DEV_DEFAULT

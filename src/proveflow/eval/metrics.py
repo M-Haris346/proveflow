@@ -43,6 +43,7 @@ from proveflow.flows.roles import assigned_roles, classify_tool
 from proveflow.stats.intervals import cohens_kappa, wilson
 
 MIN_CI_DENOMINATOR = 10
+NOT_IMPLEMENTED_EXIT = 2
 YES, NO = "yes", "no"
 
 
@@ -249,6 +250,40 @@ def compute(split_dir: Path) -> dict[str, Any]:
     }
 
 
+# --- held-out v2 guard (checkpoint 1c Stage D) ----------------------------------------
+# Required label cells: <role>_a and <role>_final for every role, on every row. The labeler-B
+# columns are optional (no second held-out labeler is planned); kappa is reported only if
+# they are complete. The held-out counter lives in <heldout_dir>/metrics_runs.json under
+# "heldout_evaluations" (created at 0 by `split --heldout`), separate from the v1 split's
+# "test_evaluations".
+HELDOUT_CSV = "labels_heldout_v2.csv"
+HELDOUT_COUNTER_KEY = "heldout_evaluations"
+HELDOUT_REQUIRED = [*(f"{r}_a" for r in ROLES), *(f"{r}_final" for r in ROLES)]
+
+
+def heldout_label_gaps(heldout_dir: Path) -> int:
+    """Number of empty required label cells (an empty sheet counts as one gap)."""
+    rows = _read_csv(heldout_dir / HELDOUT_CSV)
+    if not rows:
+        return 1
+    return sum(1 for row in rows for c in HELDOUT_REQUIRED if not (row.get(c) or "").strip())
+
+
+def heldout_counter(heldout_dir: Path) -> int:
+    data = json.loads((heldout_dir / "metrics_runs.json").read_text(encoding="utf-8"))
+    return int(data[HELDOUT_COUNTER_KEY])
+
+
+def guard_heldout(heldout_dir: Path) -> None:
+    """Refuse held-out evaluation while any required label cell is empty."""
+    gaps = heldout_label_gaps(heldout_dir)
+    if gaps:
+        raise MetricsError(
+            f"held-out labels incomplete: {gaps} empty label cell(s) in {HELDOUT_CSV}; "
+            "refusing to evaluate (counter unchanged)"
+        )
+
+
 def _classifier_sha256() -> str:
     return _sha_files([Path(roles_module.__file__), Path(server_roles_module.__file__)])
 
@@ -406,7 +441,11 @@ def render(result: dict[str, Any]) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     console = Console(stderr=True)
     parser = argparse.ArgumentParser(prog="python -m proveflow.eval.metrics")
-    parser.add_argument("--split-dir", type=Path, required=True)
+    parser.add_argument("--split-dir", type=Path, default=None)
+    parser.add_argument(
+        "--heldout", type=Path, default=None,
+        help="held-out dir (data/eval/roles/heldout_v2): refused while any label is empty",
+    )  # fmt: skip
     parser.add_argument(
         "--out", type=Path, default=None,
         help="default: docs/eval/RESULTS.md, or docs/eval/DEV_RESULTS.md with --dev-only",
@@ -416,6 +455,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="tuning aid: read only the dev split; never open test files or the counter",
     )  # fmt: skip
     ns = parser.parse_args(argv)
+    if ns.heldout is not None:
+        try:
+            guard_heldout(ns.heldout)
+        except (MetricsError, FileNotFoundError, KeyError) as exc:
+            console.print(Text(f"error: {exc}", style="red"))
+            return 1
+        console.print(Text(
+            "held-out labels complete, but the held-out evaluation (v1 and v2 in one run) is "
+            "implemented in Stage D part 2; nothing evaluated, counter unchanged"
+        ))  # fmt: skip
+        return NOT_IMPLEMENTED_EXIT
+    if ns.split_dir is None:
+        parser.error("--split-dir is required (or use --heldout)")
     if ns.dev_only:
         out = ns.out or Path("docs/eval/DEV_RESULTS.md")
         try:

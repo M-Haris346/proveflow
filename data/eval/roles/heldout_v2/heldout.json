@@ -1,0 +1,56 @@
+{
+  "cap": 15,
+  "capped_out": {
+    "pdf-suite": [
+      "pdf_add_image",
+      "pdf_blank_pages",
+      "pdf_create",
+      "pdf_decrypt",
+      "pdf_extract_pages",
+      "pdf_form_fill",
+      "pdf_highlight",
+      "pdf_images_to_pdf",
+      "pdf_info",
+      "pdf_insert_pages",
+      "pdf_merge",
+      "pdf_overlay_pdf",
+      "pdf_page_layout",
+      "pdf_page_numbers",
+      "pdf_read_text",
+      "pdf_redact",
+      "pdf_reorder",
+      "pdf_repair",
+      "pdf_rotate",
+      "pdf_sign",
+      "pdf_stamp",
+      "pdf_validate"
+    ]
+  },
+  "inputs": {
+    "tools.jsonl": "2014d6eca67ab91d208d52b3f6db8cad2455aaae54933454d3140cde3102069f"
+  },
+  "kind": "heldout_v2",
+  "labels_csv": "labels_heldout_v2.csv",
+  "labels_csv_sha256": "711e706560d984e99e664425c580f1c00d050980e4e1d6cfd1a65d749d2f69ad",
+  "per_category": {
+    "dev-tools": 13,
+    "file": 25,
+    "llm-proxy": 5,
+    "messaging": 3,
+    "other": 9
+  },
+  "per_server": {
+    "bankregpulse": 9,
+    "compound-memory": 5,
+    "emailmd": 3,
+    "pdf-suite": 15,
+    "podman": 13,
+    "purmemo": 5,
+    "tabellio": 5
+  },
+  "proveflow_version": "0.0.1.dev0",
+  "schema_version": 1,
+  "seed": 20261201,
+  "tools_after_cap": 55,
+  "tools_before_cap": 77
+}
