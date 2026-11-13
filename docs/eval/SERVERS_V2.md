@@ -1,10 +1,13 @@
 # Classifier eval v2: fresh held-out servers (checkpoint 1c, Stage C)
 
-> Prepared, **not collected**. 14 servers (run 3). The author triggers `eval-collect` with
-> `servers=data/eval/roles/servers_v2.json`, `out_dir=out/v2`. No server below has been
-> launched, asked for `tools/list`, or had its tools classified. Claude did read README
-> excerpts while checking credentials and launch commands, and some excerpts name tools or
-> parameters (see "Blindness during selection").
+> 14 servers selected (run 3).
+> - **Collected** by the author in eval-collect run 43441434109 (`servers_v2.json` → `out/v2`):
+>   7 ok, 7 failed, all server-caused (see "Failure classification").
+> - No collected tool has been opened, labeled or classified yet. Claude read only the
+>   collection summary, the failed servers' stderr tails, and the README excerpts read during
+>   selection (some name tools or parameters; see "Blindness during selection").
+> - Two failed servers were also launched locally to diagnose them, against the project rule
+>   (see "Rule violation" under "Failure classification").
 
 ## Why a new set
 
@@ -197,6 +200,13 @@ Other category notes:
       chosen file's ids (`python -m proveflow.eval.verify_collection`).
     - Tests: `tests/safety/test_eval_collect_workflow.py`.
   - Run #2's output is not used for anything in checkpoint 1c.
+- **eval-collect run 43441434109** (2026-11-13, commit 20aa78f) is **the v2 collection**.
+  - Its first step printed `servers file : data/eval/roles/servers_v2.json`,
+    `out_dir : out/v2` and `artifact : eval-tools-v2`.
+  - The id check printed `ok: summary server ids match data/eval/roles/servers_v2.json`.
+  - Result: 7 ok and 7 failed, 77 tools in total. Every failure is server-caused; see
+    "Failure classification".
+  - The artifact was downloaded to `out/v2/` (gitignored, not committed).
 
 ## Decision before collection
 
@@ -221,7 +231,53 @@ only, no tools/call):
 No server is added, swapped or dropped. The safety flags are not relaxed.
 The classification of each server and its evidence line are recorded here.
 
-## Final set (14 servers; collected by the author, not yet)
+### Classification of run 43441434109 (2026-11-13; 7 of 14 failed)
+
+Evidence comes from each server's `stderr_tail` in `out/v2/tools.jsonl.summary.json` (the
+JSONL rows were not opened). For the two unclear tails (glyphic, a11y-scanner), Claude:
+- reproduced locally with the exact `servers_v2.json` commands, through
+  `python -m proveflow.eval.collect --only … --yes --timeout 180 --ignore-scripts --no-build`
+  (tools/list only, no credentials);
+- checked the published package itself.
+
+Paths in the CI tails are partly replaced by `<redacted:…>` by the stderr scrubber.
+
+| Server | Class | Evidence line | Why |
+|---|---|---|---|
+| `bitbucket` | **server** | `Error: Either BITBUCKET_TOKEN or BITBUCKET_USERNAME/PASSWORD is required` | missing credential (refuses to start without one) |
+| `perplexity` | **server** | `Error: PERPLEXITY_API_KEY environment variable is required` | missing credential |
+| `mssql-reader` | **server** | `Fatal: Error: No environment config file provided and SERVER_NAME/DATABASE_NAME env vars not set` | needs a real database configuration to start. npm also warned: `@connorbritain/mssql-mcp-reader@0.3.1: Security: SQL injection (CVE-2026-63129). Upgrade to >=0.5.0.` |
+| `meok-koikeeper` | **server** | `ModuleNotFoundError: No module named 'mcp.server.fastmcp'. This is mcp 2.x, where FastMCP was renamed to MCPServer …` | import error. The package declares `mcp>=1.28.0` (PyPI `requires_dist`, 1.0.3), so mcp 2.x is resolved. Same failure as v1's global-sentinel-mcp |
+| `wander-agent` | **server** | same `ModuleNotFoundError: No module named 'mcp.server.fastmcp' …` | import error; declares `mcp[cli]>=1.27.0` (0.1.1) |
+| `glyphic` | **server** | CI tail: `npm error A complete log of this run can be found in: …`. Local repro: `npm error code EUNSUPPORTEDPROTOCOL` / `npm error Unsupported URL Type "workspace:": workspace:*` | broken publish. The npm manifest of `@glyphicjs/mcp-server@1.0.2` lists `"@glyphicjs/core": "workspace:*"` and `"@glyphicjs/schema": "workspace:*"`, a monorepo-only protocol npm cannot install |
+| `a11y-scanner` | **server** | CI and local: `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '…/mcp-accessibility-scanner/lib/program.js' imported from …/mcp-accessibility-scanner/cli.js` | broken publish. The 1.1.1 tarball has 5 files (`LICENSE`, `NOTICE.md`, `Readme.md`, `cli.js`, `package.json`) and no `lib/`. It has no install/prepare lifecycle script, so `--ignore-scripts` is not the cause; `lib/` comes only from the publisher's own `build` script |
+
+**Collector-caused: none.** So, per the rule above, there is no fix and no re-collection. All
+7 stay attrition.
+- **Final held-out set:** 7 servers, 77 tools before CAP. They are bankregpulse, compound-memory,
+  emailmd, pdf-suite, podman, purmemo and tabellio.
+- **Lost categories:** browser, vcs-hosting, database and web. The remaining llm-proxy
+  (`purmemo`) and messaging (`emailmd`) picks are the ones flagged above as incidental.
+
+meok-koikeeper and wander-agent declare open-ended mcp>=1.x; resolving today installs mcp 2.x.
+Recorded as dependency drift since publish; attrition, as v1's global-sentinel.
+
+**Rule violation: local reproduction on the author's laptop.**
+- The local reproduction ran third-party code on the author's laptop. This went against the
+  project rule that third-party servers run only on the ephemeral CI runner.
+- `a11y-scanner`'s `cli.js` ran and failed on import. `glyphic` ran no code: npm failed while
+  resolving its `workspace:*` dependencies, before installing it.
+- **npx cache cleanup (checked 2026-11-13):**
+  - The `_npx` cache dir from the a11y-scanner run (`ca4e3d94bbc08dcf`, named in its error)
+    no longer existed.
+  - The empty `_npx` dir created by the run (`1b85d3177f7ab8e6`, 0 files) was deleted, along
+    with the scratch output of the reproduction.
+  - npm's shared content store (`_cacache`) may still hold the downloaded tarballs. It was
+    not cleaned, because `npm cache clean --force` would also remove the author's unrelated
+    cached packages.
+- **Future reproductions run only in CI.**
+
+## Final set (14 servers selected; collected in run 43441434109: 7 ok, 7 failed)
 
 | id | source | category (after label fix) | package @ pinned version | license (file) | npm downloads (snapshot) | launch | env |
 |---|---|---|---|---|---|---|---|
