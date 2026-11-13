@@ -45,6 +45,9 @@ from proveflow.stats.intervals import cohens_kappa, wilson
 MIN_CI_DENOMINATOR = 10
 NOT_IMPLEMENTED_EXIT = 2
 YES, NO = "yes", "no"
+# The label values v1 metrics accept are these two, after .strip().lower() (see _yn). The
+# held-out guard is stricter: a label cell must be EXACTLY one of them (no case or spaces).
+ALLOWED_VALUES = (YES, NO)
 
 
 class MetricsError(RuntimeError):
@@ -251,22 +254,25 @@ def compute(split_dir: Path) -> dict[str, Any]:
 
 
 # --- held-out v2 guard (checkpoint 1c Stage D) ----------------------------------------
-# Required label cells: <role>_a and <role>_final for every role, on every row. The labeler-B
+# Required label cells: <role>_a and <role>_final for every role, plus uncertain_a, on every
+# row, each EXACTLY "yes" or "no". The labeler-B
 # columns are optional (no second held-out labeler is planned); kappa is reported only if
 # they are complete. The held-out counter lives in <heldout_dir>/metrics_runs.json under
 # "heldout_evaluations" (created at 0 by `split --heldout`), separate from the v1 split's
 # "test_evaluations".
 HELDOUT_CSV = "labels_heldout_v2.csv"
 HELDOUT_COUNTER_KEY = "heldout_evaluations"
-HELDOUT_REQUIRED = [*(f"{r}_a" for r in ROLES), *(f"{r}_final" for r in ROLES)]
+# uncertain_a: one per tool, yes/no, required on every row (as in every v1 dev/test row).
+HELDOUT_REQUIRED = [*(f"{r}_a" for r in ROLES), *(f"{r}_final" for r in ROLES), "uncertain_a"]
 
 
 def heldout_label_gaps(heldout_dir: Path) -> int:
-    """Number of empty required label cells (an empty sheet counts as one gap)."""
+    """Number of required label cells that are not EXACTLY one of ALLOWED_VALUES (empty,
+    'Yes ', 'y', ... all count). An empty sheet counts as one gap."""
     rows = _read_csv(heldout_dir / HELDOUT_CSV)
     if not rows:
         return 1
-    return sum(1 for row in rows for c in HELDOUT_REQUIRED if not (row.get(c) or "").strip())
+    return sum(1 for row in rows for c in HELDOUT_REQUIRED if row.get(c) not in ALLOWED_VALUES)
 
 
 def heldout_counter(heldout_dir: Path) -> int:
@@ -279,7 +285,8 @@ def guard_heldout(heldout_dir: Path) -> None:
     gaps = heldout_label_gaps(heldout_dir)
     if gaps:
         raise MetricsError(
-            f"held-out labels incomplete: {gaps} empty label cell(s) in {HELDOUT_CSV}; "
+            f"held-out labels incomplete: {gaps} label cell(s) in {HELDOUT_CSV} not exactly "
+            f"one of {list(ALLOWED_VALUES)}; "
             "refusing to evaluate (counter unchanged)"
         )
 

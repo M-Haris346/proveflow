@@ -36,6 +36,7 @@ dev = [
     "mypy>=1.13",
     "jsonschema>=4.26.0",
     "psutil>=7.2.2",
+    "openpyxl==3.1.5",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -66,6 +67,12 @@ strict = true
 plugins = ["pydantic.mypy"]
 files = ["src"]
 python_version = "3.12"
+
+[[tool.mypy.overrides]]
+# openpyxl (dev-only, used lazily by proveflow.eval.label_sheet) ships no type information;
+# no stub package is added for it.
+module = ["openpyxl", "openpyxl.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

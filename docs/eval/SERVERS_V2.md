@@ -208,6 +208,11 @@ Other category notes:
     "Failure classification".
   - The artifact was downloaded to `out/v2/` (gitignored, not committed).
 
+## Held-out label sheet
+
+Held-out cap seed 20261201 (v1 split used 20261111); fixed before any held-out
+row was seen; only affects which 15 of pdf-suite's 37 tools are kept.
+
 ## Decision before collection
 
 No supplement round. Servers that fail without credentials are
