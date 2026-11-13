@@ -330,6 +330,56 @@ def scan(
 
 
 @app.command()
+def proxy(
+    session: Annotated[
+        Path,
+        typer.Option(
+            "--session",
+            help="Proxy session JSON (twin upstream, tool policy, optional attack, cassette).",
+            exists=True,
+            dir_okay=False,
+        ),
+    ],
+) -> None:
+    """Serve ONE twin upstream to an agent as a stdio MCP server (twin mode only).
+
+    The upstream must be this Python interpreter running a .py twin; real servers (npx,
+    uvx, node, docker, URLs) are refused. Every tools/call that is not explicitly allowed
+    (sink, unknown, unclassified, server-level) gets a sandbox response and is never
+    forwarded. The sandbox cannot be disabled: there is no flag, env var or config for it.
+    Everything is recorded in the session's cassette (JSONL, hash-chained).
+    """
+    # Lazy: the proxy (and the MCP SDK) load only for this command. stdout is the MCP
+    # channel, so every message here goes to stderr.
+    from pydantic import ValidationError
+
+    from proveflow.proxy.server import run_proxy
+    from proveflow.proxy.session import SessionFileError, load_session
+
+    err = Console(stderr=True)
+    try:
+        loaded = load_session(session)
+    except (SessionFileError, ValidationError, OSError) as exc:
+        message = (
+            f"invalid session file ({exc.error_count()} errors)"
+            if isinstance(exc, ValidationError)
+            else str(exc)
+        )
+        err.print(Text(f"error: {message}", style="red"))
+        if isinstance(exc, ValidationError):
+            for error in exc.errors(include_input=False, include_url=False):
+                loc = ".".join(str(p) for p in error["loc"])
+                err.print(Text(f"  {loc}: {error['msg']}"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE) from None
+    import anyio
+
+    outcome = anyio.run(run_proxy, loaded)
+    if outcome.reason not in ("agent_closed", "sigterm"):
+        err.print(Text(f"proxy ended: {outcome.reason}", style="yellow"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+
+
+@app.command()
 def prove() -> None:
     """Attack flows in a safe schema twin and report confirmed exploits."""
     _stub("prove", "Phase 7")

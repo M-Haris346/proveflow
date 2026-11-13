@@ -108,26 +108,26 @@ flowchart LR
 sequenceDiagram
   participant E as Campaign engine
   participant A as Agent (model under test)
-  participant M as Mitigation layer (optional)
-  participant P as Interception proxy
+  participant P as Interception proxy (sandbox ALWAYS on)
   participant T as Schema twin
   participant O as Oracle
 
   E->>T: start twin(flow, seed, honey secrets)
-  E->>P: arm(attack, canary=cnry_7f3a9c)
-  E->>A: user task + system prompt + tools (via P)
+  E->>P: arm(attack, canary=cnry_7f3a9c01b2d4)
+  E->>A: user task + system prompt + tools (via P, outputSchema stripped)
   loop agent loop (max steps, timeout)
-    A->>M: tool call
-    M->>P: tool call (or BLOCK)
-    alt sink tool
-      P-->>M: sandboxed fake success (never forwarded)
-    else other tool
-      P->>T: forward
-      T-->>P: synthetic result
-      P->>P: inject payload via carrier at source tool
-      P-->>M: result
+    A->>P: tool call
+    opt mitigation policy layer inside P (Phase 8)
+      P->>P: mitigation may BLOCK or rewrite
     end
-    M-->>A: result
+    alt default deny: sink, source+sink, unclassified, server-level, unknown, not listed by twin
+      P-->>A: sandbox success {"ok": true, "id": "sbx_NNNN"} (never forwarded)
+    else forward=True (role-classified, no sink, tool-granularity)
+      P->>T: forward (write-path gate re-checks)
+      T-->>P: synthetic result
+      P->>P: inject payload via carrier (untrusted_source tools only)
+      P-->>A: result (structuredContent dropped)
+    end
   end
   P->>E: cassette (all events, raw + transformed)
   E->>O: evaluate(cassette, goal, utility check)
@@ -175,10 +175,71 @@ sequenceDiagram
 - **Honest limitation:** twin behavior is not the real server's behavior. Twin proves *the agent + tool surface* is exploitable, not that the real server returns exploitable content. Documented in every report.
 - **Real read-only mode** [planned v1, opt-in]: forward non-sink calls to real servers; requires explicit `--real-reads` + per-server consent; warning that real data goes to the model provider; recommends local model.
 
-### 5.5 Interception proxy `proxy/`
-- Agent-facing MCP server, upstream-facing MCP client (official `mcp` Python SDK). stdio first; Streamable HTTP later.
-- **Sink sandbox (default ON, cannot be disabled in twin mode):** sink-role tool calls are never forwarded; proxy returns plausible fake success and records args for the oracle.
-- Injection at source-tool results via carrier. Cassette: JSONL, every event, raw + transformed, hashes.
+### 5.5 Interception proxy `proxy/` [impl][tested] Phase 2 (ADR-006)
+`proveflow proxy --session FILE`: a stdio MCP server for an agent, and a stdio MCP client for
+**one twin upstream** (official `mcp` SDK 2.3.0; SDK facts in docs/MCP_SDK.md).
+
+- **D1 scope.** stdio on both sides, tools only. Not built and not stubbed:
+  - twin generator (Phase 4), oracle (3), agent runner/LLM (6), corpus (6), mitigations (8),
+    replay CLI (5);
+  - Streamable HTTP, `--real-reads`.
+- **D2 layer A.**
+  - `TwinUpstream(name, argv)` is valid only for `[sys.executable, /abs/path/twin.py, ...]`. It
+    is checked at validation and again before spawn.
+  - `proxy/` imports no `discover*`, `introspect.launchspec`/`transport`/`runner` or
+    `core.client`. An AST scan and a fresh-interpreter `sys.modules` check enforce this. The CLI
+    process itself loads `discover` (accepted).
+  - The upstream starts through `introspect.procs.spawn` (Job Object / process group) with a
+    minimal env and an empty temp cwd.
+- **D3 layer B, default deny.**
+  - `ToolPolicy(forward, inject)`. `forward` = roles non-empty, AND no `sink`, AND all evidence
+    tool-granularity, AND name ≠ `*`. `inject` = `untrusted_source` in roles.
+  - A `tools/call` that is not forward, or not in the twin's own `tools/list`, gets the sandbox
+    response.
+  - **No flag, env var or config disables the sandbox.** One mode only: twin mode.
+- **D4 methods.**
+  - To upstream: `initialize`, `notifications/initialized`, `tools/list`, `tools/call` (gated),
+    `ping`, `notifications/cancelled`.
+  - Agent `resources/*`, `prompts/*`, `completion/*`, `logging/*` and anything else → `-32601`
+    locally (SDK behaviour).
+  - Upstream `sampling/*`, `roots/*`, `elicitation/*` (any upstream request) → error, never
+    relayed.
+  - Upstream notifications are dropped and recorded.
+- **D5 gate + fail closed.**
+  - `UpstreamGate` on the write path (stream `send` + writer task) raises before any byte is
+    written, independently of the handler.
+  - Exception, oversized line, crash, invalid line or timeout → `isError=true` "proveflow
+    proxy: <reason>", and nothing is forwarded.
+  - Limits (tighten-only): per call 30 s, session 600 s, at most 200 tool calls.
+  - Proxy exit or kill → the twin's tree is killed. POSIX SIGKILL residual: the twin exits on
+    stdin EOF.
+- **D6 sandbox.**
+  - `CallToolResult(isError=false)` with one TextContent `{"ok": true, "id": "sbx_0001"}`;
+    the arguments are recorded.
+  - `outputSchema` is stripped from all advertised tools (recorded per tool), and forwarded
+    results drop `structuredContent` (raw kept in the cassette). Limitation, revisited in
+    Phase 4.
+- **D7 carriers** (`proxy/carriers.py`, pure):
+  - PLAIN, HTML_COMMENT, MARKDOWN, CODE_COMMENT and JSON_STRING. JSON_STRING handles an object
+    as `_note` / `_note_N`, an array by appending, and anything else with the PLAIN fallback +
+    `json.dumps(payload)`.
+  - Injection happens only for `inject=True`, only into the first TextContent, and only with an
+    armed `Attack`. Otherwise an `injection_skipped` event is recorded.
+- **D8 session.** `ProxySession` (pydantic, `extra=forbid`, schema 1): session_id, upstream,
+  policy, attack, cassette_path (absolute, never overwritten), limits.
+- **D9 cassette** (`proxy/cassette.py`):
+  - JSONL, one validated event per line;
+  - `seq`, no wall clock;
+  - sha256 hash chain over canonical JSON;
+  - raw `upstream_response`, transformed `agent_response`;
+  - 1 MiB per-value cap with a `truncated` flag;
+  - upstream stderr scrubbed.
+  - `load_cassette` validates the models, seq order, chain and canonical form, with a 16 MiB
+    line and 64 MiB file limit. Replay is Phase 5.
+- **D10 evidence.** The test twin logs every received line before parsing. Safety tests use
+  that log, not the cassette.
+- **Residual (ADR-006):** a real sink mislabeled as source/private only is forwarded **to the
+  twin**. That is harmless in twin mode, but must be closed before `--real-reads`.
 
 ### 5.6 Agent runner `agents/`
 - **builtin**: tool-calling loop over LiteLLM. Providers: Groq, Gemini, Cerebras, OpenRouter (free tiers — limits change, checked at runtime via 429 handling, not hard-coded), Ollama local (3–4B models on CPU; small runs only).
@@ -293,8 +354,8 @@ proveflow/
 | Phase | Scope | Exit criteria | Est. |
 |---|---|---|---|
 | **0 Foundation** | Repo, tooling, CI, CLI skeleton, core models, docs (METHODOLOGY v0, THREAT_MODEL v0, COMPETITORS, DATASETS audit, CLIENT_CONFIGS verified, ADRs) | **Done 2026-11-10** [impl][tested]: ruff/mypy-strict/pytest (79 tests) green locally on Windows; CI workflow written but **never run** (repo has no remote yet); audits filled with source links, pending Haris review | 2–3 d |
-| **1 Find** | discover + redaction, introspect (tools/list only), role classifier, flow graph, terminal + SARIF report; labeled tool set for classifier eval | `proveflow scan` on Haris's real machine; classifier precision/recall **[measured]**; redaction property tests. **1a done 2026-11-10** [impl][tested]. **1b introspection [impl][tested] 2026-11-12**: consented tools/list with a method allowlist; Job Object / process-group kill; safe PATH resolution and temp cwd; project-scope consent; unresolved-variable refusal; discover→legacy relaunch; tool cache + PF-TOOLCHANGE; PF-UNPINNED. Tested with a fake server on Windows; CI run 43059686222 green on ubuntu + windows at 3b66868. **1b done 2026-11-13**: real-machine `scan` run by the author (1 real stdio server; consent yes → `ok`, consent no → `declined`; `leak_check` clean both times; output not committed). Classifier baseline **[measured] once** (docs/eval/RESULTS.md); caveat: the test split is mostly reference servers, dev recall ~0.2–0.3, labels are LLM pre-labels reviewed by the author. Fixed from the real-machine run: silent drop of out-of-project servers (T16); UTF-8 `--json` on Windows. **1c done 2026-11-13**: classifier v2 (rules tuned on dev only, docs/eval/V2_CHANGELOG.md) measured once with v1 on a fresh held-out set (docs/eval/RESULTS_V2.md): held-out (55 tools, 7 servers, single blind human labeler): sink recall 8/25 -> 16/25, mostly one rule (C1) on one server; private_data recall 4/20 for both; 10 of 13 v2 rules untested; large dev-to-held-out gap. **Flow grouping [impl][tested] 2026-11-14** (§5.3; scan report schema 2): one table row per group; reduces rows, not tool paths. **Next:** Phase 2 (Proxy) | 5–6 d |
-| **2 Proxy** | stdio proxy, sink sandbox, carriers, cassette | Safety tests prove no sink forwarding | 3–4 d |
+| **1 Find** | discover + redaction, introspect (tools/list only), role classifier, flow graph, terminal + SARIF report; labeled tool set for classifier eval | `proveflow scan` on Haris's real machine; classifier precision/recall **[measured]**; redaction property tests. **1a done 2026-11-10** [impl][tested]. **1b introspection [impl][tested] 2026-11-12**: consented tools/list with a method allowlist; Job Object / process-group kill; safe PATH resolution and temp cwd; project-scope consent; unresolved-variable refusal; discover→legacy relaunch; tool cache + PF-TOOLCHANGE; PF-UNPINNED. Tested with a fake server on Windows; CI run 43059686222 green on ubuntu + windows at 3b66868. **1b done 2026-11-13**: real-machine `scan` run by the author (1 real stdio server; consent yes → `ok`, consent no → `declined`; `leak_check` clean both times; output not committed). Classifier baseline **[measured] once** (docs/eval/RESULTS.md); caveat: the test split is mostly reference servers, dev recall ~0.2–0.3, labels are LLM pre-labels reviewed by the author. Fixed from the real-machine run: silent drop of out-of-project servers (T16); UTF-8 `--json` on Windows. **1c done 2026-11-13**: classifier v2 (rules tuned on dev only, docs/eval/V2_CHANGELOG.md) measured once with v1 on a fresh held-out set (docs/eval/RESULTS_V2.md): held-out (55 tools, 7 servers, single blind human labeler): sink recall 8/25 -> 16/25, mostly one rule (C1) on one server; private_data recall 4/20 for both; 10 of 13 v2 rules untested; large dev-to-held-out gap. **Flow grouping [impl][tested] 2026-11-14** (§5.3; scan report schema 2): one table row per group; reduces rows, not tool paths. Phase 1 done. | 5–6 d |
+| **2 Proxy** | stdio proxy, sink sandbox, carriers, cassette | Safety tests prove no sink forwarding. **[impl][tested] 2026-11-14** (§5.5, ADR-006): `proveflow proxy --session` serves ONE python twin (layer A) with a default-deny policy + write-path gate (layer B); sandbox not disableable; 5 carriers; hash-chained cassette with validating loader; limits; fail closed. Tested only against a fake twin written for the tests (no real server, no network, no LLM, no agent loop); Windows locally; POSIX kill tests run only in CI. Not built: twin generator, oracle, agent runner, corpus, mitigations, replay CLI, Streamable HTTP, `--real-reads`. **Next:** Phase 3 (Oracle) | 3–4 d |
 | **3 Oracle** | canary, encodings, matcher, R1–R4, FakeLLM policies | Exact FakeLLM verdicts; mutation tests fail as designed | 3–4 d |
 | **4 Twin** | twin generator, archetypes, synthetic data, honey secrets, schema validation | Twin of pg-mcp-guard + 2 public servers runs under proxy | 4–5 d |
 | **5 Runner + store** | LiteLLM loop, command adapter, retries/429, SQLite, replay | One real trial on free tier; replay reproduces verdict | 3–4 d |

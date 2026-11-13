@@ -1,7 +1,10 @@
 # Methodology v0 [planned]
 
-> Status: design document. Nothing below is implemented or measured yet. Definitions here bind
-> later phases; changes require updating this file first.
+> Status: design document. The models exist (`core/attacks.py`: `Attack`, `Payload`,
+> `Carrier`, goals, `CANARY_PATTERN`; `core/trials.py`: `Trial`, `Verdict`, `RunMeta`), and
+> Phase 2 implemented the proxy-side **carriers** (docs/ARCHITECTURE.md §5.5). No oracle rule,
+> trial, statistic or campaign behaviour described below is implemented, and nothing is
+> measured. Definitions here bind later phases; changes require updating this file first.
 
 ## 1. Oracle rules (deterministic; LLM-as-judge never decides a primary verdict)
 

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from proveflow.core.redact import RedactedValue
-from proveflow.discover.redact_rules import redact_text
+from proveflow.core.redact_rules import redact_text
 
 
 def scrub_text(text: str, secrets: Sequence[str]) -> str:

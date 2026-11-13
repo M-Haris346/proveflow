@@ -14,7 +14,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 ## Status
 
-> **Phase 1 (Find): checkpoints 1a, 1b and 1c done. Not released.**
+> **Phase 1 (Find) done. Phase 2 (Proxy) [impl][tested]. Not released.**
 >
 > - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
 >   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
@@ -56,13 +56,27 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 >   `--limit` counts groups. **Grouping reduces table rows, not the number of tool paths**:
 >   every flow is still in `--json` and `--sarif`, and per-path triage is Prove (Phase 7).
 >   Rules and limitations: docs/ARCHITECTURE.md §5.3.
-> - **Next:** Phase 2 (Proxy).
-> - Everything from Phase 2 on is [planned]. No releases.
+> - `proveflow proxy --session FILE` (Phase 2) [impl][tested, against a fake twin only]: a stdio
+>   MCP proxy that serves ONE twin upstream to an agent (docs/ARCHITECTURE.md §5.5,
+>   docs/adr/ADR-006-proxy-default-deny.md).
+>   - the upstream must be this Python interpreter running a `.py` twin; real servers (npx, uvx,
+>     node, docker, URLs) are refused before anything starts
+>   - default deny: only role-classified, non-sink, tool-level tools are forwarded; every other
+>     `tools/call` gets a sandbox reply and is never forwarded; a second check on the write path
+>     blocks independently. **The sandbox cannot be disabled** (no flag, env var or config)
+>   - 5 injection carriers for source results; hash-chained JSONL cassette with a validating
+>     loader; per-call / session / call-count limits; fails closed
+>   - tested only with a fake twin written for the tests: no real server, no network, no LLM, no
+>     agent loop. Windows locally; the POSIX kill tests run only in CI (not yet run for Phase 2).
+>     Residual: a sink mislabeled by the classifier is forwarded to the twin (harmless in twin
+>     mode; must be closed before any real-reads mode)
+> - **Next:** Phase 3 (Oracle).
+> - Everything from Phase 3 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
 `43493526715` on commit `13d1900`, green on both OSes (ubuntu: 572 passed, 14 skipped, all
-Windows-only tests; windows: 586 passed). This README states CI results only for a run id
-checked with `gh run list`. Local commands:
+Windows-only tests; windows: 586 passed). That run predates Phase 2: the proxy tests have not
+run in CI yet. This README states CI results only for a run id checked with `gh run list`. Local commands:
 
 ```bash
 uv sync

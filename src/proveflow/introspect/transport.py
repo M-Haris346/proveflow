@@ -26,6 +26,7 @@ from mcp.shared.message import SessionMessage
 
 from proveflow.introspect.env import child_env
 from proveflow.introspect.launchspec import LaunchSpec
+from proveflow.introspect.limits import MAX_LINE
 from proveflow.introspect.procs import Spawned, spawn
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,6 @@ ALLOWED_METHODS: frozenset[str] = frozenset(
     }
 )
 STDERR_CAP = 64 * 1024
-MAX_LINE = 16 * 1024 * 1024
 GRACE_SECONDS = 2.0
 
 

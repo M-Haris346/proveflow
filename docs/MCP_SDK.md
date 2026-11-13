@@ -70,3 +70,20 @@ waits for the caller. Test: `tests/safety/test_review_4a_fixes.py::test_sdk_auto
 
 Tests: `tests/safety/test_review_round3.py`.
 
+
+## Server side and proxy facts (Phase 2, verified 2026-11-14 in the installed 2.3.0 source)
+
+Read before implementing the proxy (Phase 2 step 0). None of these facts contradicted D4/D6.
+
+| Fact | Source |
+|---|---|
+| Lowlevel `Server(name, *, version, ..., on_list_tools, on_call_tool, ...)`. A spec request handler is registered only when its `on_*` argument is not `None`; `ping` (default `_ping_handler`) and `server/discover` are always registered | `mcp/server/lowlevel/server.py:459-474` |
+| A request whose method has no registered handler is answered with `MCPError(code=METHOD_NOT_FOUND, message="Method not found", data=method)` (-32601). The proxy registers only `tools/list` and `tools/call`, so agent `resources/*`, `prompts/*`, `completion/*`, `logging/setLevel` get -32601 locally | `mcp/server/runner.py:197, 210` |
+| `Server.run(read_stream, write_stream, initialization_options, raise_exceptions=False)` serves a stream pair | `mcp/server/lowlevel/server.py:703` |
+| `stdio_server(stdin=None, stdout=None)`: with explicit streams it skips claiming fd 0/1. It reads with `async for line in stdin` and parses each line with `jsonrpc_message_adapter.validate_json`. The fake twin passes a logging stdin wrapper (log before parse, A3). The proxy uses its own fd-based agent transport (daemon reader thread on a dup of fd 0, `MAX_LINE` enforced, fd 1 pointed at stderr while serving) | `mcp/server/stdio.py:162-210` |
+| ClientSession default callbacks REJECT server-initiated requests: sampling ("Sampling not supported"), elicitation, roots/list, each with `INVALID_REQUEST`. A non-default sampling callback makes the client advertise the `sampling` capability. The proxy never relays: its upstream transport answers every upstream request itself (-32601; `ping` → `{}`), so the SDK client never sees one | `mcp/client/session.py:249-274, 425-436, 631` |
+| `ClientSession.call_tool` revalidates a non-error result against the tool's `outputSchema` from `tools/list`. It raises if `structuredContent` is missing or invalid. That is why the proxy strips `outputSchema` from every advertised tool AND drops `structuredContent` from forwarded results (D6/A1) | `mcp/client/session.py:1102, 1118-1150` |
+| A request is written via `await self._write(msg, ...)` → `write_stream.send(SessionMessage(...))`. Only `BrokenResourceError`/`ClosedResourceError` are converted; any other exception from `send` propagates to the caller of `send_request`. So `GatedWriteStream.send` raising `GateBlocked` reaches the proxy handler before anything is written | `mcp/shared/jsonrpc_dispatcher.py:408-412, 797-798` |
+| `Client(transport, mode="legacy")` runs `session.initialize()` (initialize + notifications/initialized) and nothing else on connect | `mcp/client/client.py:452-470` |
+| `Client.call_tool(name, arguments=None, read_timeout_seconds=None, ...)`; a caller cancellation (e.g. `anyio.fail_after`) sends a courtesy `notifications/cancelled` to the server | `mcp/client/client.py` (`call_tool`); `mcp/shared/jsonrpc_dispatcher.py:443-451` |
+| Field names: `CallToolResult(content, structured_content, is_error)` (wire: `structuredContent`, `isError`); `TextContent(type, text)`; `Tool(name, description, input_schema, output_schema, ...)` (wire: `inputSchema`, `outputSchema`) | `mcp_types` (checked with `model_fields`) |
