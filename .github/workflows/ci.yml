@@ -25,6 +25,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # actions/checkout README (at the pinned SHA): fetch-depth "Number of commits to
+          # fetch. 0 indicates all history for all branches and tags." Default: 1. Full history
+          # is needed so test_v1_loader_reproduces_frozen_sha_and_v1_behaviour can load the
+          # frozen v1 classifier from git 86157de (it skipped on the shallow checkout).
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3

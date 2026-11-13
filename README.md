@@ -13,7 +13,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 ## Status
 
-> **Phase 1 (Find): checkpoints 1a and 1b done; 1c (classifier v2) next. Not released.**
+> **Phase 1 (Find): checkpoints 1a, 1b and 1c done. Not released.**
 >
 > - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
 >   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
@@ -41,13 +41,17 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 >     second labeler, so no kappa.
 >   - Test has only 1 `untrusted_source` positive.
 >   - Read the caveats in RESULTS.md before quoting any number.
+> - Role classifier v2 [measured, once, on a fresh held-out set]: rules tuned on dev only,
+>   results in [docs/eval/RESULTS_V2.md](docs/eval/RESULTS_V2.md). held-out (55 tools, 7
+>   servers, single blind human labeler): sink recall 8/25 -> 16/25, mostly one rule (C1) on
+>   one server; private_data recall 4/20 for both; 10 of 13 v2 rules untested; large
+>   dev-to-held-out gap.
 > - Fixed after the real-machine run:
 >   - servers discovered but in no profile (e.g. another project's Claude Code local entry)
 >     are now listed as `skipped` with a reason, no longer dropped silently (THREAT_MODEL T16)
 >   - `--json` is written as UTF-8 on Windows whatever the console code page
-> - **Next:** 1c classifier v2 (tuning on dev only, then a fresh held-out set), then Phase 2.
-> - **Known backlog:** flow grouping. One real server produced several hundred theoretical
->   flows, too many to review one by one.
+> - **Next:** flow grouping (one real server produced several hundred theoretical flows, too
+>   many to review one by one), then Phase 2 (Proxy).
 > - Everything from Phase 2 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
