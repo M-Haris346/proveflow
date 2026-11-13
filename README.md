@@ -4,8 +4,9 @@
 
 Your agent is connected to many MCP servers. Some combinations let an attacker who controls
 *one* tool output steal data through *another* tool. Static scanners say "this might be risky" —
-proveflow is being built to *prove* it: discover your installed MCP setup, map cross-server toxic
-flows, attack each flow in a safe schema twin with real-world injection payloads, let a
+proveflow is being built to *prove* it: discover your installed MCP setup, map toxic flows inside
+each agent profile (exfil, action, or informational leak; cross-server flows ranked first), attack
+each flow in a safe schema twin with real-world injection payloads, let a
 deterministic oracle decide whether the agent was hijacked, then propose a fix and measure the
 attack-success-rate change after applying it.
 
@@ -59,8 +60,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 > - Everything from Phase 2 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`43059686222` on commit `3b66868`, green on both OSes (ubuntu: 327 passed, 14 skipped, all
-Windows-only tests; windows: 341 passed). This README states CI results only for a run id
+`43493526715` on commit `13d1900`, green on both OSes (ubuntu: 572 passed, 14 skipped, all
+Windows-only tests; windows: 586 passed). This README states CI results only for a run id
 checked with `gh run list`. Local commands:
 
 ```bash

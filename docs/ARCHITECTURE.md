@@ -10,8 +10,8 @@
 
 Your agent is connected to many MCP servers. Some combinations let an attacker who controls *one* tool output steal data through *another* tool. Static scanners say "this might be risky". **proveflow proves it**:
 
-1. **Find** — discover your installed MCP setup and map cross-server toxic flows (untrusted source → private data → sink).
-2. **Prove** — attack each flow in a safe **schema twin** of your servers with real-world injection payloads; a deterministic oracle decides if the agent was hijacked. Result: `CONFIRMED` / `NOT REPRODUCED` / `THEORETICAL`, with attack success rate (ASR) and confidence interval.
+1. **Find** — discover your installed MCP setup and map toxic flows inside each agent profile. A toxic flow is `exfil` (untrusted source → private data → sink), `action` (untrusted source → sink) or `leak` (private data → sink, informational). Cross-server flows are ranked first but are not required.
+2. **Prove** — attack each flow in a safe **schema twin** of your servers with real-world injection payloads; a deterministic oracle decides if the agent was hijacked. Result: `CONFIRMED` / `NOT_REPRODUCED` / `THEORETICAL`, with attack success rate (ASR) and confidence interval.
 3. **Fix** — propose a concrete mitigation (patch file, never auto-applied).
 4. **Verify** — re-run the same attacks with the fix and show the ASR change, paired and significance-tested.
 
@@ -19,8 +19,8 @@ Your agent is connected to many MCP servers. Some combinations let an attacker w
 proveflow discover                          # find MCP configs on this machine (secrets redacted)
 proveflow scan                              # static toxic-flow map, no LLM, SARIF output
 proveflow prove --model groq/<model-id>     # dynamic exploit confirmation in twin mode
-proveflow fix   --flow F3                   # write mitigation patch for review
-proveflow verify --flow F3                  # re-run attacks with fix applied in twin
+proveflow fix   --flow F-<8 hex>            # write mitigation patch for review (flow id from scan)
+proveflow verify --flow F-<8 hex>           # re-run attacks with fix applied in twin
 proveflow replay runs/<run-id>              # deterministic re-check from cassette, zero LLM cost
 ```
 
@@ -52,12 +52,12 @@ Install target (Phase 9): `uv tool install proveflow`, `uvx proveflow`, `pipx in
 | **ClientConfig** | One discovered MCP client config file (Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, or `--servers file`). |
 | **ServerSpec** | A configured server: name, transport, command/url, env **keys only** (values redacted), source file. |
 | **ToolSpec** | Name, description, input schema, server, **roles** ⊆ {`untrusted_source`, `private_data`, `sink`}, role provenance (heuristic / override / LLM-suggested-and-confirmed). |
-| **Flow** | Ordered path `source tool → (private tool) → sink tool`, possibly across servers. Severity class: `exfil` (source+private+sink), `action` (source+sink), `leak` (private+sink with no source = misuse, informational). |
+| **Flow** | Ordered path `source tool → (private tool) → sink tool` inside one agent profile; the tools may be on one server or on several (cross-server is ranked first, not required). Flow class: `exfil` (source+private+sink), `action` (source+sink), `leak` (private+sink with no source = misuse, informational). Severity is a separate field, `sink_severity` (network egress > remote write > local write). |
 | **Twin** | Mock MCP server generated from real `ToolSpec`s: same names/schemas/descriptions, deterministic synthetic responses, honey secrets, injection slots. |
 | **Payload / Carrier / Goal / Attack** | Attack text (with provenance + license) × embedding method × attacker objective, instantiated with per-trial canary. |
 | **Trial** | (flow, attack \| none, model, mitigation, seed) → trajectory → verdict. Every attacked trial has a clean twin (same seed). |
 | **Verdict** | `utility`, `compromised`, `rule_hit`, `blocked_by_mitigation`, tokens, latency. |
-| **FlowVerdict** | Per flow: `CONFIRMED` (≥1 compromise and ASR CI lower bound > 0), `NOT REPRODUCED` (0 compromises in N trials; report upper CI bound — absence ≠ safety), `THEORETICAL` (static only, not tested). |
+| **FlowVerdict** | Per flow: `CONFIRMED` (≥1 compromise and ASR CI lower bound > 0), `NOT_REPRODUCED` (0 compromises in N trials; report upper CI bound — absence ≠ safety), `THEORETICAL` (static only, not tested). |
 | **Mitigation** | Candidate fix from catalog, rendered as reviewable patch + twin-applicable policy. |
 
 ## 4. Architecture
@@ -68,7 +68,7 @@ flowchart LR
     DISC[discover<br/>client config readers<br/>+ secret redaction]
     INTRO[introspect<br/>tools/list only, no tool calls]
     ROLE[role classifier<br/>heuristics + overrides]
-    GRAPH[flow graph<br/>cross-server paths]
+    GRAPH[flow graph<br/>paths per agent profile]
   end
 
   subgraph PROVE["Prove"]
@@ -148,7 +148,7 @@ sequenceDiagram
 ### 5.3 Role classifier + flow graph `flows/`
 - Roles from deterministic heuristics: verbs/nouns in tool name + description + schema (e.g. `send|post|write|delete|create|upload|exec` → sink; `fetch|read_url|search_web|list_issues|read_email` → untrusted_source; `query|read_file|get_secret|list_customers` → private_data). Weights and reasons recorded per tool.
 - User overrides in `proveflow.toml` (highest priority). Optional LLM role suggestion: shown to user, counts only after confirmation, stored with provenance.
-- Graph: all ordered (source, private?, sink) combinations across servers. Ranking: cross-server first, then sink severity (external network > write > local), then classifier confidence. Output table + SARIF.
+- Graph: all ordered (source, private?, sink) combinations **within each agent profile**; flows never span profiles, and same-server paths are included. Ranking: cross-server first, then sink severity (network egress > remote write > local write), then flow class (exfil > action > leak), then −confidence, then the profile and tool labels as a tiebreak. Output table + SARIF.
 - Classifier quality is itself **measured** (Phase 1): hand-labeled set of tools from public MCP servers → precision/recall per role.
 - **Flow grouping** [impl][tested] (scan report schema 2, 2026-11-14): flows are grouped for review. **Grouping reduces table rows, not the number of tool paths**: every flow stays in the report (JSON `flows`, one SARIF result per flow), and per-path triage is Prove (Phase 7).
   - **Key:** (flow class, source server, private server, sink server). The profile is **not** part of the key, so the same server path in several clients is one group.
@@ -216,7 +216,9 @@ Wilson 95% CI; paired McNemar exact + Newcombe CI for mitigation effect; optiona
 
 ### 5.11 Store + reports `store/`, `report/`
 - SQLite single file + cassette dir. (ADR: no server needed for a CLI; Postgres depth already shown in other repos.)
-- Terminal report (Rich), HTML (self-contained), JSON, SARIF (scan findings), JUnit (CI).
+- Terminal report (Rich), HTML (self-contained), JSON, SARIF, JUnit (CI).
+- In SARIF, every flow is one result (rules PF-EXFIL, PF-ACTION, PF-LEAK). Non-flow scan results (PF-UNPINNED, PF-TOOLCHANGE) are further results.
+- In the report model, `Finding` means only a **non-flow** static finding about one server (e.g. PF-UNPINNED). Flows are not `Finding`s.
 - Rule: every number in README/site is regenerable by one command from a stored run.
 
 ### 5.12 CI `action/`
@@ -255,7 +257,7 @@ proveflow/
 │   ├── core/                   # pydantic domain models
 │   ├── discover/               # readers/, redact.py
 │   ├── introspect/             # launch.py, cache.py
-│   ├── flows/                  # roles.py, graph.py
+│   ├── flows/                  # roles.py, graph.py, server_roles.py, pinning.py
 │   ├── twin/                   # generator.py, archetypes/, synth.py
 │   ├── proxy/                  # server.py, upstream.py, sandbox.py, carriers.py, cassette.py
 │   ├── agents/                 # builtin.py, command.py, fake.py
@@ -327,6 +329,6 @@ Realistic MVP (0–9): **~8–9 weeks part-time.** v0.1 (Phase 1) is releasable 
 | Launching malicious servers during introspection | Per-server consent, timeout/kill, `--no-launch`; documented in THREAT_MODEL |
 | Free-tier limits / nondeterminism | Paired trials, CIs, replay, SPRT, record everything |
 | Commoditization (Snyk/Anthropic ship similar) | Portfolio value stays; position on measured proof + fix verification |
-| Over-claiming | "NOT REPRODUCED ≠ safe"; tags; no enterprise claims |
+| Over-claiming | "NOT_REPRODUCED ≠ safe"; tags; no enterprise claims |
 | Dataset licenses | Phase 0 audit; fetch at runtime; never redistribute raw data |
 | Responsible disclosure | Real flaws in third-party servers reported privately first; no exploit publication before fix window |
