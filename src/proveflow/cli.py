@@ -105,6 +105,22 @@ def _project(project: Path | None) -> Path:
     return (project or Path.cwd()).resolve()
 
 
+def _emit_machine_output(text: str) -> None:
+    """Machine-readable stdout (``--json``) is always UTF-8 with LF line endings, whatever
+    the locale or console code page. A redirected stdout on Windows otherwise encodes with
+    the ANSI code page (e.g. cp1252: an em dash becomes byte 0x97, non-BMP text raises).
+    The human-readable Rich output keeps the stream's own encoding."""
+    stream = sys.stdout
+    buffer = getattr(stream, "buffer", None)
+    if buffer is None:  # text-only stream without a byte layer (nothing to encode)
+        stream.write(text)
+        stream.flush()
+        return
+    stream.flush()
+    buffer.write(text.encode("utf-8"))
+    buffer.flush()
+
+
 @app.command()
 def discover(
     project: ProjectOpt = None, servers: ServersOpt = None, json_output: JsonOpt = False
@@ -115,11 +131,10 @@ def discover(
     report = DiscoverReport(
         proveflow_version=__version__, project=str(proj), configs=tuple(configs)
     )
-    console = _console()
     if json_output:
-        console.out(to_json(report), highlight=False, end="")
+        _emit_machine_output(to_json(report))
     else:
-        render_discover(report, console)
+        render_discover(report, _console())
 
 
 def _interactive() -> bool:
@@ -305,7 +320,7 @@ def scan(
     if sarif is not None:
         write_sarif(report, sarif)
     if json_output:
-        console.out(to_json(report), highlight=False, end="")
+        _emit_machine_output(to_json(report))
     else:
         render_scan(report, console, limit)
         if sarif is not None:
