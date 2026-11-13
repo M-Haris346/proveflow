@@ -13,8 +13,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 ## Status
 
-> **Phase 1 (Find): checkpoint 1a done; checkpoint 1b introspection built, classifier eval run
-> once (LLM-labeled, see below). Not released.**
+> **Phase 1 (Find): checkpoints 1a and 1b done; 1c (classifier v2) next. Not released.**
 >
 > - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
 >   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
@@ -23,23 +22,32 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 > - `proveflow scan --no-launch` [impl][tested]: static flow map from server names/commands only
 >   (low confidence; nothing is started). `--json`, and `--sarif` (SARIF 2.1.0, validated
 >   against the official OASIS schemas in tests). Every flow is THEORETICAL.
-> - `proveflow scan` (introspection) [impl][tested on Windows with a fake MCP server; POSIX
->   path tested in CI only]:
+> - `proveflow scan` (introspection) [impl][tested with a fake MCP server on Windows and in CI;
+>   verified once on the author's real Windows machine]:
 >   - per-server consent; `--yes` does not cover project-scoped servers (`--yes-project`)
 >   - `tools/list` only, with a method allowlist that blocks `tools/call`
 >   - the process tree is killed (Windows Job Object; POSIX process group)
 >   - minimal env and an empty temp cwd; no executables from the cwd or project
 >   - servers with unresolved variables are not launched
 >   - tool-change detection against a per-user cache; PF-UNPINNED notes
->   - **It has not yet been run against your own real servers (step 1b exit).**
-> - Role-classifier precision/recall [measured, once]: results are in
+>   - **Real-machine check (1b exit):** run by the author with 1 real stdio server.
+>     Consent yes gave `ok`; consent no gave `declined`. `scripts/leak_check.py` was clean
+>     both times. Output is not committed.
+> - Role-classifier baseline [measured, once]: results are in
 >   [docs/eval/RESULTS.md](docs/eval/RESULTS.md). Test N = 40, dev N = 60 tools, from 13
 >   servers (12 of 14 planned collected).
->   - The labels are LLM labels reviewed by the author. There is no independent human second
->     labeler, so no kappa.
+>   - **Caveat:** the test split is mostly reference servers, dev recall is about 0.2-0.3, and
+>     the labels are LLM pre-labels reviewed by the author. There is no independent human
+>     second labeler, so no kappa.
 >   - Test has only 1 `untrusted_source` positive.
->   - Test and dev differ sharply. For example, sink recall is 10/11 on test and 8/27 on dev.
 >   - Read the caveats in RESULTS.md before quoting any number.
+> - Fixed after the real-machine run:
+>   - servers discovered but in no profile (e.g. another project's Claude Code local entry)
+>     are now listed as `skipped` with a reason, no longer dropped silently (THREAT_MODEL T16)
+>   - `--json` is written as UTF-8 on Windows whatever the console code page
+> - **Next:** 1c classifier v2 (tuning on dev only, then a fresh held-out set), then Phase 2.
+> - **Known backlog:** flow grouping. One real server produced several hundred theoretical
+>   flows, too many to review one by one.
 > - Everything from Phase 2 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
