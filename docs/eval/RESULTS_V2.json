@@ -1,0 +1,1057 @@
+{
+  "metadata": {
+    "eval_module_sha256": "a797c21a2ecc82851bdd39db742a9390ae5e807f579d1020f88786643b889697",
+    "generated_at": "2026-11-13T15:40:19+00:00",
+    "git_head": "a74bc9df89a22b5a3a31ae1865b46d369e1f1dcf",
+    "heldout_evaluations": 1,
+    "labels_sha256": "55981d7385f530bbd6d9809818dab8a347cb4cd30a8cfed91640432a8f8963bb",
+    "plan_sha256": "38e6c70adeaac7fda80b2dfea368c6a79b9d74603f0315ece113d6d814a61e0b",
+    "proveflow_version": "0.0.1.dev0",
+    "python": "3.12.10",
+    "v1_classifier_sha256": "08deee09cb4feb3cf388b93c263dbcdc6f95165cba1678a6305680b5b60f4a16",
+    "v1_source": "git 86157de",
+    "v2_classifier_sha256": "db4100d59c74668c594947fd0bf7d52869bfc831778ff24ac2de352f91a78a50",
+    "v2_source": "working tree src/proveflow/flows/"
+  },
+  "results": {
+    "errors": {
+      "v1": [
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "container_inspect",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "container_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "container_logs",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "discover_related_conversations",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "image_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "image_pull",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "network_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "pdf_compare",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "pdf_form_read",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "pdf_search",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "read",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "recall",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "recall_memories",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "search",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "volume_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "memory_feedback",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_attach",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_compress",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_draw",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_flatten",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_set_metadata",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_split",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "read_docs",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "save_conversation",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "container_run",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "container_stop",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "image_build",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "image_pull",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "memory_feedback",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "memory_link",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_attach",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_compress",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_crop",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_draw",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_flatten",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_header_footer",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_reverse",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_split",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_watermark",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "render",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "subscribe_to_daily_brief",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "sink",
+          "tool_name": "get_blog_post",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "sink",
+          "tool_name": "get_blog_posts",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "sink",
+          "tool_name": "get_linkedin_post",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "untrusted_source",
+          "tool_name": "container_logs",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "untrusted_source",
+          "tool_name": "recall",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "untrusted_source",
+          "tool_name": "search",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_blog_post",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_blog_posts",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_daily_briefing",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_linkedin_post",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "render",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "save_conversation",
+          "uncertain": false
+        }
+      ],
+      "v2": [
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "container_inspect",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "container_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "container_logs",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "discover_related_conversations",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "image_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "image_pull",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "network_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "pdf_compare",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "pdf_form_read",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "pdf_search",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "read",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "recall",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "recall_memories",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "search",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "private_data",
+          "tool_name": "volume_list",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "memory_feedback",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_attach",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_compress",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_draw",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_flatten",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "pdf_split",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "private_data",
+          "tool_name": "read_docs",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "container_run",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "container_stop",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "image_build",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "image_pull",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "memory_feedback",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "memory_link",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "pdf_split",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "render",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "sink",
+          "tool_name": "subscribe_to_daily_brief",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "sink",
+          "tool_name": "get_blog_post",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "sink",
+          "tool_name": "get_blog_posts",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "sink",
+          "tool_name": "get_linkedin_post",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "untrusted_source",
+          "tool_name": "container_logs",
+          "uncertain": true
+        },
+        {
+          "kind": "FN",
+          "role": "untrusted_source",
+          "tool_name": "recall",
+          "uncertain": false
+        },
+        {
+          "kind": "FN",
+          "role": "untrusted_source",
+          "tool_name": "search",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_blog_post",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_blog_posts",
+          "uncertain": false
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_daily_briefing",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "get_linkedin_post",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "render",
+          "uncertain": true
+        },
+        {
+          "kind": "FP",
+          "role": "untrusted_source",
+          "tool_name": "save_conversation",
+          "uncertain": false
+        }
+      ]
+    },
+    "exposure": {
+      "C1": {
+        "status": "exposed",
+        "tool_names": [
+          "pdf_add_text",
+          "pdf_attach",
+          "pdf_compress",
+          "pdf_crop",
+          "pdf_delete_pages",
+          "pdf_draw",
+          "pdf_flatten",
+          "pdf_header_footer",
+          "pdf_reverse",
+          "pdf_set_metadata",
+          "pdf_watermark"
+        ],
+        "tools": 11
+      },
+      "C11a": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C11c": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C11d": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C12": {
+        "status": "exposed",
+        "tool_names": [
+          "pdf_header_footer"
+        ],
+        "tools": 1
+      },
+      "C2": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C3": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C4": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C5": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C6": {
+        "status": "exposed",
+        "tool_names": [
+          "pdf_set_metadata",
+          "save_conversation"
+        ],
+        "tools": 2
+      },
+      "C7": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C8": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      },
+      "C9": {
+        "status": "untested",
+        "tool_names": [],
+        "tools": 0
+      }
+    },
+    "not_in_v2": {
+      "C10": "reverted (no dev effect)",
+      "C11b": "skipped (single-server convention)"
+    },
+    "positives": {
+      "private_data": 20,
+      "sink": 25,
+      "untrusted_source": 4
+    },
+    "primary": {
+      "n": 55,
+      "v1": {
+        "private_data": {
+          "f1": 0.24242424242424246,
+          "fn": 16,
+          "fp": 9,
+          "n": 55,
+          "precision": {
+            "ci": [
+              0.12680703655710515,
+              0.5763065681945096
+            ],
+            "k": 4,
+            "n": 13,
+            "note": null,
+            "value": 0.3076923076923077
+          },
+          "recall": {
+            "ci": [
+              0.08065766257979806,
+              0.41601743225189364
+            ],
+            "k": 4,
+            "n": 20,
+            "note": null,
+            "value": 0.2
+          },
+          "tn": 26,
+          "tp": 4
+        },
+        "sink": {
+          "f1": 0.4444444444444444,
+          "fn": 17,
+          "fp": 3,
+          "n": 55,
+          "precision": {
+            "ci": [
+              0.43435469882387084,
+              0.902539407099751
+            ],
+            "k": 8,
+            "n": 11,
+            "note": null,
+            "value": 0.7272727272727273
+          },
+          "recall": {
+            "ci": [
+              0.17205190306907978,
+              0.5158973072689775
+            ],
+            "k": 8,
+            "n": 25,
+            "note": null,
+            "value": 0.32
+          },
+          "tn": 27,
+          "tp": 8
+        },
+        "untrusted_source": {
+          "f1": 0.18181818181818182,
+          "fn": 3,
+          "fp": 6,
+          "n": 55,
+          "precision": {
+            "ci": [
+              0.02567962434474355,
+              0.5131278292743189
+            ],
+            "k": 1,
+            "n": 7,
+            "note": "n < 10: very wide",
+            "value": 0.14285714285714285
+          },
+          "recall": {
+            "ci": [
+              0.04558726080970055,
+              0.6993581574175981
+            ],
+            "k": 1,
+            "n": 4,
+            "note": "n < 10: very wide",
+            "value": 0.25
+          },
+          "tn": 45,
+          "tp": 1
+        }
+      },
+      "v2": {
+        "private_data": {
+          "f1": 0.25806451612903225,
+          "fn": 16,
+          "fp": 7,
+          "n": 55,
+          "precision": {
+            "ci": [
+              0.15166471095367573,
+              0.6461988254921511
+            ],
+            "k": 4,
+            "n": 11,
+            "note": null,
+            "value": 0.36363636363636365
+          },
+          "recall": {
+            "ci": [
+              0.08065766257979806,
+              0.41601743225189364
+            ],
+            "k": 4,
+            "n": 20,
+            "note": null,
+            "value": 0.2
+          },
+          "tn": 28,
+          "tp": 4
+        },
+        "sink": {
+          "f1": 0.7272727272727272,
+          "fn": 9,
+          "fp": 3,
+          "n": 55,
+          "precision": {
+            "ci": [
+              0.6243452472967093,
+              0.9447952836146585
+            ],
+            "k": 16,
+            "n": 19,
+            "note": null,
+            "value": 0.8421052631578947
+          },
+          "recall": {
+            "ci": [
+              0.44518497748164865,
+              0.7975211922554178
+            ],
+            "k": 16,
+            "n": 25,
+            "note": null,
+            "value": 0.64
+          },
+          "tn": 27,
+          "tp": 16
+        },
+        "untrusted_source": {
+          "f1": 0.18181818181818182,
+          "fn": 3,
+          "fp": 6,
+          "n": 55,
+          "precision": {
+            "ci": [
+              0.02567962434474355,
+              0.5131278292743189
+            ],
+            "k": 1,
+            "n": 7,
+            "note": "n < 10: very wide",
+            "value": 0.14285714285714285
+          },
+          "recall": {
+            "ci": [
+              0.04558726080970055,
+              0.6993581574175981
+            ],
+            "k": 1,
+            "n": 4,
+            "note": "n < 10: very wide",
+            "value": 0.25
+          },
+          "tn": 45,
+          "tp": 1
+        }
+      }
+    },
+    "secondary": {
+      "n": 36,
+      "v1": {
+        "private_data": {
+          "f1": 0.125,
+          "fn": 5,
+          "fp": 9,
+          "n": 36,
+          "precision": {
+            "ci": [
+              0.017876213095072896,
+              0.4041500267952385
+            ],
+            "k": 1,
+            "n": 10,
+            "note": null,
+            "value": 0.1
+          },
+          "recall": {
+            "ci": [
+              0.030053369748306635,
+              0.5635028221864702
+            ],
+            "k": 1,
+            "n": 6,
+            "note": "n < 10: very wide",
+            "value": 0.16666666666666666
+          },
+          "tn": 21,
+          "tp": 1
+        },
+        "sink": {
+          "f1": 0.48484848484848486,
+          "fn": 15,
+          "fp": 2,
+          "n": 36,
+          "precision": {
+            "ci": [
+              0.49016247153664183,
+              0.9433178485456247
+            ],
+            "k": 8,
+            "n": 10,
+            "note": null,
+            "value": 0.8
+          },
+          "recall": {
+            "ci": [
+              0.1881127593879773,
+              0.55109664622737
+            ],
+            "k": 8,
+            "n": 23,
+            "note": null,
+            "value": 0.34782608695652173
+          },
+          "tn": 11,
+          "tp": 8
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 1,
+          "fp": 3,
+          "n": 36,
+          "precision": {
+            "ci": [
+              5.551115123125783e-17,
+              0.5614970317550454
+            ],
+            "k": 0,
+            "n": 3,
+            "note": "n < 10: very wide",
+            "value": 0.0
+          },
+          "recall": {
+            "ci": [
+              0.0,
+              0.7934506856227626
+            ],
+            "k": 0,
+            "n": 1,
+            "note": "n < 10: very wide",
+            "value": 0.0
+          },
+          "tn": 32,
+          "tp": 0
+        }
+      },
+      "v2": {
+        "private_data": {
+          "f1": 0.14285714285714288,
+          "fn": 5,
+          "fp": 7,
+          "n": 36,
+          "precision": {
+            "ci": [
+              0.02241749145005667,
+              0.4708881822128535
+            ],
+            "k": 1,
+            "n": 8,
+            "note": "n < 10: very wide",
+            "value": 0.125
+          },
+          "recall": {
+            "ci": [
+              0.030053369748306635,
+              0.5635028221864702
+            ],
+            "k": 1,
+            "n": 6,
+            "note": "n < 10: very wide",
+            "value": 0.16666666666666666
+          },
+          "tn": 23,
+          "tp": 1
+        },
+        "sink": {
+          "f1": 0.7804878048780488,
+          "fn": 7,
+          "fp": 2,
+          "n": 36,
+          "precision": {
+            "ci": [
+              0.672002348698212,
+              0.9689804773543876
+            ],
+            "k": 16,
+            "n": 18,
+            "note": null,
+            "value": 0.8888888888888888
+          },
+          "recall": {
+            "ci": [
+              0.49134243731240795,
+              0.8439597554678597
+            ],
+            "k": 16,
+            "n": 23,
+            "note": null,
+            "value": 0.6956521739130435
+          },
+          "tn": 11,
+          "tp": 16
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 1,
+          "fp": 3,
+          "n": 36,
+          "precision": {
+            "ci": [
+              5.551115123125783e-17,
+              0.5614970317550454
+            ],
+            "k": 0,
+            "n": 3,
+            "note": "n < 10: very wide",
+            "value": 0.0
+          },
+          "recall": {
+            "ci": [
+              0.0,
+              0.7934506856227626
+            ],
+            "k": 0,
+            "n": 1,
+            "note": "n < 10: very wide",
+            "value": 0.0
+          },
+          "tn": 32,
+          "tp": 0
+        }
+      }
+    },
+    "uncertain_rows": 19
+  },
+  "schema_version": 1
+}
