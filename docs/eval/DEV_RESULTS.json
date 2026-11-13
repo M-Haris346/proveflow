@@ -1,0 +1,766 @@
+{
+  "dev": {
+    "by_source": {
+      "own": {
+        "n": 3,
+        "private_data": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "tn": 0,
+          "tp": 3
+        },
+        "sink": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 3,
+          "tp": 0
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 1,
+          "fp": 0,
+          "n": 3,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "tn": 2,
+          "tp": 0
+        }
+      },
+      "popular": {
+        "n": 30,
+        "private_data": {
+          "f1": null,
+          "fn": 3,
+          "fp": 0,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 3,
+            "value": 0.0
+          },
+          "tn": 27,
+          "tp": 0
+        },
+        "sink": {
+          "f1": 0.4444444444444444,
+          "fn": 12,
+          "fp": 3,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 6,
+            "n": 9,
+            "value": 0.6666666666666666
+          },
+          "recall": {
+            "ci": [
+              0.1627877475083369,
+              0.5625053270405489
+            ],
+            "ci_note": null,
+            "k": 6,
+            "n": 18,
+            "value": 0.3333333333333333
+          },
+          "tn": 9,
+          "tp": 6
+        },
+        "untrusted_source": {
+          "f1": 0.23529411764705882,
+          "fn": 11,
+          "fp": 2,
+          "n": 30,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 2,
+            "n": 4,
+            "value": 0.5
+          },
+          "recall": {
+            "ci": [
+              0.043258178358081184,
+              0.4223463101948254
+            ],
+            "ci_note": null,
+            "k": 2,
+            "n": 13,
+            "value": 0.15384615384615385
+          },
+          "tn": 15,
+          "tp": 2
+        }
+      },
+      "reference": {
+        "n": 14,
+        "private_data": {
+          "f1": null,
+          "fn": 7,
+          "fp": 1,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 7,
+            "value": 0.0
+          },
+          "tn": 6,
+          "tp": 0
+        },
+        "sink": {
+          "f1": 0.5714285714285715,
+          "fn": 3,
+          "fp": 0,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 2,
+            "n": 2,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 2,
+            "n": 5,
+            "value": 0.4
+          },
+          "tn": 9,
+          "tp": 2
+        },
+        "untrusted_source": {
+          "f1": null,
+          "fn": 0,
+          "fp": 0,
+          "n": 14,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "tn": 14,
+          "tp": 0
+        }
+      },
+      "registry": {
+        "n": 13,
+        "private_data": {
+          "f1": null,
+          "fn": 1,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 1,
+            "value": 0.0
+          },
+          "tn": 12,
+          "tp": 0
+        },
+        "sink": {
+          "f1": null,
+          "fn": 4,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "undefined (n = 0)",
+            "k": 0,
+            "n": 0,
+            "value": null
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 0,
+            "n": 4,
+            "value": 0.0
+          },
+          "tn": 9,
+          "tp": 0
+        },
+        "untrusted_source": {
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "n": 13,
+          "precision": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "recall": {
+            "ci": null,
+            "ci_note": "N < 10, not reported",
+            "k": 3,
+            "n": 3,
+            "value": 1.0
+          },
+          "tn": 10,
+          "tp": 3
+        }
+      }
+    },
+    "n": 60,
+    "pooled": {
+      "private_data": {
+        "f1": 0.3333333333333333,
+        "fn": 11,
+        "fp": 1,
+        "n": 60,
+        "precision": {
+          "ci": null,
+          "ci_note": "N < 10, not reported",
+          "k": 3,
+          "n": 4,
+          "value": 0.75
+        },
+        "recall": {
+          "ci": [
+            0.07571386712693184,
+            0.47589230586600295
+          ],
+          "ci_note": null,
+          "k": 3,
+          "n": 14,
+          "value": 0.21428571428571427
+        },
+        "tn": 45,
+        "tp": 3
+      },
+      "sink": {
+        "f1": 0.42105263157894735,
+        "fn": 19,
+        "fp": 3,
+        "n": 60,
+        "precision": {
+          "ci": [
+            0.43435469882387084,
+            0.902539407099751
+          ],
+          "ci_note": null,
+          "k": 8,
+          "n": 11,
+          "value": 0.7272727272727273
+        },
+        "recall": {
+          "ci": [
+            0.1585304046977976,
+            0.4848068296414814
+          ],
+          "ci_note": null,
+          "k": 8,
+          "n": 27,
+          "value": 0.2962962962962963
+        },
+        "tn": 30,
+        "tp": 8
+      },
+      "untrusted_source": {
+        "f1": 0.4166666666666667,
+        "fn": 12,
+        "fp": 2,
+        "n": 60,
+        "precision": {
+          "ci": null,
+          "ci_note": "N < 10, not reported",
+          "k": 5,
+          "n": 7,
+          "value": 0.7142857142857143
+        },
+        "recall": {
+          "ci": [
+            0.1327998961029523,
+            0.5313311006653985
+          ],
+          "ci_note": null,
+          "k": 5,
+          "n": 17,
+          "value": 0.29411764705882354
+        },
+        "tn": 41,
+        "tp": 5
+      }
+    },
+    "uncertain_rows": 24
+  },
+  "errors": [
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-f8fb99947248",
+      "tool_name": "git_branch",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-3596491e6b00",
+      "tool_name": "git_diff",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-75abd0223445",
+      "tool_name": "git_diff_staged",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-421bd99ecf8a",
+      "tool_name": "git_diff_unstaged",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-6e9690020e69",
+      "tool_name": "git_log",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-281a0c10a5bd",
+      "tool_name": "git_show",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-11e7243917a4",
+      "tool_name": "git_status",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "grok-mcp",
+      "tool_id": "t-b39ba8e9ee53",
+      "tool_name": "grok_review",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "playwright",
+      "tool_id": "t-c954970edfdd",
+      "tool_name": "browser_drop",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "playwright",
+      "tool_id": "t-49a703a7cc9a",
+      "tool_name": "browser_file_upload",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "private_data",
+      "server_id": "playwright",
+      "tool_id": "t-d5a7920a0fc6",
+      "tool_name": "browser_run_code_unsafe",
+      "uncertain": true
+    },
+    {
+      "kind": "FP",
+      "role": "private_data",
+      "server_id": "git",
+      "tool_id": "t-cd998b093379",
+      "tool_name": "git_commit",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-376bf2c1c804",
+      "tool_name": "emulate",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-1c62323edda0",
+      "tool_name": "fill",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-cf5f5972051b",
+      "tool_name": "handle_dialog",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-eb91d802efc2",
+      "tool_name": "performance_stop_trace",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-4243b74ad9b5",
+      "tool_name": "screencast_start",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-ab10946f36eb",
+      "tool_name": "take_screenshot",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-7cbd5ef2ce79",
+      "tool_name": "take_snapshot",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "git",
+      "tool_id": "t-2a709e1a53ed",
+      "tool_name": "git_checkout",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "git",
+      "tool_id": "t-cd998b093379",
+      "tool_name": "git_commit",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "git",
+      "tool_id": "t-4cae8bf1c6de",
+      "tool_name": "git_reset",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "grok-mcp",
+      "tool_id": "t-51fef0754aa2",
+      "tool_name": "grok_challenge",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "grok-mcp",
+      "tool_id": "t-7e0c5f36ec6e",
+      "tool_name": "grok_chat",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "grok-mcp",
+      "tool_id": "t-7e455d08c0a5",
+      "tool_name": "grok_consult",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "grok-mcp",
+      "tool_id": "t-b39ba8e9ee53",
+      "tool_name": "grok_review",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "playwright",
+      "tool_id": "t-0f0160552d0a",
+      "tool_name": "browser_console_messages",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "playwright",
+      "tool_id": "t-e2455763a84c",
+      "tool_name": "browser_handle_dialog",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "playwright",
+      "tool_id": "t-5693473cd1eb",
+      "tool_name": "browser_network_requests",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "playwright",
+      "tool_id": "t-e2190a296f9b",
+      "tool_name": "browser_snapshot",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "sink",
+      "server_id": "playwright",
+      "tool_id": "t-803df9daf428",
+      "tool_name": "browser_tabs",
+      "uncertain": true
+    },
+    {
+      "kind": "FP",
+      "role": "sink",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-e6046dae99f1",
+      "tool_name": "close_page",
+      "uncertain": false
+    },
+    {
+      "kind": "FP",
+      "role": "sink",
+      "server_id": "playwright",
+      "tool_id": "t-04a0a4315287",
+      "tool_name": "browser_drag",
+      "uncertain": false
+    },
+    {
+      "kind": "FP",
+      "role": "sink",
+      "server_id": "playwright",
+      "tool_id": "t-9a2a5f96944a",
+      "tool_name": "browser_hover",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-e31c80e49496",
+      "tool_name": "drag",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-1c62323edda0",
+      "tool_name": "fill",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-d804cb76b529",
+      "tool_name": "get_css_styles",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-d47bdc728797",
+      "tool_name": "hover",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-9c17d8a6b637",
+      "tool_name": "list_network_requests",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-ab10946f36eb",
+      "tool_name": "take_screenshot",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "chrome-devtools",
+      "tool_id": "t-7cbd5ef2ce79",
+      "tool_name": "take_snapshot",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "pg-mcp-guard",
+      "tool_id": "t-703dca827d7a",
+      "tool_name": "run_query",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-0f0160552d0a",
+      "tool_name": "browser_console_messages",
+      "uncertain": false
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-5693473cd1eb",
+      "tool_name": "browser_network_requests",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-d5a7920a0fc6",
+      "tool_name": "browser_run_code_unsafe",
+      "uncertain": true
+    },
+    {
+      "kind": "FN",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-e2190a296f9b",
+      "tool_name": "browser_snapshot",
+      "uncertain": false
+    },
+    {
+      "kind": "FP",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-3b99e774d261",
+      "tool_name": "browser_navigate",
+      "uncertain": true
+    },
+    {
+      "kind": "FP",
+      "role": "untrusted_source",
+      "server_id": "playwright",
+      "tool_id": "t-11e15ce16a49",
+      "tool_name": "browser_navigate_back",
+      "uncertain": false
+    }
+  ],
+  "metadata": {
+    "classifier_sha256": "08deee09cb4feb3cf388b93c263dbcdc6f95165cba1678a6305680b5b60f4a16",
+    "generated_at": "2026-11-13T09:37:09+00:00",
+    "git_commit": "76610d4077e307aff63cddd383a9f321fe8af382",
+    "labels_sha256": "b9d0e3f2b9a0d8ce7395be0c46ffa5b4763d0efc03a48d28ced9c687a6027711",
+    "mode": "dev_only",
+    "proveflow_version": "0.0.1.dev0",
+    "python": "3.12.10"
+  },
+  "schema_version": 1
+}

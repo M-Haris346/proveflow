@@ -194,6 +194,71 @@ def test_bad_label_value_is_an_error(labeled: Path) -> None:
         met.compute(labeled)
 
 
+FORBIDDEN_IN_DEV_ONLY = ("labels_test.csv", "test_tools.jsonl", "metrics_runs.json", "split.json")
+
+
+def test_dev_only_never_opens_test_files_or_counter(
+    labeled: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import builtins
+    import io
+
+    (labeled / "metrics_runs.json").write_text('{"test_evaluations": 1}\n', encoding="utf-8")
+    counter_before = (labeled / "metrics_runs.json").read_bytes()
+
+    def guard(path: object) -> None:
+        if Path(str(path)).name in FORBIDDEN_IN_DEV_ONLY:
+            raise AssertionError(f"--dev-only opened {Path(str(path)).name}")
+
+    real_open, real_path_open = builtins.open, Path.open
+    real_read_text, real_read_bytes = Path.read_text, Path.read_bytes
+    monkeypatch.setattr(builtins, "open", lambda f, *a, **k: (guard(f), real_open(f, *a, **k))[1])
+    monkeypatch.setattr(io, "open", builtins.open)
+    monkeypatch.setattr(Path, "open", lambda s, *a, **k: (guard(s), real_path_open(s, *a, **k))[1])
+    monkeypatch.setattr(
+        Path, "read_text", lambda s, *a, **k: (guard(s), real_read_text(s, *a, **k))[1]
+    )
+    monkeypatch.setattr(
+        Path, "read_bytes", lambda s, *a, **k: (guard(s), real_read_bytes(s, *a, **k))[1]
+    )
+
+    out = tmp_path / "DEV_RESULTS.md"
+    assert met.main(["--split-dir", str(labeled), "--dev-only", "--out", str(out)]) == 0
+    monkeypatch.undo()
+
+    assert (labeled / "metrics_runs.json").read_bytes() == counter_before
+    text = out.read_text(encoding="utf-8")
+    assert "DEV split only" in text and "NOT a claim" in text and "classifier_sha256" in text
+    data = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
+    assert data["metadata"]["mode"] == "dev_only" and "test" not in data
+    # dev numbers equal the full run's dev block (same rows, same classifier)
+    full = met.compute(labeled)
+    assert data["dev"]["pooled"] == full["dev"]["pooled"]
+    # every error row is a real FN/FP of the dev block
+    for role in sp.ROLES:
+        m = data["dev"]["pooled"][role]
+        kinds = [e["kind"] for e in data["errors"] if e["role"] == role]
+        assert (kinds.count("FN"), kinds.count("FP")) == (m["fn"], m["fp"])
+
+
+def test_dev_only_guard_would_catch_a_test_read(
+    labeled: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mutation: if the dev path read the test split, the guard above must fire."""
+    real_load = met.load_rows
+    monkeypatch.setattr(met, "load_rows", lambda d, s: real_load(d, "test" if s == "dev" else s))
+    real_read_text = Path.read_text
+
+    def guarded(self: Path, *a: object, **k: object) -> str:
+        if self.name in FORBIDDEN_IN_DEV_ONLY:
+            raise AssertionError(f"opened {self.name}")
+        return real_read_text(self, *a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", guarded)
+    with pytest.raises(AssertionError, match=r"test_tools\.jsonl"):
+        met.compute_dev(labeled)
+
+
 def test_results_md_written_with_metadata_and_run_counter(labeled: Path, tmp_path: Path) -> None:
     out = tmp_path / "RESULTS.md"
     assert met.main(["--split-dir", str(labeled), "--out", str(out)]) == 0
