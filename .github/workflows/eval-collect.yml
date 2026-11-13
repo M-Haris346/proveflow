@@ -23,22 +23,29 @@
 #   downloads it automatically.
 # - proveflow's own guards still apply: tools/list only, method allowlist, job/process-group
 #   kill, empty temp cwd, minimal env
-# - inputs (checkpoint 1c): `servers` picks the server file (default: the v1 set), `out_dir`
-#   the output folder (v2: out/v2). They reach the shell ONLY as env vars (never `${{ }}`
-#   inside a run script) and are checked against fixed patterns before use.
+# - inputs (checkpoint 1c): `servers` picks the server file, `out_dir` the output folder
+#   (v1: data/eval/roles/servers.json + out; v2: data/eval/roles/servers_v2.json + out/v2).
+#   Both are REQUIRED with NO default, so a dispatch must name the set explicitly. They
+#   reach the shell ONLY as env vars (never `${{ }}` inside a run script) and are checked
+#   against fixed patterns before use.
+# - Run #2 (2026-11-13, 016e39d) was dispatched with the then-DEFAULT inputs and silently
+#   collected the v1 set. Now: no defaults (above); the first step validates, prints and
+#   step-summarizes the resolved inputs; the artifact name is derived from out_dir
+#   (out -> eval-tools,
+#   out/v2 -> eval-tools-v2); and a step after collection fails the job unless the
+#   summary's server ids equal the ids in the chosen server file
+#   (python -m proveflow.eval.verify_collection).
 name: eval-collect
 
 on:
   workflow_dispatch:
     inputs:
       servers:
-        description: "Eval server file (data/eval/roles/<name>.json)"
-        required: false
-        default: "data/eval/roles/servers.json"
+        description: "Eval server file, e.g. data/eval/roles/servers_v2.json (no default)"
+        required: true
       out_dir:
-        description: "Output folder: out or out/<name>"
-        required: false
-        default: "out"
+        description: "Output folder, e.g. out/v2 (no default)"
+        required: true
 
 permissions:
   contents: read
@@ -50,6 +57,32 @@ jobs:
     env:
       CI: "true"
     steps:
+      - name: Resolve and print inputs
+        id: resolve
+        env:
+          SERVERS: ${{ inputs.servers }}
+          OUT_DIR: ${{ inputs.out_dir }}
+        # Validate BEFORE printing: an unvalidated value echoed to the log could inject
+        # workflow commands. After validation both values are [A-Za-z0-9_/.-] only.
+        run: |
+          [[ "$SERVERS" =~ ^data/eval/roles/[A-Za-z0-9_-]+\.json$ ]] || { echo "bad servers input"; exit 1; }
+          [[ "$OUT_DIR" =~ ^out(/[A-Za-z0-9_-]+)?$ ]] || { echo "bad out_dir input"; exit 1; }
+          if [[ "$OUT_DIR" == "out" ]]; then ARTIFACT="eval-tools"; else ARTIFACT="eval-tools-${OUT_DIR#out/}"; fi
+          echo "servers file : $SERVERS"
+          echo "out_dir      : $OUT_DIR"
+          echo "artifact     : $ARTIFACT"
+          {
+            echo "### eval-collect inputs"
+            echo "- servers file: \`$SERVERS\`"
+            echo "- out_dir: \`$OUT_DIR\`"
+            echo "- artifact: \`$ARTIFACT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "servers=$SERVERS"
+            echo "out_dir=$OUT_DIR"
+            echo "artifact=$ARTIFACT"
+          } >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -71,35 +104,40 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
-      - name: Validate inputs
+      - name: Check the server file exists
         env:
-          SERVERS: ${{ inputs.servers }}
-          OUT_DIR: ${{ inputs.out_dir }}
-        run: |
-          [[ "$SERVERS" =~ ^data/eval/roles/[A-Za-z0-9_-]+\.json$ ]] || { echo "bad servers input"; exit 1; }
-          [[ "$OUT_DIR" =~ ^out(/[A-Za-z0-9_-]+)?$ ]] || { echo "bad out_dir input"; exit 1; }
-          test -f "$SERVERS" || { echo "servers file not found"; exit 1; }
+          SERVERS: ${{ steps.resolve.outputs.servers }}
+        run: test -f "$SERVERS" || { echo "servers file not found"; exit 1; }
 
       - name: Collect tools/list (all eval servers in the chosen server file)
         # Node.js comes preinstalled on the ubuntu-24.04 image (actions/runner-images).
         # Whether Chrome DevTools MCP needs a browser just to answer tools/list is not
         # documented; a failure is reported in the summary, not hidden.
         env:
-          SERVERS: ${{ inputs.servers }}
-          OUT_DIR: ${{ inputs.out_dir }}
+          SERVERS: ${{ steps.resolve.outputs.servers }}
+          OUT_DIR: ${{ steps.resolve.outputs.out_dir }}
         run: >
           uv run python -m proveflow.eval.collect
           --servers "$SERVERS"
           --yes --timeout 180 --ignore-scripts --no-build
           --out "$OUT_DIR/tools.jsonl"
 
+      - name: Verify the summary covers exactly the chosen server file
+        env:
+          SERVERS: ${{ steps.resolve.outputs.servers }}
+          OUT_DIR: ${{ steps.resolve.outputs.out_dir }}
+        run: >
+          uv run python -m proveflow.eval.verify_collection
+          --servers "$SERVERS"
+          --summary "$OUT_DIR/tools.jsonl.summary.json"
+
       - name: Upload collected tool metadata
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          # inputs were validated above; `with:` values are not run by a shell
-          name: eval-tools${{ inputs.out_dir != 'out' && '-v2' || '' }}
+          # resolved + validated in the first step; `with:` values are not run by a shell
+          name: ${{ steps.resolve.outputs.artifact }}
           path: |
-            ${{ inputs.out_dir }}/tools.jsonl
-            ${{ inputs.out_dir }}/tools.jsonl.summary.json
+            ${{ steps.resolve.outputs.out_dir }}/tools.jsonl
+            ${{ steps.resolve.outputs.out_dir }}/tools.jsonl.summary.json
           retention-days: 7
           if-no-files-found: error

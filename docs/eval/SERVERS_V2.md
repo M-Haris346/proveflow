@@ -181,6 +181,23 @@ Other category notes:
   (see "Rule changes" item 4 for the exact diff).
 - **What the picker reads:** besides registry metadata and the snapshot, it reads each walked candidate's LICENSE and README from the pinned npm tarball or PyPI archive (in memory only).
 
+## Collection attempts
+
+- **eval-collect run #2** (GitHub Actions 43432066358, 2026-11-13, commit 016e39d) is **not a
+  v2 collection**.
+  - Its log records the input defaults: `SERVERS: data/eval/roles/servers.json` and
+    `OUT_DIR: out`. So it collected the v1 set into the artifact `eval-tools`.
+  - Cause: the workflow's defaults silently select the v1 set. Nothing printed the chosen
+    file, and nothing checked the result. Claude's Stage C report named the v2 artifact
+    without checking what the default inputs produce.
+  - Fix (next commit):
+    - the first job step validates, prints and step-summarizes the resolved inputs;
+    - the artifact name is derived from `out_dir` (`out/v2` → `eval-tools-v2`);
+    - a step after collection fails the job unless the summary's server ids equal the
+      chosen file's ids (`python -m proveflow.eval.verify_collection`).
+    - Tests: `tests/safety/test_eval_collect_workflow.py`.
+  - Run #2's output is not used for anything in checkpoint 1c.
+
 ## Decision before collection
 
 No supplement round. Servers that fail without credentials are
