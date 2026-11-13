@@ -116,7 +116,75 @@ def test_workflow_runs_the_id_check_on_the_resolved_inputs() -> None:
     assert "inputs.out_dir" not in upload_step and "'-v2'" not in upload_step
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+def _probe(bash: Path) -> bool:
+    """True only for a working POSIX bash (the WSL launcher stub prints a UTF-16 notice and
+    exits 1 when no distribution is installed: CI run 43436655254, windows-2025)."""
+    try:
+        res = subprocess.run(
+            [str(bash), "-c", "printf ok"], capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return res.returncode == 0 and res.stdout == "ok"
+
+
+def _real_bash() -> str | None:
+    """A bash that actually runs scripts. On Windows a bare `bash` on PATH is often the WSL
+    launcher (System32 / WindowsApps), so Git for Windows' own bash next to `git` is tried
+    first (git.exe lives in <root>/cmd, bash.exe in <root>/bin). Every candidate must pass
+    the probe; None -> see require_bash()."""
+    candidates: list[Path] = []
+    git = shutil.which("git")
+    if git:
+        root = Path(git).resolve().parent.parent
+        candidates += [root / "bin" / "bash.exe", root / "usr" / "bin" / "bash.exe"]
+    on_path = shutil.which("bash")
+    if on_path:
+        candidates.append(Path(on_path))
+    return next((str(c) for c in candidates if c.is_file() and _probe(c)), None)
+
+
+BASH = _real_bash()
+NO_BASH = "no working bash found (only a WSL stub or none)"
+
+
+def require_bash(found: str | None) -> str:
+    """Use the bash if there is one. Without one: on CI (env CI set, as GitHub Actions does)
+    the test FAILS, so the resolve-step tests can never silently vanish from CI; locally it
+    is a visible skip (-rs)."""
+    if found is not None:
+        return found
+    if os.environ.get("CI"):
+        pytest.fail(f"{NO_BASH} on CI: the eval-collect resolve-step tests must run here")
+    pytest.skip(NO_BASH)
+
+
+@pytest.fixture
+def bash() -> str:
+    return require_bash(BASH)
+
+
+def test_missing_bash_fails_on_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="on CI"):
+        require_bash(None)
+
+
+def test_missing_bash_skips_locally(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match="no working bash"):
+        require_bash(None)
+
+
+def test_found_bash_is_used_regardless_of_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    for ci in ("true", None):
+        if ci is None:
+            monkeypatch.delenv("CI", raising=False)
+        else:
+            monkeypatch.setenv("CI", ci)
+        assert require_bash("/some/bash") == "/some/bash"
+
+
 @pytest.mark.parametrize(
     ("servers", "out_dir", "artifact"),
     [
@@ -126,14 +194,14 @@ def test_workflow_runs_the_id_check_on_the_resolved_inputs() -> None:
     ],
 )
 def test_resolve_step_prints_inputs_and_derives_artifact_from_out_dir(
-    tmp_path: Path, servers: str, out_dir: str, artifact: str
+    tmp_path: Path, bash: str, servers: str, out_dir: str, artifact: str
 ) -> None:
     script = tmp_path / "resolve.sh"
     script.write_text(_run_block(_step("Resolve and print inputs")), encoding="utf-8", newline="\n")
     out, summary = tmp_path / "gh_output", tmp_path / "gh_summary"
     env = {**os.environ, "SERVERS": servers, "OUT_DIR": out_dir,
            "GITHUB_OUTPUT": str(out), "GITHUB_STEP_SUMMARY": str(summary)}  # fmt: skip
-    res = subprocess.run(["bash", "-e", str(script)], env=env, capture_output=True, text=True)  # noqa: S607
+    res = subprocess.run([bash, "-e", str(script)], env=env, capture_output=True, text=True)
     assert res.returncode == 0, res.stdout + res.stderr
     assert f"servers file : {servers}" in res.stdout
     assert f"out_dir      : {out_dir}" in res.stdout
@@ -143,22 +211,24 @@ def test_resolve_step_prints_inputs_and_derives_artifact_from_out_dir(
     assert servers in summary.read_text(encoding="utf-8")
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 @pytest.mark.parametrize(
-    ("servers", "out_dir"),
-    [("../secrets.json", "out"), ("data/eval/roles/servers_v2.json", "out/../x"),
-     ("data/eval/roles/x.json\n::set-output name=a::b", "out")],
+    ("servers", "out_dir", "message"),
+    [("../secrets.json", "out", "bad servers input"),
+     ("data/eval/roles/servers_v2.json", "out/../x", "bad out_dir input"),
+     ("data/eval/roles/x.json\n::set-output name=a::b", "out", "bad servers input")],
 )  # fmt: skip
 def test_resolve_step_rejects_bad_inputs_before_printing(
-    tmp_path: Path, servers: str, out_dir: str
+    tmp_path: Path, bash: str, servers: str, out_dir: str, message: str
 ) -> None:
     script = tmp_path / "resolve.sh"
     script.write_text(_run_block(_step("Resolve and print inputs")), encoding="utf-8", newline="\n")
     out = tmp_path / "gh_output"
     env = {**os.environ, "SERVERS": servers, "OUT_DIR": out_dir,
            "GITHUB_OUTPUT": str(out), "GITHUB_STEP_SUMMARY": str(tmp_path / "s")}  # fmt: skip
-    res = subprocess.run(["bash", "-e", str(script)], env=env, capture_output=True, text=True)  # noqa: S607
+    res = subprocess.run([bash, "-e", str(script)], env=env, capture_output=True, text=True)
     assert res.returncode != 0
+    # the script's OWN rejection message: proves the step ran (a broken bash also exits != 0)
+    assert res.stdout.strip() == message, res.stdout + res.stderr
     assert "servers file :" not in res.stdout  # nothing printed before validation
     assert not out.exists()
 
