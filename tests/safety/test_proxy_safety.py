@@ -398,20 +398,6 @@ def test_sigkill_to_proxy_twin_exits_on_stdin_eof_posix(tmp_path: Path) -> None:
     _check_sigkill_twin_exits(tmp_path)
 
 
-# TEMPORARY race check (Phase 2.1, CI run 43575764649): each POSIX kill test 10 more times.
-# Remove in a separate change once CI shows all 20 repetitions green.
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
-@pytest.mark.parametrize("rep", range(10))
-def test_repeat_sigterm_posix(tmp_path: Path, rep: int) -> None:
-    _check_sigterm_kills_twin(tmp_path)
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
-@pytest.mark.parametrize("rep", range(10))
-def test_repeat_sigkill_posix(tmp_path: Path, rep: int) -> None:
-    _check_sigkill_twin_exits(tmp_path)
-
-
 # --- import guard --------------------------------------------------------------------------
 
 

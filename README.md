@@ -74,7 +74,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 >     fails closed
 >   - tested only with a fake twin written for the tests: no real server, no network, no LLM, no
 >     agent loop. Windows locally and in CI; the POSIX kill tests run only in CI (run
->     `43509278369`, ubuntu job: not skipped, 0 failed).
+>     `43582905272`, ubuntu job: not skipped, 0 failed; that run also repeated both POSIX kill
+>     tests 10x each, all green, after a test race was fixed).
 >     Residuals: a sink that both the session's labels and the proxy's classifier miss (the
 >     twin describes it innocently; held-out sink recall is 16/25) is forwarded to the twin,
 >     harmless in twin mode but must be closed before any real-reads mode; fetch-a-URL sources
@@ -84,8 +85,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 > - Everything from Phase 3 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`43509278369` on commit `38feec6` (Phase 2), green on both OSes (ubuntu: 779 passed, 15
-skipped, all Windows-only tests; windows: 792 passed, 2 skipped, both POSIX-only signal tests).
+`43582905272` on commit `ec85e53` (Phase 2.1 + kill-test race fix), green on both OSes
+(ubuntu: 859 passed, 15 skipped, all Windows-only tests; windows: 852 passed, 22 skipped, all
+POSIX-only signal tests: 2 kill tests + 20 temporary repetitions, removed afterwards).
 This README states CI results only for a run id checked with `gh run list`. Local commands:
 
 ```bash
