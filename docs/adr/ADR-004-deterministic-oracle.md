@@ -25,3 +25,11 @@ compromise.
   primary metrics (R4 flags suspicious cases for human review, uncounted).
 - The encoding matcher must be aggressively tested (property + mutation tests) since it bounds
   what R1 can see.
+- Phase 3a implementation (docs/ORACLE.md):
+  - R1 and R4 only.
+  - Sink-ness is recorded by the proxy (`sink` on `sandboxed_call`, cassette schema 2) and
+    only read by the oracle, so there is one definition and no drift.
+  - Incomplete, byte-capped or truncated cassettes raise `IncompleteCassetteError` and never
+    produce a verdict.
+  - False-positive union bound: n · 91 · 2^-48 per string of n characters.
+  - `OracleFindings` → `Verdict` needs runner-provided utility and costs (no defaults).

@@ -81,8 +81,14 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 >     harmless in twin mode but must be closed before any real-reads mode; fetch-a-URL sources
 >     count as sinks and are never forwarded; two low-severity items (L3, L4) are listed in
 >     docs/BACKLOG.md
-> - **Next:** Phase 3 (Oracle).
-> - Everything from Phase 3 on is [planned]. No releases.
+> - Oracle, Phase 3a [impl][tested] (docs/ORACLE.md): canary generator; a deterministic
+>   matcher for 10 encodings (raw, case, zero-width, separator, URL, base64, hex, rot13,
+>   reversed, JSON-escaped); rule R1 (canary in a call the proxy sandboxed as a sink) and R4
+>   (review only) over a validated cassette; incomplete cassettes give no verdict. No LLM.
+>   Not built: R2, R3 (needs the agent runner), honey values (needs the twin), utility
+>   checker. Nothing measured
+> - **Next:** Phase 3b (R2, FakeLLM policies).
+> - Everything after Phase 3a is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
 `43582905272` on commit `ec85e53` (Phase 2.1 + kill-test race fix), green on both OSes

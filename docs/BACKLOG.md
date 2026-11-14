@@ -30,10 +30,25 @@ moves out of this file only with a fix and that test in the repo.
   hash chain, canonical form, sizes), not completeness. A cassette cut off by SIGKILL, or read
   while the proxy is still running, loads without error. `is_complete(events)` (added in Phase
   2.1) returns False for it, but nothing enforces that yet.
-- **Proposed fix:** replay and the oracle refuse, or mark as INCOMPLETE, any cassette where
-  `is_complete` is False. They never compute a verdict from it.
+- **Oracle part: done in Phase 3a.** `oracle.rules.evaluate` raises `IncompleteCassetteError`
+  (no findings) when `is_complete` is False, when events were dropped, or when `session_start`
+  or a sink call was truncated (`tests/unit/test_oracle_rules.py`).
+- **Still open (Phase 5):** the replay CLI must surface that error as INCOMPLETE and never
+  report a verdict.
 - **Proposed test:** replay of a cassette with its `session_end` removed reports INCOMPLETE and
   produces no verdict.
+
+### Deeply nested JSON in a cassette line raises an untyped error (low)
+- **Where:** `src/proveflow/proxy/cassette.py` `load_cassette` (and `canonical` on write).
+  `json.loads` of a line nested about 100k levels deep raises `RecursionError`, which is not
+  caught as `CassetteError`. Probed in Phase 3a: `RecursionError (untyped)`.
+- **Today:** fails closed (no events, so no findings). But callers that expect
+  `CassetteError` get an untyped exception. The oracle's own JSON walk is iterative and
+  unaffected.
+- **Proposed fix:** catch `RecursionError` in `load_cassette` (and in the writer) and raise
+  `CassetteError("nesting too deep")`. This is a proxy change, outside Phase 3a's single
+  allowed proxy change.
+- **Proposed test:** a cassette line with 100k nested lists → `CassetteError`.
 
 ### Classifier miss before `--real-reads` (must fix before that mode exists)
 - A sink that both the session's evidence and the proxy's own v2 classifier miss is forwarded
