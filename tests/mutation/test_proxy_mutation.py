@@ -6,6 +6,8 @@
     (and with only ONE layer broken the safety check still passes: layers are independent)
 (d) JSON_STRING fallback broken      -> the C3 canary property fails
 (e) each carrier dropping its payload -> the C3 canary property fails for that carrier
+(f) H1 second opinion disabled       -> assert_forged_session_cannot_forward_sink fails
+(g) L1 collision detection disabled  -> the look-alike policy check fails
 """
 
 from __future__ import annotations
@@ -17,17 +19,64 @@ import pytest
 from hypothesis import given, settings
 
 from proveflow.core.attacks import Carrier
-from proveflow.proxy import carriers, server
+from proveflow.proxy import carriers, gate, policy, server
 from proveflow.proxy.gate import UpstreamGate
 from proveflow.proxy.policy import Decision
 from proxychecks import (
     ANY_TEXT,
     assert_canary_once_more,
+    assert_forged_session_cannot_forward_sink,
     assert_gate_blocks_on_write_path,
     assert_sink_call_sandboxed,
     assert_twin_never_sees_denied_calls,
     payloads,
 )
+from proxyhelpers import LOOKALIKE, PRIVATE, SINK, proxy_twin_root, twin_specs  # noqa: F401
+
+# (f) ----------------------------------------------------------------------------------
+
+
+def test_f_second_opinion_disabled_fails_forged_session_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ok, mut = _dirs(tmp_path)
+    assert_forged_session_cannot_forward_sink(ok)
+    monkeypatch.setattr(server, "proxy_sink_names", lambda tools: frozenset())
+    with pytest.raises(AssertionError, match="forged sink reached the twin"):
+        assert_forged_session_cannot_forward_sink(mut)
+
+
+# (g) ----------------------------------------------------------------------------------
+
+
+def assert_lookalike_pair_denied() -> None:
+    specs = twin_specs({"send_email": (SINK,), LOOKALIKE: (PRIVATE,)})
+    built = policy.build_policy(specs)
+    assert not built[LOOKALIKE].forward, "look-alike of a sink was forwarded"
+    g = UpstreamGate({LOOKALIKE: policy.ToolPolicy(forward=True, inject=False)})
+    g.set_advertised(frozenset({"send_email", LOOKALIKE}), proxy_sinks=frozenset())
+    msg = {"name": LOOKALIKE}
+    from proveflow.proxy.gate import GateBlocked
+
+    class _M:
+        method = "tools/call"
+        params = msg
+
+    try:
+        g.check(_M())
+    except GateBlocked:
+        return
+    raise AssertionError("look-alike passed the gate")
+
+
+def test_g_collision_detection_disabled_fails_lookalike_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert_lookalike_pair_denied()
+    monkeypatch.setattr(policy, "colliding_names", lambda names: frozenset())
+    monkeypatch.setattr(gate, "colliding_names", lambda names: frozenset())
+    with pytest.raises(AssertionError, match="look-alike"):
+        assert_lookalike_pair_denied()
 
 
 def _forward_everything(*_args: Any, **_kwargs: Any) -> tuple[Decision, None]:

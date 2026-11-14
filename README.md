@@ -59,24 +59,34 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 > - `proveflow proxy --session FILE` (Phase 2) [impl][tested, against a fake twin only]: a stdio
 >   MCP proxy that serves ONE twin upstream to an agent (docs/ARCHITECTURE.md §5.5,
 >   docs/adr/ADR-006-proxy-default-deny.md).
->   - the upstream must be this Python interpreter running a `.py` twin; real servers (npx, uvx,
->     node, docker, URLs) are refused before anything starts
->   - default deny: only role-classified, non-sink, tool-level tools are forwarded; every other
->     `tools/call` gets a sandbox reply and is never forwarded; a second check on the write path
->     blocks independently. **The sandbox cannot be disabled** (no flag, env var or config)
+>   - the upstream must be this Python interpreter running a script inside proveflow's own twin
+>     directory, whose sha256 matches the session (the hashed copy is what runs); npx, uvx,
+>     node, docker, URLs and any other `.py` file are refused before anything starts. This does
+>     not prove a script placed in that directory is harmless
+>   - the session lists classified tools, never allow/deny decisions; the proxy computes the
+>     policy itself (default deny: only role-classified, non-sink, tool-level tools) and also
+>     runs its own classifier on what the twin advertises: a tool it calls a sink is never
+>     forwarded; look-alike names (e.g. with a zero-width space) are denied together. Every
+>     other `tools/call` gets a sandbox reply; a second check on the write path blocks
+>     independently. No flag, env var or session field disables this
 >   - 5 injection carriers for source results; hash-chained JSONL cassette with a validating
->     loader; per-call / session / call-count limits; fails closed
+>     loader; per-call / session / call-count limits plus message and cassette-size caps;
+>     fails closed
 >   - tested only with a fake twin written for the tests: no real server, no network, no LLM, no
->     agent loop. Windows locally; the POSIX kill tests run only in CI (not yet run for Phase 2).
->     Residual: a sink mislabeled by the classifier is forwarded to the twin (harmless in twin
->     mode; must be closed before any real-reads mode)
+>     agent loop. Windows locally and in CI; the POSIX kill tests run only in CI (run
+>     `43509278369`, ubuntu job: not skipped, 0 failed).
+>     Residuals: a sink that both the session's labels and the proxy's classifier miss (the
+>     twin describes it innocently; held-out sink recall is 16/25) is forwarded to the twin,
+>     harmless in twin mode but must be closed before any real-reads mode; fetch-a-URL sources
+>     count as sinks and are never forwarded; two low-severity items (L3, L4) are listed in
+>     docs/BACKLOG.md
 > - **Next:** Phase 3 (Oracle).
 > - Everything from Phase 3 on is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`43493526715` on commit `13d1900`, green on both OSes (ubuntu: 572 passed, 14 skipped, all
-Windows-only tests; windows: 586 passed). That run predates Phase 2: the proxy tests have not
-run in CI yet. This README states CI results only for a run id checked with `gh run list`. Local commands:
+`43509278369` on commit `38feec6` (Phase 2), green on both OSes (ubuntu: 779 passed, 15
+skipped, all Windows-only tests; windows: 792 passed, 2 skipped, both POSIX-only signal tests).
+This README states CI results only for a run id checked with `gh run list`. Local commands:
 
 ```bash
 uv sync

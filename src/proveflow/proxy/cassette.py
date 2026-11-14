@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Annotated, Any, Literal
 
@@ -135,6 +136,7 @@ class SessionEnd(_Event):
     sandboxed_calls: int
     upstream_stderr: str
     upstream_stderr_truncated: bool
+    dropped_events: int = 0  # events not written because the cassette byte cap was hit
 
 
 Event = Annotated[
@@ -169,15 +171,49 @@ def _cap(value: Any) -> tuple[Any, bool]:
     return raw[:TEXT_CAP].decode("utf-8", errors="ignore"), True
 
 
-class CassetteWriter:
-    """Append-only writer. Opens with ``x`` (never overwrites an existing cassette)."""
+FINAL_RESERVE = 64 * 1024  # room kept for the cassette_full error + session_end
 
-    def __init__(self, path: Path) -> None:
+
+class CassetteWriter:
+    """Append-only writer. Opens with ``x`` (never overwrites an existing cassette).
+
+    ``max_bytes`` (M1): total file size cap. Ordinary events may use ``max_bytes -
+    FINAL_RESERVE``; the first event that does not fit is DROPPED, the writer turns ``full``
+    and calls ``on_full`` once (the proxy then records one ``error`` and ends the session).
+    While full only that one ``error`` and ``session_end`` are written (within ``max_bytes``);
+    every other event is dropped and counted in ``dropped``. The chain stays valid because
+    dropped events never get a ``seq``.
+    """
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        max_bytes: int | None = None,
+        on_full: Callable[[], None] | None = None,
+    ) -> None:
         self._fh: IO[bytes] = path.open("xb")
         self._seq = 0
         self._prev = GENESIS
+        self._max = max_bytes
+        self._on_full = on_full
+        self._written = 0
+        self.full = False
+        self.dropped = 0
+        self._final_error_left = 1
 
-    def emit(self, kind: str, **fields: Any) -> Event:
+    def _fits(self, kind: str, size: int) -> bool:
+        if self._max is None:
+            return True
+        if kind == "session_end":
+            return self._written + size <= self._max
+        if not self.full:
+            return self._written + size <= max(self._max - FINAL_RESERVE, 0)
+        if kind == "session_end" or (kind == "error" and self._final_error_left > 0):
+            return self._written + size <= self._max
+        return False
+
+    def emit(self, kind: str, **fields: Any) -> Event | None:
         if self._fh.closed:
             raise CassetteError("cassette already closed")
         truncated = False
@@ -196,8 +232,19 @@ class CassetteWriter:
         )
         body["sha256"] = digest(body)
         event = EVENT_ADAPTER.validate_python(body)  # never write an invalid event
-        self._fh.write((canonical(body) + "\n").encode("utf-8"))
+        line = (canonical(body) + "\n").encode("utf-8")
+        if not self._fits(kind, len(line)):
+            self.dropped += 1
+            if not self.full:
+                self.full = True
+                if self._on_full is not None:
+                    self._on_full()
+            return None
+        if self.full and kind == "error":
+            self._final_error_left -= 1
+        self._fh.write(line)
         self._fh.flush()
+        self._written += len(line)
         self._seq += 1
         self._prev = body["sha256"]
         return event

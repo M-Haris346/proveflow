@@ -10,13 +10,20 @@ forward (and the SDK's own ``notifications/cancelled`` for that in-flight call).
 Upstream side: ``Client(mode="legacy")`` over ``upstream.twin_stdio`` (initialize handshake,
 then ``tools/list``). Every write passes ``UpstreamGate``.
 
+Second opinion (Phase 2.1 H1): after the twin's ``tools/list`` the proxy classifies every
+ADVERTISED tool itself (``flows.roles.classify_tool`` on name, description, inputSchema). A
+tool the proxy's classifier marks ``sink`` is never forwarded, whatever the session's labels
+say; the same set goes to the handler (``decide``) and to the gate (``set_advertised``).
+
 ``tools/call``: ``policy.decide`` -> sandbox (``sbx_NNNN``) or forward. A forwarded result
 loses ``structuredContent`` (A1; ``outputSchema`` is stripped from every advertised tool,
 D6) and, for an ``inject=True`` tool with an armed attack, gets the payload in its first
 TextContent via the attack's carrier. Every failure (gate, timeout, upstream crash, error)
 becomes ``isError=true`` "proveflow proxy: <reason>" and nothing is forwarded.
 
-Limits (``ProxyLimits``): per call, per session, max tool calls (sandboxed calls count).
+Limits (``ProxyLimits``): per call, per session, max tool calls (sandboxed calls count),
+max agent messages (all methods), max upstream messages, max cassette bytes; hitting one of
+the last three ends the session fail-closed (``error`` + ``session_end`` with that reason).
 On exit or cancellation the twin's process tree is killed (``Spawned.kill_tree``); on
 POSIX a SIGTERM handler kills the tree first (ADR-006; SIGKILL residual: the twin exits on
 stdin EOF).
@@ -28,7 +35,7 @@ import os
 import signal
 import sys
 import threading
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from types import TracebackType
@@ -47,12 +54,15 @@ from mcp.shared.exceptions import MCPError
 from mcp.shared.message import SessionMessage
 
 from proveflow import __version__
+from proveflow.core.tools import ToolRole
+from proveflow.flows.roles import classify_tool
 from proveflow.introspect.limits import MAX_LINE
 from proveflow.introspect.scrub import scrub_stderr
 from proveflow.proxy.carriers import apply_carrier
 from proveflow.proxy.cassette import CassetteWriter
 from proveflow.proxy.gate import GateBlocked, UpstreamGate
-from proveflow.proxy.policy import Decision, decide
+from proveflow.proxy.lines import LineSplitter, LineTooLong
+from proveflow.proxy.policy import Decision, ToolPolicy, decide
 from proveflow.proxy.sandbox import error_result_dict, sandbox_id, sandbox_result_dict
 from proveflow.proxy.session import ProxySession
 from proveflow.proxy.upstream import Record, UpstreamState, twin_stdio
@@ -81,6 +91,13 @@ class ProxyControl:
         if self.scope is not None:
             self.scope.cancel()
 
+    def end(self, reason: str) -> None:
+        """Synchronous fail-closed end (limits): first reason wins; the scope is cancelled."""
+        if self.reason is None:
+            self.reason = reason
+        if self.scope is not None:
+            self.scope.cancel()
+
 
 @dataclass
 class ProxyOutcome:
@@ -96,14 +113,30 @@ def _dump(model: Any) -> Any:
 
 
 class RecordingRead:
-    """Agent read stream wrapper: records every inbound message (and stream errors)."""
+    """Agent read stream wrapper: records every inbound message (and stream errors), and
+    ends the session after ``max_messages`` agent messages (all methods count)."""
 
-    def __init__(self, inner: Any, record: Record) -> None:
+    def __init__(
+        self,
+        inner: Any,
+        record: Record,
+        *,
+        max_messages: int | None = None,
+        on_limit: Callable[[str], None] | None = None,
+    ) -> None:
         self._inner = inner
         self._record = record
+        self._max = max_messages
+        self._on_limit = on_limit
+        self._count = 0
 
     async def receive(self) -> SessionMessage | Exception:
         item: SessionMessage | Exception = await self._inner.receive()
+        self._count += 1
+        if self._max is not None and self._count > self._max:
+            if self._on_limit is not None:
+                self._on_limit("agent_message_limit")
+            raise anyio.EndOfStream  # the message is neither recorded nor handled
         if isinstance(item, Exception):
             kind = (
                 "agent_line_too_long"
@@ -178,14 +211,18 @@ class _CallHandler:
     def __init__(
         self,
         session: ProxySession,
+        policy: Mapping[str, ToolPolicy],
         client: Client,
         advertised: frozenset[str],
+        proxy_sinks: frozenset[str],
         record: Record,
         outcome: ProxyOutcome,
     ) -> None:
         self._session = session
+        self._policy = policy
         self._client = client
         self._advertised = advertised
+        self._proxy_sinks = proxy_sinks
         self._record = record
         self._outcome = outcome
         self._sbx_seq = 0
@@ -202,7 +239,7 @@ class _CallHandler:
         self._outcome.tool_calls += 1
         if self._outcome.tool_calls > self._session.limits.max_calls:
             return self._error("max_calls_exceeded", name, "tool call limit reached")
-        decision, why = decide(self._session.policy, self._advertised, name)
+        decision, why = decide(self._policy, self._advertised, name, proxy_sinks=self._proxy_sinks)
         if decision is not Decision.FORWARD:
             self._outcome.sandboxed_calls += 1
             self._sbx_seq += 1
@@ -236,7 +273,7 @@ class _CallHandler:
         result = _dump(raw)
         self._record("upstream_response", tool=name, result=result)
         result.pop("structuredContent", None)  # A1: the raw value stays in the cassette
-        policy = self._session.policy.get(name)
+        policy = self._policy.get(name)
         attack = self._session.attack
         if policy is not None and policy.inject and attack is not None:
             self._inject(name, result, attack.carrier, attack.payload.text, attack.canary)
@@ -261,6 +298,17 @@ class _CallHandler:
                 )
                 return
         self._record("injection_skipped", tool=name, reason="no_text_content")
+
+
+def proxy_roles(tool: mcp_types.Tool) -> list[str]:
+    """The proxy's OWN classification of an advertised tool (v2 classifier)."""
+    spec = classify_tool(tool.name, "twin", tool.description or "", dict(tool.input_schema))
+    return sorted({ev.role.value for ev in spec.roles})
+
+
+def proxy_sink_names(tools: Sequence[mcp_types.Tool]) -> frozenset[str]:
+    """Second opinion the session cannot forge: names the proxy's classifier marks sink."""
+    return frozenset(t.name for t in tools if ToolRole.SINK.value in proxy_roles(t))
 
 
 async def _list_upstream_tools(client: Client) -> list[mcp_types.Tool]:
@@ -292,37 +340,71 @@ async def serve(
     """Run one proxy session over the given agent streams until the agent disconnects,
     a limit is hit, or ``control.stop`` is called. Always writes ``session_end``."""
     control = control or ProxyControl()
-    writer = CassetteWriter(session.cassette_path)
+    limits = session.limits
+
+    def end_session(reason: str) -> None:
+        """Fail-closed end on a limit: one ``error`` event, then the scope is cancelled."""
+        if control.reason is None:
+            record("error", error_kind=reason, detail="session ended (limit reached)")
+        control.end(reason)
+
+    writer = CassetteWriter(
+        session.cassette_path,
+        max_bytes=limits.max_cassette_bytes,
+        on_full=lambda: end_session("cassette_full"),
+    )
     record: Record = writer.emit
     outcome = ProxyOutcome(reason="agent_closed")
     upstream_state = UpstreamState()
     control.upstream = upstream_state
-    gate = UpstreamGate(session.policy)
+    policy = session.policy  # computed by the proxy from the session's ToolSpecs
+    gate = UpstreamGate(policy)
     record(
         "session_start",
         session_id=session.session_id,
         proveflow_version=__version__,
-        upstream=session.upstream.model_dump(mode="json"),
-        policy={k: v.model_dump(mode="json") for k, v in sorted(session.policy.items())},
+        upstream={
+            **session.upstream.model_dump(mode="json"),
+            "twin_sha256": session.twin_sha256,
+        },
+        policy={
+            "tools": [t.model_dump(mode="json") for t in session.tools],
+            "computed": {k: v.model_dump(mode="json") for k, v in sorted(policy.items())},
+        },
         attack=session.attack.model_dump(mode="json") if session.attack else None,
-        limits=session.limits.model_dump(mode="json"),
+        limits=limits.model_dump(mode="json"),
     )
     try:
         with anyio.CancelScope() as scope:
             control.scope = scope
-            scope.deadline = anyio.current_time() + session.limits.session_timeout_s
-            transport = twin_stdio(session.upstream, gate, upstream_state, record, parent_env)
+            scope.deadline = anyio.current_time() + limits.session_timeout_s
+            transport = twin_stdio(
+                session.upstream,
+                session.twin_sha256,
+                gate,
+                upstream_state,
+                record,
+                parent_env,
+                max_messages=limits.max_upstream_messages,
+                on_limit=end_session,
+            )
             async with Client(transport, mode="legacy") as client:
                 tools = await _list_upstream_tools(client)
                 stripped = [_strip_output_schema(t) for t in tools]
                 record(
                     "tools_advertised",
-                    tools=[{"tool": w, "output_schema_stripped": s} for _, w, s in stripped],
+                    tools=[
+                        {"tool": w, "output_schema_stripped": s, "proxy_roles": proxy_roles(t)}
+                        for t, w, s in stripped
+                    ],
                 )
                 advertised_tools = [t for t, _, _ in stripped]
                 advertised_names = frozenset(t.name for t in tools)
-                gate.set_advertised(advertised_names)
-                handler = _CallHandler(session, client, advertised_names, record, outcome)
+                sinks = proxy_sink_names(tools)
+                gate.set_advertised(advertised_names, proxy_sinks=sinks)
+                handler = _CallHandler(
+                    session, policy, client, advertised_names, sinks, record, outcome
+                )
 
                 async def on_list_tools(
                     ctx: ServerRequestContext[Any], params: mcp_types.PaginatedRequestParams | None
@@ -336,12 +418,19 @@ async def serve(
                     on_call_tool=handler,
                 )
                 await server.run(
-                    RecordingRead(agent_read, record),
+                    RecordingRead(
+                        agent_read,
+                        record,
+                        max_messages=limits.max_agent_messages,
+                        on_limit=end_session,
+                    ),
                     RecordingWrite(agent_write, record),
                     server.create_initialization_options(),
                 )
         if scope.cancelled_caught:
             outcome.reason = control.reason or "session_timeout"
+        elif control.reason is not None:
+            outcome.reason = control.reason
     except Exception as exc:
         record("error", error_kind="proxy_failure", detail=_leaf_names(exc))
         outcome.reason = control.reason or "error"
@@ -365,6 +454,7 @@ async def serve(
             upstream_stderr=text,
             upstream_stderr_truncated=upstream_state.stderr_truncated
             or len(raw.decode("utf-8", errors="replace")) > STDERR_REPORT,
+            dropped_events=writer.dropped,
         )
         writer.close()
     return outcome
@@ -432,17 +522,17 @@ async def agent_stdio(
         await read_w.send(SessionMessage(msg))
 
     async def reader() -> None:
-        buffer = b""
+        splitter = LineSplitter(MAX_LINE)  # byte limit; scans only each new chunk
         async with read_w, chunks_r:
             with suppress(anyio.ClosedResourceError, anyio.BrokenResourceError):
                 async for chunk in chunks_r:
                     if chunk is None:
-                        if buffer:
-                            await deliver(buffer)
+                        if splitter.rest():
+                            await deliver(splitter.rest())
                         return
-                    buffer += chunk
-                    *lines, buffer = buffer.split(b"\n")
-                    if len(buffer) > MAX_LINE or any(len(x) > MAX_LINE for x in lines):
+                    try:
+                        lines = splitter.feed(chunk)
+                    except LineTooLong:
                         await read_w.send(AgentLineTooLong(f"line over {MAX_LINE} bytes"))
                         return
                     for line in lines:

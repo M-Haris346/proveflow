@@ -21,6 +21,7 @@ from hypothesis import strategies as st
 from proveflow.core.attacks import Carrier
 from proveflow.proxy.carriers import NOTE_KEY, apply_carrier
 from proveflow.proxy.gate import GateBlocked, UpstreamGate
+from proveflow.proxy.names import colliding_names
 from proveflow.proxy.policy import ToolPolicy
 from proxychecks import (
     ANY_TEXT,
@@ -81,18 +82,30 @@ NAMES = st.text(max_size=12)
     ),
     name=NAMES,
     advertised=st.none() | st.frozensets(NAMES, max_size=8),
+    proxy_sinks=st.frozensets(NAMES, max_size=4),
 )
 def test_gate_never_passes_tools_call_unless_forward(
-    policy: dict[str, ToolPolicy], name: str, advertised: frozenset[str] | None
+    policy: dict[str, ToolPolicy],
+    name: str,
+    advertised: frozenset[str] | None,
+    proxy_sinks: frozenset[str],
 ) -> None:
     gate = UpstreamGate(policy)
     if advertised is not None:
-        gate.set_advertised(advertised)
+        gate.set_advertised(advertised, proxy_sinks=proxy_sinks)
     msg = mcp_types.JSONRPCRequest(
         jsonrpc="2.0", id=1, method="tools/call", params={"name": name, "arguments": {}}
     )
     entry = policy.get(name)
-    if entry is not None and entry.forward and advertised is not None and name in advertised:
+    allowed = (
+        entry is not None
+        and entry.forward
+        and advertised is not None
+        and name in advertised
+        and name not in proxy_sinks
+        and name not in colliding_names(advertised)
+    )
+    if allowed:
         gate.check(msg)
     else:
         with pytest.raises(GateBlocked):

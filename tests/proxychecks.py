@@ -21,6 +21,9 @@ from proveflow.proxy import carriers, upstream
 from proveflow.proxy.gate import GateBlocked, UpstreamGate
 from proxyhelpers import (
     FORWARDED,
+    LOOKALIKE,
+    PRIVATE,
+    TWIN_ROLES,
     TWIN_TOOLS,
     make_session,
     run_in_process,
@@ -31,7 +34,7 @@ from proxyhelpers import (
 
 # --- layer B, handler ----------------------------------------------------------------
 
-DENIED = ("send_email", "nonexistent_tool", "noop", "ghost")
+DENIED = ("send_email", "nonexistent_tool", "noop", "ghost", LOOKALIKE)
 
 
 def assert_sink_call_sandboxed(tmp_path: Path) -> None:
@@ -57,10 +60,19 @@ def assert_gate_blocks_on_write_path(tmp_path: Path) -> None:
     async def run() -> None:
         state = upstream.UpstreamState()
         gate = UpstreamGate(session.policy)
-        gate.set_advertised(TWIN_TOOLS)  # blocked because send_email is a sink, not unlisted
+        # Blocked because send_email is a sink in the session policy (not unlisted, and the
+        # proxy-classifier set is left empty so only the policy decides here).
+        gate.set_advertised(TWIN_TOOLS, proxy_sinks=frozenset())
         try:
             async with upstream.twin_stdio(
-                session.upstream, gate, state, lambda *a, **k: None, dict(os.environ)
+                session.upstream,
+                session.twin_sha256,
+                gate,
+                state,
+                lambda *a, **k: None,
+                dict(os.environ),
+                max_messages=100,
+                on_limit=lambda reason: None,
             ) as (_read, write):
                 msg = mcp_types.JSONRPCRequest(
                     jsonrpc="2.0", id=1, method="tools/call", params={"name": "send_email"}
@@ -98,6 +110,24 @@ def assert_twin_never_sees_denied_calls(tmp_path: Path) -> None:
     assert seen == ["read_page", "query_db"], seen
     assert set(seen) <= FORWARDED
     assert {n for n, p in twin_policy().items() if p.forward} == FORWARDED
+
+
+# --- H1 second opinion: a forged session cannot unlock a sink -------------------------
+
+
+def assert_forged_session_cannot_forward_sink(tmp_path: Path) -> None:
+    """Named check: the session's ToolSpec evidence claims send_email is PRIVATE (forged);
+    the proxy's own classifier flags it as sink, so the twin log shows ZERO tools/call."""
+    forged = {**TWIN_ROLES, "send_email": (PRIVATE,)}
+    session = make_session(tmp_path, roles=forged)
+    assert session.policy["send_email"].forward is True  # the forgery itself "works"
+
+    async def script(client: Any) -> Any:
+        return await client.call_tool("send_email", {"to": "x@example.invalid", "body": "b"})
+
+    result, _ = run_in_process(session, script)
+    assert "send_email" not in twin_tool_calls(tmp_path), "forged sink reached the twin"
+    assert json.loads(text_of(result)) == {"ok": True, "id": "sbx_0001"}
 
 
 # --- carriers (C3) ---------------------------------------------------------------------

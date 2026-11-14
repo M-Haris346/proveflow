@@ -214,3 +214,55 @@ def test_truncation_never_splits_utf8(tmp_path: Path, monkeypatch: pytest.Monkey
     w.close()
     assert event.detail == "üüü"  # type: ignore[union-attr]
     assert event.truncated is True
+
+
+# --- M1: total byte cap ------------------------------------------------------------------
+
+
+def _end(w: CassetteWriter) -> object:
+    return w.emit(
+        "session_end",
+        reason="cassette_full",
+        tool_calls=0,
+        forwarded_calls=0,
+        sandboxed_calls=0,
+        upstream_stderr="",
+        upstream_stderr_truncated=False,
+        dropped_events=w.dropped,
+    )
+
+
+def test_byte_cap_drops_events_calls_on_full_once_and_keeps_room_for_the_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cassette, "FINAL_RESERVE", 1500)
+    path = tmp_path / "c.jsonl"
+    calls: list[int] = []
+    w: CassetteWriter
+
+    def on_full() -> None:
+        calls.append(1)
+        assert w.emit("error", error_kind="cassette_full", detail="cap") is not None
+
+    w = CassetteWriter(path, max_bytes=4000, on_full=on_full)
+    written = 0
+    for i in range(100):
+        if w.emit("agent_request", message={"i": i, "pad": "x" * 100}) is not None:
+            written += 1
+    assert w.full and calls == [1]
+    assert 0 < written < 100
+    assert w.emit("error", error_kind="late", detail="dropped") is None  # only ONE final error
+    assert _end(w) is not None
+    w.close()
+    assert path.stat().st_size <= 4000
+    events = load_cassette(path)  # still a valid chain
+    assert [e.kind for e in events[-2:]] == ["error", "session_end"]
+    assert events[-1].dropped_events == w.dropped > 0  # type: ignore[union-attr]
+
+
+def test_no_cap_by_default(tmp_path: Path) -> None:
+    w = CassetteWriter(tmp_path / "c.jsonl")
+    for i in range(50):
+        assert w.emit("agent_request", message={"i": i}) is not None
+    assert not w.full
+    w.close()

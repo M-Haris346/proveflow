@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from proveflow.proxy.names import colliding_names
 from proveflow.proxy.policy import ToolPolicy
 
 UPSTREAM_ALLOWED: frozenset[str] = frozenset(
@@ -38,7 +39,8 @@ class GateBlocked(RuntimeError):
 
 class UpstreamGate:
     """``tools/call`` passes only for names that are ``forward=True`` in the policy AND in
-    the upstream's own ``tools/list`` (the full D3 forward condition, enforced here
+    the upstream's own ``tools/list`` AND not colliding with another listed name AND not a
+    sink by the proxy's own classifier (the full forward condition, enforced here
     independently of the handler). Until ``set_advertised`` is called, no ``tools/call``
     passes at all."""
 
@@ -47,12 +49,15 @@ class UpstreamGate:
         self._forward: frozenset[str] = frozenset()
         self._advertised_set = False
 
-    def set_advertised(self, names: frozenset[str]) -> None:
-        """Called once, after the upstream's tools/list; can only narrow the forward set."""
+    def set_advertised(self, names: frozenset[str], *, proxy_sinks: frozenset[str]) -> None:
+        """Called once, after the upstream's tools/list; can only narrow the forward set.
+
+        ``proxy_sinks``: names the PROXY's own classifier marks as sink (second opinion).
+        Names that collide under ``names.name_key`` are removed here too (L1)."""
         if self._advertised_set:
             raise RuntimeError("advertised tools already set")
         self._advertised_set = True
-        self._forward = self._policy_forward & names
+        self._forward = (self._policy_forward & names) - colliding_names(names) - proxy_sinks
 
     def check(self, message: object) -> None:
         method = getattr(message, "method", None)

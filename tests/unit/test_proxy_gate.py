@@ -6,10 +6,11 @@ import mcp_types
 import pytest
 
 from proveflow.proxy.gate import UPSTREAM_ALLOWED, GateBlocked, UpstreamGate
-from proxyhelpers import FORWARDED, TWIN_ROLES, TWIN_TOOLS, twin_policy
+from proveflow.proxy.policy import ToolPolicy
+from proxyhelpers import FORWARDED, LOOKALIKE, TWIN_ROLES, TWIN_TOOLS, twin_policy
 
 GATE = UpstreamGate(twin_policy())
-GATE.set_advertised(TWIN_TOOLS)
+GATE.set_advertised(TWIN_TOOLS, proxy_sinks=frozenset())
 GATE_FORWARD = FORWARDED & TWIN_TOOLS  # policy-forward AND advertised upstream
 
 
@@ -97,9 +98,9 @@ def test_no_tools_call_before_upstream_list_is_known() -> None:
 
 def test_advertised_set_only_once() -> None:
     gate = UpstreamGate(twin_policy())
-    gate.set_advertised(frozenset({"query_db"}))
+    gate.set_advertised(frozenset({"query_db"}), proxy_sinks=frozenset())
     with pytest.raises(RuntimeError):
-        gate.set_advertised(TWIN_TOOLS)
+        gate.set_advertised(TWIN_TOOLS, proxy_sinks=frozenset())
     with pytest.raises(GateBlocked):
         gate.check(request("tools/call", {"name": "read_page"}))
     gate.check(request("tools/call", {"name": "query_db"}))
@@ -128,6 +129,24 @@ def test_non_empty_result_to_upstream_is_blocked() -> None:
 
 def test_empty_policy_blocks_every_tools_call() -> None:
     gate = UpstreamGate({})
-    gate.set_advertised(TWIN_TOOLS)
+    gate.set_advertised(TWIN_TOOLS, proxy_sinks=frozenset())
     with pytest.raises(GateBlocked):
         gate.check(request("tools/call", {"name": "read_page"}))
+
+
+def test_proxy_classifier_sink_is_blocked_even_if_policy_forwards() -> None:
+    """H1 second opinion on the write path: the session says forward, the proxy says sink."""
+    gate = UpstreamGate({"send_email": ToolPolicy(forward=True, inject=False)})
+    gate.set_advertised(frozenset({"send_email"}), proxy_sinks=frozenset({"send_email"}))
+    with pytest.raises(GateBlocked):
+        gate.check(request("tools/call", {"name": "send_email"}))
+
+
+def test_advertised_lookalike_names_are_all_blocked() -> None:
+    """L1 on the write path: the twin lists send_email AND a look-alike; the session only
+    knows (and forwards) the look-alike. Both are blocked."""
+    gate = UpstreamGate({LOOKALIKE: ToolPolicy(forward=True, inject=False)})
+    gate.set_advertised(frozenset({"send_email", LOOKALIKE}), proxy_sinks=frozenset())
+    for name in ("send_email", LOOKALIKE):
+        with pytest.raises(GateBlocked):
+            gate.check(request("tools/call", {"name": name}))

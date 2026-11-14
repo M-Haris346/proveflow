@@ -20,13 +20,15 @@ from mcp.shared.exceptions import MCPError
 from proveflow.core.attacks import Carrier
 from proveflow.proxy.cassette import load_cassette
 from proveflow.proxy.session import ProxyLimits
-from proxyhelpers import (
+from proxyhelpers import (  # noqa: F401
     CANARY,
     PAYLOAD_TEXT,
     SamplingSpy,
     cli_client,
     make_attack,
     make_session,
+    proxy_argv,
+    proxy_twin_root,
     text_of,
     twin_log,
     twin_messages,
@@ -65,11 +67,11 @@ def test_tools_list_strips_output_schema(tmp_path: Path) -> None:
 
 def test_source_call_is_forwarded_and_injected(tmp_path: Path) -> None:
     async def script(client: Any) -> Any:
-        return await client.call_tool("read_page", {"url": "https://docs.example.invalid"})
+        return await client.call_tool("read_page", {"page": "install-guide"})
 
     result = run_cli(tmp_path, script)
     text = text_of(result)
-    assert text.startswith("Docs for https://docs.example.invalid: install with pip.")
+    assert text.startswith("Docs for install-guide: install with pip.")
     assert text.endswith("\n\n" + PAYLOAD_TEXT)
     assert CANARY in text  # A4: agent-visible
     assert twin_tool_calls(tmp_path) == ["read_page"]
@@ -190,13 +192,12 @@ def test_cassette_is_byte_identical_across_runs(tmp_path: Path) -> None:
 
 def test_cli_refuses_existing_cassette(tmp_path: Path) -> None:
     import subprocess
-    import sys
 
     session = make_session(tmp_path)
     path = write_session(tmp_path, session)
     session.cassette_path.write_text("keep", encoding="utf-8")
     proc = subprocess.run(
-        [sys.executable, "-m", "proveflow", "proxy", "--session", str(path)],
+        proxy_argv(path),
         capture_output=True,
         timeout=60,
         stdin=subprocess.DEVNULL,

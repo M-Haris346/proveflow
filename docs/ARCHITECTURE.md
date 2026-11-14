@@ -183,20 +183,31 @@ sequenceDiagram
   - twin generator (Phase 4), oracle (3), agent runner/LLM (6), corpus (6), mitigations (8),
     replay CLI (5);
   - Streamable HTTP, `--real-reads`.
-- **D2 layer A.**
-  - `TwinUpstream(name, argv)` is valid only for `[sys.executable, /abs/path/twin.py, ...]`. It
-    is checked at validation and again before spawn.
+- **D2 layer A: proveflow-owned twin dir + hash pin** (Phase 2.1 H2).
+  - `TwinUpstream(name, argv)` is valid only for `[sys.executable, /abs/path/twin.py, ...]`,
+    where the script resolves (realpath) under `TWIN_ROOT` (per-user data dir + `twins`).
+    `TWIN_ROOT` has no flag or env override.
+  - The session pins `twin_sha256`. Before spawn the script is copied into the private temp
+    cwd, the copy is hashed (a mismatch is refused), and the copy runs.
+  - This refuses installed real servers and other `.py` files. It does not prove that a script
+    placed inside `TWIN_ROOT` is harmless.
   - `proxy/` imports no `discover*`, `introspect.launchspec`/`transport`/`runner` or
-    `core.client`. An AST scan and a fresh-interpreter `sys.modules` check enforce this. The CLI
-    process itself loads `discover` (accepted).
+    `core.client`. Enforced by an AST scan, an import-time fresh-interpreter check, and a
+    runtime check after a full session. The CLI process itself loads `discover` (accepted).
   - The upstream starts through `introspect.procs.spawn` (Job Object / process group) with a
-    minimal env and an empty temp cwd.
-- **D3 layer B, default deny.**
-  - `ToolPolicy(forward, inject)`. `forward` = roles non-empty, AND no `sink`, AND all evidence
-    tool-granularity, AND name ≠ `*`. `inject` = `untrusted_source` in roles.
-  - A `tools/call` that is not forward, or not in the twin's own `tools/list`, gets the sandbox
-    response.
-  - **No flag, env var or config disables the sandbox.** One mode only: twin mode.
+    minimal env.
+- **D3 layer B, default deny + second opinion** (Phase 2.1 H1, L1).
+  - The session carries classified `ToolSpec`s; the proxy computes `ToolPolicy(forward,
+    inject)` itself.
+    - `forward` = roles non-empty, AND no `sink`, AND all evidence tool-granularity, AND
+      name ≠ `*`, AND no look-alike collision (NFKC + casefold + removal of
+      Default_Ignorable_Code_Point).
+    - `inject` = `untrusted_source` in roles.
+  - The proxy also runs the v2 classifier on each tool the **twin advertises**. A tool it marks
+    `sink` is never forwarded, whatever the session says.
+  - Advertised look-alikes are denied together.
+  - Anything not forwarded gets the sandbox response.
+  - **No flag, env var or session field disables the sandbox.** One mode only: twin mode.
 - **D4 methods.**
   - To upstream: `initialize`, `notifications/initialized`, `tools/list`, `tools/call` (gated),
     `ping`, `notifications/cancelled`.
@@ -208,9 +219,11 @@ sequenceDiagram
 - **D5 gate + fail closed.**
   - `UpstreamGate` on the write path (stream `send` + writer task) raises before any byte is
     written, independently of the handler.
-  - Exception, oversized line, crash, invalid line or timeout → `isError=true` "proveflow
-    proxy: <reason>", and nothing is forwarded.
-  - Limits (tighten-only): per call 30 s, session 600 s, at most 200 tool calls.
+  - Exception, oversized line (bytes), crash, invalid line or timeout → `isError=true`
+    "proveflow proxy: <reason>", and nothing is forwarded.
+  - Limits (tighten-only): per call 30 s, session 600 s, at most 200 tool calls, 1000 agent
+    messages, 2000 upstream messages, 32 MiB cassette. The last three end the session
+    fail-closed (Phase 2.1 M1).
   - Proxy exit or kill → the twin's tree is killed. POSIX SIGKILL residual: the twin exits on
     stdin EOF.
 - **D6 sandbox.**
@@ -225,8 +238,9 @@ sequenceDiagram
     `json.dumps(payload)`.
   - Injection happens only for `inject=True`, only into the first TextContent, and only with an
     armed `Attack`. Otherwise an `injection_skipped` event is recorded.
-- **D8 session.** `ProxySession` (pydantic, `extra=forbid`, schema 1): session_id, upstream,
-  policy, attack, cassette_path (absolute, never overwritten), limits.
+- **D8 session.** `ProxySession` (pydantic, `extra=forbid`, schema 2 since Phase 2.1):
+  session_id, upstream, twin_sha256, tools (classified `ToolSpec`s; a `policy` key is
+  rejected), attack, cassette_path (absolute, never overwritten), limits.
 - **D9 cassette** (`proxy/cassette.py`):
   - JSONL, one validated event per line;
   - `seq`, no wall clock;
@@ -236,10 +250,15 @@ sequenceDiagram
   - upstream stderr scrubbed.
   - `load_cassette` validates the models, seq order, chain and canonical form, with a 16 MiB
     line and 64 MiB file limit. Replay is Phase 5.
-- **D10 evidence.** The test twin logs every received line before parsing. Safety tests use
-  that log, not the cassette.
-- **Residual (ADR-006):** a real sink mislabeled as source/private only is forwarded **to the
-  twin**. That is harmless in twin mode, but must be closed before `--real-reads`.
+- **D10 evidence.** The test twin logs every received line as raw bytes before decoding.
+  Safety tests use that log, not the cassette.
+- **Residuals (ADR-006, docs/BACKLOG.md):**
+  - A sink that both the session's labels and the proxy's classifier miss is forwarded **to
+    the twin** (held-out sink recall 16/25). Harmless in twin mode; must be closed before
+    `--real-reads`.
+  - Fetch-a-URL sources are classified source+sink and never forwarded.
+  - L3: the gate allows any error response and any cancel params.
+  - L4: cancellation during spawn.
 
 ### 5.6 Agent runner `agents/`
 - **builtin**: tool-calling loop over LiteLLM. Providers: Groq, Gemini, Cerebras, OpenRouter (free tiers — limits change, checked at runtime via 429 handling, not hard-coded), Ollama local (3–4B models on CPU; small runs only).
@@ -355,7 +374,7 @@ proveflow/
 |---|---|---|---|
 | **0 Foundation** | Repo, tooling, CI, CLI skeleton, core models, docs (METHODOLOGY v0, THREAT_MODEL v0, COMPETITORS, DATASETS audit, CLIENT_CONFIGS verified, ADRs) | **Done 2026-11-10** [impl][tested]: ruff/mypy-strict/pytest (79 tests) green locally on Windows; CI workflow written but **never run** (repo has no remote yet); audits filled with source links, pending Haris review | 2–3 d |
 | **1 Find** | discover + redaction, introspect (tools/list only), role classifier, flow graph, terminal + SARIF report; labeled tool set for classifier eval | `proveflow scan` on Haris's real machine; classifier precision/recall **[measured]**; redaction property tests. **1a done 2026-11-10** [impl][tested]. **1b introspection [impl][tested] 2026-11-12**: consented tools/list with a method allowlist; Job Object / process-group kill; safe PATH resolution and temp cwd; project-scope consent; unresolved-variable refusal; discover→legacy relaunch; tool cache + PF-TOOLCHANGE; PF-UNPINNED. Tested with a fake server on Windows; CI run 43059686222 green on ubuntu + windows at 3b66868. **1b done 2026-11-13**: real-machine `scan` run by the author (1 real stdio server; consent yes → `ok`, consent no → `declined`; `leak_check` clean both times; output not committed). Classifier baseline **[measured] once** (docs/eval/RESULTS.md); caveat: the test split is mostly reference servers, dev recall ~0.2–0.3, labels are LLM pre-labels reviewed by the author. Fixed from the real-machine run: silent drop of out-of-project servers (T16); UTF-8 `--json` on Windows. **1c done 2026-11-13**: classifier v2 (rules tuned on dev only, docs/eval/V2_CHANGELOG.md) measured once with v1 on a fresh held-out set (docs/eval/RESULTS_V2.md): held-out (55 tools, 7 servers, single blind human labeler): sink recall 8/25 -> 16/25, mostly one rule (C1) on one server; private_data recall 4/20 for both; 10 of 13 v2 rules untested; large dev-to-held-out gap. **Flow grouping [impl][tested] 2026-11-14** (§5.3; scan report schema 2): one table row per group; reduces rows, not tool paths. Phase 1 done. | 5–6 d |
-| **2 Proxy** | stdio proxy, sink sandbox, carriers, cassette | Safety tests prove no sink forwarding. **[impl][tested] 2026-11-14** (§5.5, ADR-006): `proveflow proxy --session` serves ONE python twin (layer A) with a default-deny policy + write-path gate (layer B); sandbox not disableable; 5 carriers; hash-chained cassette with validating loader; limits; fail closed. Tested only against a fake twin written for the tests (no real server, no network, no LLM, no agent loop); Windows locally; POSIX kill tests run only in CI. Not built: twin generator, oracle, agent runner, corpus, mitigations, replay CLI, Streamable HTTP, `--real-reads`. **Next:** Phase 3 (Oracle) | 3–4 d |
+| **2 Proxy** | stdio proxy, sink sandbox, carriers, cassette | Safety tests prove no sink forwarding. **[impl][tested] 2026-11-14** (§5.5, ADR-006): `proveflow proxy --session` serves ONE python twin (layer A) with a default-deny policy + write-path gate (layer B); sandbox not disableable; 5 carriers; hash-chained cassette with validating loader; limits; fail closed. **Phase 2.1 (review fixes)**: layer A = proveflow-owned twin dir + sha256 pin (copy hashed, copy runs); session carries classified tools, the proxy computes the policy and adds its own classifier's second opinion on advertised tools; look-alike names denied; byte-counted lines; message and cassette caps end the session fail-closed; raw-byte twin log; runtime import guard. Residuals: classifier miss on innocently described sinks (16/25 held-out recall), L3, L4 (docs/BACKLOG.md). Tested only against a fake twin written for the tests (no real server, no network, no LLM, no agent loop); Windows locally and in CI; POSIX kill tests run only in CI (run `43509278369`, ubuntu: not skipped, 0 failed). Not built: twin generator, oracle, agent runner, corpus, mitigations, replay CLI, Streamable HTTP, `--real-reads`. **Next:** Phase 3 (Oracle) | 3–4 d |
 | **3 Oracle** | canary, encodings, matcher, R1–R4, FakeLLM policies | Exact FakeLLM verdicts; mutation tests fail as designed | 3–4 d |
 | **4 Twin** | twin generator, archetypes, synthetic data, honey secrets, schema validation | Twin of pg-mcp-guard + 2 public servers runs under proxy | 4–5 d |
 | **5 Runner + store** | LiteLLM loop, command adapter, retries/429, SQLite, replay | One real trial on free tier; replay reproduces verdict | 3–4 d |

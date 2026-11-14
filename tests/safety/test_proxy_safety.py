@@ -2,8 +2,13 @@
 
 * zero tools/call for sink, unknown, unclassified and not-advertised tools reach the twin;
   forwarded calls equal exactly the expected list
+* H1: a session whose evidence forges a sink as private cannot get it forwarded (the
+  proxy's own classifier); a ``policy`` key is refused
 * the gate blocks on the write path even with no handler involved
-* a non-python upstream is refused before anything is spawned
+* H2: a non-python upstream, an installed package module, a .py outside TWIN_ROOT, a
+  symlink escaping TWIN_ROOT, and a hash-pin mismatch are all refused before spawn
+* M2: the twin log is raw bytes written before decoding (tested with unparseable input)
+* L5: a full in-process session in ``python -I`` loads no forbidden module
 * killing the proxy kills the twin (Windows: TerminateProcess + Job; POSIX: SIGTERM handler
   kills the tree; SIGKILL: the twin exits on stdin EOF - residual in ADR-006)
 * import guard: AST scan + a fresh ``python -I`` interpreter's sys.modules
@@ -28,15 +33,26 @@ from typer.testing import CliRunner
 import proveflow.proxy
 from proveflow.cli import app
 from proveflow.introspect import procs
+from proveflow.proxy import policy as policy_module
 from proveflow.proxy import upstream
 from proveflow.proxy.gate import UpstreamGate
 from proveflow.proxy.policy import TwinUpstream, TwinUpstreamError
 from proxychecks import (
+    assert_forged_session_cannot_forward_sink,
     assert_gate_blocks_on_write_path,
     assert_sink_call_sandboxed,
     assert_twin_never_sees_denied_calls,
 )
-from proxyhelpers import make_session, twin_messages, write_session
+from proxyhelpers import (  # noqa: F401
+    TWIN_SRC,
+    make_escape_link,
+    make_session,
+    proxy_argv,
+    proxy_twin_root,
+    twin_messages,
+    twin_script,
+    write_session,
+)
 
 PROXY_DIR = Path(proveflow.proxy.__file__).parent
 FORBIDDEN_PREFIXES = ("proveflow.discover",)
@@ -60,19 +76,44 @@ def test_gate_blocks_on_write_path(tmp_path: Path) -> None:
     assert_gate_blocks_on_write_path(tmp_path)
 
 
-def test_twin_log_records_before_parsing(tmp_path: Path) -> None:
-    """A3: the twin log is written before parsing, so even a line the twin cannot parse
-    would be visible. Every logged line here is a JSON-RPC message from the proxy."""
-    assert_twin_never_sees_denied_calls(tmp_path)
-    messages = twin_messages(tmp_path)
-    assert messages[0]["method"] == "initialize"
-    assert {m.get("method") for m in messages} <= {
-        "initialize",
-        "notifications/initialized",
-        "tools/list",
-        "tools/call",
-        None,  # responses (none expected here, allowed by D4)
-    }
+def test_forged_session_cannot_forward_sink(tmp_path: Path) -> None:
+    assert_forged_session_cannot_forward_sink(tmp_path)
+
+
+def test_cli_refuses_session_with_policy_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _forbid_spawn(monkeypatch)
+    data = json.loads(make_session(tmp_path).model_dump_json())
+    data["policy"] = {"send_email": {"forward": True, "inject": False}}
+    path = tmp_path / "session.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    result = CliRunner().invoke(app, ["proxy", "--session", str(path)])
+    assert result.exit_code == 1
+    assert "policy" in result.output
+    assert calls == []
+
+
+def test_twin_log_records_raw_bytes_before_parsing(tmp_path: Path) -> None:
+    """M2/A3: lines the twin cannot decode or parse are in its log, byte-exact, in order,
+    before the valid message that follows them."""
+    log = tmp_path / "raw.log"
+    lines = [
+        b"this is not json",
+        b'[{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"send_email"}}]',
+        b"\xff\xfe",
+        b'{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":'
+        b'"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}',
+    ]
+    proc = subprocess.run(
+        [sys.executable, str(TWIN_SRC), "--log", str(log)],
+        input=b"".join(line + b"\n" for line in lines),
+        capture_output=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert log.read_bytes().split(b"\n")[:-1] == lines
+    assert b'"id":2' in proc.stdout  # the twin kept serving and answered initialize
 
 
 # --- refused before spawn ----------------------------------------------------------------
@@ -117,18 +158,92 @@ def test_transport_rechecks_twin_argv_before_spawn(
     """Even a TwinUpstream built WITHOUT validation (model_construct) is refused."""
     calls = _forbid_spawn(monkeypatch)
     forged = TwinUpstream.model_construct(name="real", argv=("npx", "-y", "server"))
+    with pytest.raises(TwinUpstreamError):
+        _open_transport(tmp_path, forged)
+    assert calls == []
+
+
+def _open_transport(tmp_path: Path, up: TwinUpstream, sha: str | None = None) -> None:
     session = make_session(tmp_path)
 
     async def run() -> None:
         async with upstream.twin_stdio(
-            forged, UpstreamGate(session.policy), upstream.UpstreamState(),
-            lambda *a, **k: None, dict(os.environ),
-        ):  # fmt: skip
+            up,
+            sha or session.twin_sha256,
+            UpstreamGate(session.policy),
+            upstream.UpstreamState(),
+            lambda *a, **k: None,
+            dict(os.environ),
+            max_messages=100,
+            on_limit=lambda reason: None,
+        ):
             raise AssertionError("must not get here")
 
-    with pytest.raises(TwinUpstreamError):
-        anyio.run(run)
+    anyio.run(run)
+
+
+def _forge(argv1: Path) -> TwinUpstream:
+    return TwinUpstream.model_construct(name="twin", argv=(sys.executable, str(argv1)))
+
+
+def test_installed_package_module_refused_before_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import mcp
+
+    calls = _forbid_spawn(monkeypatch)
+    with pytest.raises(TwinUpstreamError, match="TWIN_ROOT"):
+        _open_transport(tmp_path, _forge(Path(mcp.__file__).parent / "server" / "__main__.py"))
     assert calls == []
+
+
+def test_py_outside_twin_root_refused_before_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _forbid_spawn(monkeypatch)
+    outside = tmp_path / "fake_twin.py"
+    outside.write_bytes(twin_script().read_bytes())  # identical content, wrong place
+    with pytest.raises(TwinUpstreamError, match="TWIN_ROOT"):
+        _open_transport(tmp_path, _forge(outside))
+    assert calls == []
+
+
+def test_symlink_escaping_twin_root_refused_before_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _forbid_spawn(monkeypatch)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = make_escape_link(policy_module.TWIN_ROOT, outside)
+    with pytest.raises(TwinUpstreamError, match="TWIN_ROOT"):
+        _open_transport(tmp_path, _forge(link))
+    assert calls == []
+
+
+def test_hash_mismatch_refused_before_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The session pins twin_sha256; the twin file changed afterwards -> refused (the copy
+    in the private cwd is what gets hashed)."""
+    calls = _forbid_spawn(monkeypatch)
+    session = make_session(tmp_path)  # pins the current hash
+    twin_script().write_bytes(twin_script().read_bytes() + b"\n# swapped after the session\n")
+    with pytest.raises(TwinUpstreamError, match="sha256"):
+        _open_transport(tmp_path, session.upstream, session.twin_sha256)
+    assert calls == []
+
+
+def test_cli_hash_mismatch_refused(tmp_path: Path) -> None:
+    """Same through the real CLI subprocess: exit 1, no twin ever started."""
+    data = json.loads(make_session(tmp_path).model_dump_json())
+    data["twin_sha256"] = "0" * 64
+    path = tmp_path / "session.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    proc = subprocess.run(proxy_argv(path), capture_output=True, timeout=60, stdin=subprocess.PIPE)
+    assert proc.returncode == 1
+    assert not (tmp_path / "twin.log").exists()
+    events = (tmp_path / "cassette.jsonl").read_text(encoding="utf-8").splitlines()
+    assert any(json.loads(e).get("detail") == "TwinUpstreamError" for e in events)
 
 
 # --- killing the proxy kills the twin ------------------------------------------------------
@@ -149,7 +264,7 @@ def _start_proxy(tmp_path: Path) -> tuple[subprocess.Popen[bytes], psutil.Proces
     launcher that runs the real interpreter as a child)."""
     path = write_session(tmp_path, make_session(tmp_path))
     proc = subprocess.Popen(
-        [sys.executable, "-m", "proveflow", "proxy", "--session", str(path)],
+        proxy_argv(path),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -169,10 +284,19 @@ def _start_proxy(tmp_path: Path) -> tuple[subprocess.Popen[bytes], psutil.Proces
     return proc, psutil.Process(top.ppid())
 
 
+def _is_alive(p: psutil.Process) -> bool:
+    """A process that vanished between listing and inspection is gone (the success case);
+    a zombie is gone too. Fixes a NoSuchProcess race seen once in a local full-suite run."""
+    try:
+        return p.status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+
+
 def _assert_twins_gone(tmp_path: Path, timeout: float = 20) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        alive = [p for p in _twin_processes(tmp_path) if p.status() != psutil.STATUS_ZOMBIE]
+        alive = [p for p in _twin_processes(tmp_path) if _is_alive(p)]
         if not alive:
             return
         time.sleep(0.2)
@@ -271,6 +395,42 @@ def test_fresh_interpreter_import_guard() -> None:
     )
     data = json.loads(proc.stdout)
     assert "proveflow.proxy.server" in data["mods"] and "proveflow.proxy.upstream" in data["mods"]
+    assert "proveflow.flows.roles" in data["loaded"]  # the second opinion is in the guard
+    leaked = [m for m in data["loaded"] if _forbidden(m)]
+    assert leaked == []
+
+
+RUNTIME_GUARD = """
+import json, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import proveflow.proxy.policy as p
+p.TWIN_ROOT = Path(sys.argv[2])
+from proxyhelpers import make_attack, make_session, run_in_process
+tmp = Path(sys.argv[3])
+async def script(c):
+    await c.list_tools()
+    for n in ("read_page", "send_email", "structured", "bump_tools", "crash"):
+        await c.call_tool(n, {})
+_, outcome = run_in_process(make_session(tmp, attack=make_attack()), script)
+print(json.dumps({"reason": outcome.reason, "loaded": sorted(sys.modules)}))
+"""
+
+
+def test_runtime_import_guard_after_full_session(tmp_path: Path) -> None:
+    """L5: a FULL in-process session (injection, sink, structured, notification, crash) in a
+    fresh ``python -I`` interpreter: still no forbidden module in sys.modules afterwards."""
+    tests_dir = Path(__file__).resolve().parents[1]
+    proc = subprocess.run(
+        [sys.executable, "-I", "-c", RUNTIME_GUARD, str(tests_dir),
+         str(policy_module.TWIN_ROOT), str(tmp_path)],
+        capture_output=True,
+        timeout=180,
+    )  # fmt: skip
+    assert proc.returncode == 0, proc.stderr[-3000:]
+    data = json.loads(proc.stdout.splitlines()[-1])
+    assert data["reason"] == "agent_closed"
+    assert "proveflow.proxy.server" in data["loaded"]
     leaked = [m for m in data["loaded"] if _forbidden(m)]
     assert leaked == []
 

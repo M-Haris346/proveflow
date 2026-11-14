@@ -335,7 +335,10 @@ def proxy(
         Path,
         typer.Option(
             "--session",
-            help="Proxy session JSON (twin upstream, tool policy, optional attack, cassette).",
+            help=(
+                "Proxy session JSON (twin upstream + sha256 pin, classified tools, "
+                "optional attack, cassette)."
+            ),
             exists=True,
             dir_okay=False,
         ),
@@ -343,11 +346,15 @@ def proxy(
 ) -> None:
     """Serve ONE twin upstream to an agent as a stdio MCP server (twin mode only).
 
-    The upstream must be this Python interpreter running a .py twin; real servers (npx,
-    uvx, node, docker, URLs) are refused. Every tools/call that is not explicitly allowed
-    (sink, unknown, unclassified, server-level) gets a sandbox response and is never
-    forwarded. The sandbox cannot be disabled: there is no flag, env var or config for it.
-    Everything is recorded in the session's cassette (JSONL, hash-chained).
+    The upstream must be this Python interpreter running a .py script inside the proveflow
+    twin directory (per-user data dir/twins), whose sha256 matches the session pin; npx,
+    uvx, node, docker, URLs and any other .py file are refused. The session lists classified
+    tools, never allow/deny decisions: the proxy computes the policy itself and also runs its
+    own classifier on what the twin advertises. Every tools/call it does not allow (sink by
+    either opinion, unknown, unclassified, server-level, look-alike names) gets a sandbox
+    response and is never forwarded. No flag, env var or session field disables this.
+    Residual: a sink that both the session and the proxy's classifier miss is forwarded to
+    the twin. Everything is recorded in the session's cassette (JSONL, hash-chained).
     """
     # Lazy: the proxy (and the MCP SDK) load only for this command. stdout is the MCP
     # channel, so every message here goes to stderr.

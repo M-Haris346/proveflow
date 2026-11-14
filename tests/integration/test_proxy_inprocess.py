@@ -4,7 +4,6 @@ limits (A2), fail-closed paths (D5), dropped notifications, injection skips."""
 from __future__ import annotations
 
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -15,14 +14,112 @@ import pytest
 
 from proveflow.proxy.cassette import load_cassette
 from proveflow.proxy.session import ProxyLimits
-from proxyhelpers import (
+from proxyhelpers import (  # noqa: F401
+    LOOKALIKE,
+    PRIVATE,
+    TWIN_ROLES,
     make_attack,
     make_session,
+    proxy_argv,
+    proxy_twin_root,
     run_in_process,
     text_of,
     twin_tool_calls,
     write_session,
 )
+
+
+async def _loop(client: Any, n: int, call: str = "list_tools") -> int:
+    """Call ``n`` times; stop at the first failure (the proxy ended the session)."""
+    done = 0
+    for _ in range(n):
+        try:
+            with anyio.fail_after(10):
+                if call == "list_tools":
+                    await client.list_tools()
+                else:
+                    await client.call_tool(call, {})
+        except Exception:
+            break
+        done += 1
+    return done
+
+
+def test_cassette_byte_cap_ends_session_and_file_still_loads(tmp_path: Path) -> None:
+    """M1: a list_tools loop fills the cassette; the session ends with cassette_full."""
+
+    async def script(client: Any) -> Any:
+        return await _loop(client, 500)
+
+    limits = ProxyLimits(max_cassette_bytes=100_000)
+    done, outcome = run_in_process(make_session(tmp_path, limits=limits), script)
+    assert outcome.reason == "cassette_full"
+    assert done < 500
+    assert (tmp_path / "cassette.jsonl").stat().st_size <= 100_000
+    events = load_cassette(tmp_path / "cassette.jsonl")  # still valid
+    assert events[-1].kind == "session_end" and events[-1].reason == "cassette_full"
+    assert events[-1].dropped_events >= 1
+    assert "cassette_full" in error_kinds(tmp_path)
+
+
+def test_agent_message_cap_ends_session(tmp_path: Path) -> None:
+    async def script(client: Any) -> Any:
+        return await _loop(client, 50)
+
+    limits = ProxyLimits(max_agent_messages=10)
+    done, outcome = run_in_process(make_session(tmp_path, limits=limits), script)
+    assert outcome.reason == "agent_message_limit"
+    assert done < 10
+    assert "agent_message_limit" in error_kinds(tmp_path)
+
+
+def test_upstream_message_cap_ends_session(tmp_path: Path) -> None:
+    async def script(client: Any) -> Any:
+        return await _loop(client, 20, call="query_db")
+
+    limits = ProxyLimits(max_upstream_messages=5)
+    done, outcome = run_in_process(make_session(tmp_path, limits=limits), script)
+    assert outcome.reason == "upstream_message_limit"
+    assert done < 20
+    assert "upstream_message_limit" in error_kinds(tmp_path)
+    # The cap counts messages RECEIVED from the twin: initialize result (1), tools/list
+    # result (2), three query_db results (3-5). The 4th query_db was already forwarded when
+    # its result (message 6) hit the cap, so the twin saw exactly 4 calls, then nothing.
+    assert twin_tool_calls(tmp_path) == ["query_db"] * 4
+
+
+def test_lookalike_pair_in_session_is_all_sandboxed(tmp_path: Path) -> None:
+    """L1 end to end: session labels send_email sink and its look-alike private; the twin
+    lists both. Both are sandboxed; the twin log has zero tools/call for either."""
+
+    async def script(client: Any) -> Any:
+        return [await client.call_tool(n, {}) for n in ("send_email", LOOKALIKE)]
+
+    roles = {**TWIN_ROLES, LOOKALIKE: (PRIVATE,)}
+    session = make_session(tmp_path, roles=roles, twin_args=("--lookalike",))
+    results, _ = run_in_process(session, script)
+    assert [text_of(r) for r in results] == [
+        '{"ok": true, "id": "sbx_0001"}',
+        '{"ok": true, "id": "sbx_0002"}',
+    ]
+    assert twin_tool_calls(tmp_path) == []
+
+
+def test_twin_lookalike_of_unknown_sink_is_sandboxed(tmp_path: Path) -> None:
+    """L1: the session never heard of send_email and labels only the look-alike private;
+    the TWIN lists both. The advertised collision denies the look-alike (name_collision)."""
+
+    async def script(client: Any) -> Any:
+        return await client.call_tool(LOOKALIKE, {})
+
+    roles = {k: v for k, v in TWIN_ROLES.items() if k != "send_email"} | {LOOKALIKE: (PRIVATE,)}
+    session = make_session(tmp_path, roles=roles, twin_args=("--lookalike",))
+    assert session.policy[LOOKALIKE].forward is True
+    result, _ = run_in_process(session, script)
+    assert text_of(result) == '{"ok": true, "id": "sbx_0001"}'
+    assert twin_tool_calls(tmp_path) == []
+    [sbx] = events_of(tmp_path, "sandboxed_call")
+    assert sbx.reason == "name_collision"
 
 
 def events_of(tmp_path: Path, kind: str) -> list[Any]:
@@ -87,7 +184,7 @@ def test_cli_session_timeout_exits_and_kills_twin(tmp_path: Path) -> None:
     session = make_session(tmp_path, limits=ProxyLimits(session_timeout_s=2))
     path = write_session(tmp_path, session)
     proc = subprocess.Popen(
-        [sys.executable, "-m", "proveflow", "proxy", "--session", str(path)],
+        proxy_argv(path),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -134,7 +231,7 @@ def test_upstream_garbage_line_fails_closed(tmp_path: Path) -> None:
 
 def test_upstream_notifications_are_dropped_and_recorded(tmp_path: Path) -> None:
     async def script(client: Any) -> Any:
-        return await client.call_tool("notify", {})
+        return await client.call_tool("bump_tools", {})
 
     result, _ = run_in_process(make_session(tmp_path), script)
     assert text_of(result) == "notified"
@@ -162,7 +259,7 @@ def test_injection_skipped_for_non_text(tmp_path: Path, tool: str, reason: str) 
 
 def test_no_attack_armed_means_no_injection(tmp_path: Path) -> None:
     async def script(client: Any) -> Any:
-        return await client.call_tool("read_page", {"url": "u"})
+        return await client.call_tool("read_page", {"page": "u"})
 
     result, _ = run_in_process(make_session(tmp_path), script)
     assert text_of(result) == "Docs for u: install with pip."
@@ -171,7 +268,7 @@ def test_no_attack_armed_means_no_injection(tmp_path: Path) -> None:
 
 def test_upstream_response_raw_agent_response_transformed(tmp_path: Path) -> None:
     async def script(client: Any) -> Any:
-        return await client.call_tool("read_page", {"url": "u"})
+        return await client.call_tool("read_page", {"page": "u"})
 
     run_in_process(make_session(tmp_path, attack=make_attack()), script)
     [raw] = events_of(tmp_path, "upstream_response")
