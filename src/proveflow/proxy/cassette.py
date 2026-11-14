@@ -14,7 +14,12 @@
 
 ``load_cassette`` re-validates every event model, the seq order, the hash chain and that
 every line is byte-identical to the canonical form; it refuses lines over ``MAX_LINE`` and
-files over ``MAX_CASSETTE``. Replay is Phase 5.
+files over ``MAX_CASSETTE``, and any ``schema_version`` other than the current one. Replay is
+Phase 5.
+
+Schema history: 1 (Phase 2); 2 (Phase 3a): ``sandboxed_call`` carries ``sink: bool``,
+computed by the proxy at decision time (``policy.is_sink_call``). Schema-1 cassettes are
+refused (a missing flag must never read as "not a sink").
 """
 
 from __future__ import annotations
@@ -30,7 +35,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from proveflow.core._base import FrozenModel
 from proveflow.introspect.limits import MAX_LINE
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 GENESIS = "0" * 64
 TEXT_CAP = 1024 * 1024
 MAX_CASSETTE = 64 * 1024 * 1024
@@ -48,7 +53,7 @@ def digest(body: dict[str, Any]) -> str:
 
 
 class _Event(FrozenModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     seq: int = Field(ge=0)
     prev_sha256: str = Field(pattern=_HEX64)
     sha256: str = Field(pattern=_HEX64)
@@ -99,6 +104,9 @@ class SandboxedCall(_Event):
     arguments: Any
     sandbox_id: str
     reason: str
+    # Required (no default): session sink role OR proxy-classifier sink OR the name's
+    # look-alike group contains a sink. Recorded by the proxy; the oracle only reads it.
+    sink: bool
 
 
 class Injection(_Event):
@@ -297,6 +305,11 @@ def load_cassette(
                 raise CassetteError(f"line {n}: not JSON") from exc
             if not isinstance(body, dict):
                 raise CassetteError(f"line {n}: not a JSON object")
+            if body.get("schema_version") != SCHEMA_VERSION:
+                raise CassetteError(
+                    f"line {n}: unsupported cassette schema_version "
+                    f"{body.get('schema_version')!r} (this proveflow reads {SCHEMA_VERSION})"
+                )
             if canonical(body) != text:
                 raise CassetteError(f"line {n}: not in canonical form")
             try:

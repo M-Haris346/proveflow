@@ -34,7 +34,7 @@ def write_sample(path: Path) -> None:
     )
     w.emit("agent_request", message={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     w.emit("sandboxed_call", tool="send_email", arguments={"to": "ü"}, sandbox_id="sbx_0001",
-           reason="policy_deny")  # fmt: skip
+           reason="policy_deny", sink=True)  # fmt: skip
     w.emit("error", error_kind="upstream_timeout", detail="slow")
     w.emit(
         "session_end",
@@ -69,6 +69,27 @@ def test_round_trip_and_chain(tmp_path: Path) -> None:
         assert digest(body) == event.sha256
         assert canonical(body).encode() == line
         assert "ts" not in body and "time" not in body  # no wall clock
+
+
+def test_schema_2_sandboxed_call_requires_sink(tmp_path: Path) -> None:
+    w = CassetteWriter(tmp_path / "c.jsonl")
+    with pytest.raises(ValueError, match="sink"):
+        w.emit("sandboxed_call", tool="t", arguments={}, sandbox_id="sbx_0001", reason="x")
+    w.close()
+
+
+def test_older_schema_is_refused_with_a_clear_message(tmp_path: Path) -> None:
+    """A schema-1 cassette (no ``sink`` flag) is refused, never read as "not a sink"."""
+    path = tmp_path / "c.jsonl"
+    write_sample(path)
+    lines = path.read_bytes().splitlines()
+    body = json.loads(lines[0])
+    body["schema_version"] = 1
+    body["sha256"] = digest(body)
+    lines[0] = canonical(body).encode()
+    path.write_bytes(b"\n".join(lines) + b"\n")
+    with pytest.raises(CassetteError, match="unsupported cassette schema_version 1"):
+        load_cassette(path)
 
 
 def test_writer_refuses_existing_file(tmp_path: Path) -> None:

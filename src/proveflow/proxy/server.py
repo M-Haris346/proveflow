@@ -62,7 +62,13 @@ from proveflow.proxy.carriers import apply_carrier
 from proveflow.proxy.cassette import CassetteWriter
 from proveflow.proxy.gate import GateBlocked, UpstreamGate
 from proveflow.proxy.lines import LineSplitter, LineTooLong
-from proveflow.proxy.policy import Decision, ToolPolicy, decide
+from proveflow.proxy.policy import (
+    Decision,
+    ToolPolicy,
+    decide,
+    is_sink_call,
+    session_sink_names,
+)
 from proveflow.proxy.sandbox import error_result_dict, sandbox_id, sandbox_result_dict
 from proveflow.proxy.session import ProxySession
 from proveflow.proxy.upstream import Record, UpstreamState, twin_stdio
@@ -223,6 +229,8 @@ class _CallHandler:
         self._client = client
         self._advertised = advertised
         self._proxy_sinks = proxy_sinks
+        # For the cassette's ``sink`` flag only (never used to decide forwarding).
+        self._sink_names = session_sink_names(session.tools) | proxy_sinks
         self._record = record
         self._outcome = outcome
         self._sbx_seq = 0
@@ -249,6 +257,7 @@ class _CallHandler:
                 arguments=arguments,
                 sandbox_id=sandbox_id(self._sbx_seq),
                 reason=why.value if why is not None else "policy_deny",
+                sink=is_sink_call(name, self._sink_names),
             )
             return mcp_types.CallToolResult.model_validate(sandbox_result_dict(self._sbx_seq))
         return await self._forward(name, arguments)

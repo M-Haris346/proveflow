@@ -36,7 +36,7 @@ from pydantic import Field, model_validator
 
 from proveflow.core._base import FrozenModel
 from proveflow.core.tools import Granularity, ToolRole, ToolSpec
-from proveflow.proxy.names import colliding_names
+from proveflow.proxy.names import colliding_names, name_key
 
 UPSTREAM_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
 
@@ -158,6 +158,22 @@ class SandboxReason(StrEnum):
     NOT_ADVERTISED = "not_advertised"  # forward=True but absent from the upstream tools/list
     NAME_COLLISION = "name_collision"  # another listed name has the same name_key
     PROXY_CLASSIFIER_SINK = "proxy_classifier_sink"  # the proxy's own classifier says sink
+
+
+def session_sink_names(tools: Sequence[ToolSpec]) -> frozenset[str]:
+    """Names the SESSION's own evidence labels ``sink`` (any granularity)."""
+    return frozenset(t.name for t in tools if any(ev.role is ToolRole.SINK for ev in t.roles))
+
+
+def is_sink_call(name: str, sink_names: frozenset[str]) -> bool:
+    """The ``sink`` flag recorded on every ``sandboxed_call`` (Phase 3a; the oracle reads it,
+    it never infers sink-ness itself). ``sink_names`` = session sink roles OR the proxy's own
+    classifier sinks. A call is a sink call if its name is one of them, or if its look-alike
+    group (``names.name_key``) contains one of them."""
+    if name in sink_names:
+        return True
+    key = name_key(name)
+    return any(name_key(s) == key for s in sink_names)
 
 
 def decide(
