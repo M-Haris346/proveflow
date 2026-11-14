@@ -253,6 +253,21 @@ class CassetteWriter:
         self._fh.close()
 
 
+def is_complete(events: list[Event]) -> bool:
+    """True only for a whole session: first event ``session_start``, last event
+    ``session_end``, and exactly one of each. ``load_cassette`` validates integrity (chain,
+    models, sizes), NOT completeness: a cassette cut off by SIGKILL or read while the proxy is
+    still running loads fine, and only this check says it is incomplete."""
+    kinds = [e.kind for e in events]
+    return (
+        bool(kinds)
+        and kinds[0] == "session_start"
+        and kinds[-1] == "session_end"
+        and kinds.count("session_start") == 1
+        and kinds.count("session_end") == 1
+    )
+
+
 def load_cassette(
     path: Path, *, max_line: int = MAX_LINE, max_bytes: int = MAX_CASSETTE
 ) -> list[Event]:

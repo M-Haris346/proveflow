@@ -25,6 +25,16 @@ moves out of this file only with a fix and that test in the repo.
 - **Proposed test:** inject a cancellation right after `open_process` returns, then assert no
   child is alive (psutil).
 
+### Incomplete cassettes must not produce verdicts (Phase 5, replay)
+- **Where:** `src/proveflow/proxy/cassette.py`. `load_cassette` checks integrity (models, seq,
+  hash chain, canonical form, sizes), not completeness. A cassette cut off by SIGKILL, or read
+  while the proxy is still running, loads without error. `is_complete(events)` (added in Phase
+  2.1) returns False for it, but nothing enforces that yet.
+- **Proposed fix:** replay and the oracle refuse, or mark as INCOMPLETE, any cassette where
+  `is_complete` is False. They never compute a verdict from it.
+- **Proposed test:** replay of a cassette with its `session_end` removed reports INCOMPLETE and
+  produces no verdict.
+
 ### Classifier miss before `--real-reads` (must fix before that mode exists)
 - A sink that both the session's evidence and the proxy's own v2 classifier miss is forwarded
   to the twin. That is harmless in twin mode. Held-out sink recall is 16/25

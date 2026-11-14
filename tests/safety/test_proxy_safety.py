@@ -327,27 +327,89 @@ def test_terminating_proxy_kills_twin_windows(tmp_path: Path) -> None:
         _cleanup(proc, tmp_path)
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
-def test_sigterm_to_proxy_kills_twin_posix(tmp_path: Path) -> None:
+# Exit code of a HANDLED SIGTERM: the watcher calls control.stop("sigterm")
+# (src/proveflow/proxy/server.py:570-574), which sets the reason before killing the tree and
+# cancelling the session (server.py:87-92); serve() reports outcome.reason == "sigterm"
+# (server.py:430-433); the CLI raises typer.Exit(1) only for reasons NOT in
+# ("agent_closed", "sigterm") (src/proveflow/cli.py:383-386), so the process exits 0.
+# Without a handler, the default action kills the process: Popen.returncode == -SIGTERM.
+HANDLED_SIGTERM_EXIT = 0
+
+
+def _wait_proxy(
+    proc: subprocess.Popen[bytes], real: psutil.Process, timeout: float = 30
+) -> tuple[int | None, str]:
+    """Wait for the REAL proxy process to exit. On POSIX the bootstrap argv runs the proxy in
+    ``proc`` itself (no launcher), so ``real.pid == proc.pid`` is expected; if not, wait on
+    ``real`` (psutil returns no exit code for a non-child: ``None``) and say so."""
+    if real.pid == proc.pid:
+        return proc.wait(timeout=timeout), "proc"
+    return real.wait(timeout=timeout), f"real (pid {real.pid} != Popen pid {proc.pid})"
+
+
+def _check_sigterm_kills_twin(tmp_path: Path) -> None:
     proc, real = _start_proxy(tmp_path)
     try:
         real.send_signal(signal.SIGTERM)
         _assert_twins_gone(tmp_path)
+        # The twin dies first (stop() kills the tree), session_end is written afterwards:
+        # wait for the proxy to EXIT before reading the cassette (the race seen in CI run
+        # 43575764649: the last line was not yet session_end).
+        code, waited_on = _wait_proxy(proc, real)
         events = (tmp_path / "cassette.jsonl").read_text(encoding="utf-8").splitlines()
-        assert json.loads(events[-1])["reason"] == "sigterm"
+        last = json.loads(events[-1])
+        if code == HANDLED_SIGTERM_EXIT:
+            verdict = "handler ran"
+        elif code == -signal.SIGTERM:
+            verdict = "-15: SIGTERM NOT handled (default action, no handler ran)"
+        elif code is None:
+            verdict = f"exit code unknown, waited on {waited_on}"
+        else:
+            verdict = f"unexpected exit code {code}"
+        if waited_on == "proc":
+            assert code == HANDLED_SIGTERM_EXIT, (
+                f"proxy exit {code} ({verdict}); last event kind={last.get('kind')}"
+            )
+        assert last.get("kind") == "session_end", (
+            f"cassette incomplete ({verdict}): last event {last}"
+        )
+        assert last["reason"] == "sigterm", last
     finally:
         _cleanup(proc, tmp_path)
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
-def test_sigkill_to_proxy_twin_exits_on_stdin_eof_posix(tmp_path: Path) -> None:
-    """Residual (ADR-006): SIGKILL runs no handler; the twin exits because its stdin closes."""
+def _check_sigkill_twin_exits(tmp_path: Path) -> None:
     proc, real = _start_proxy(tmp_path)
     try:
         real.send_signal(signal.SIGKILL)
         _assert_twins_gone(tmp_path)
     finally:
         _cleanup(proc, tmp_path)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_sigterm_to_proxy_kills_twin_posix(tmp_path: Path) -> None:
+    _check_sigterm_kills_twin(tmp_path)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_sigkill_to_proxy_twin_exits_on_stdin_eof_posix(tmp_path: Path) -> None:
+    """Residual (ADR-006): SIGKILL runs no handler; the twin exits because its stdin closes."""
+    _check_sigkill_twin_exits(tmp_path)
+
+
+# TEMPORARY race check (Phase 2.1, CI run 43575764649): each POSIX kill test 10 more times.
+# Remove in a separate change once CI shows all 20 repetitions green.
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+@pytest.mark.parametrize("rep", range(10))
+def test_repeat_sigterm_posix(tmp_path: Path, rep: int) -> None:
+    _check_sigterm_kills_twin(tmp_path)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+@pytest.mark.parametrize("rep", range(10))
+def test_repeat_sigkill_posix(tmp_path: Path, rep: int) -> None:
+    _check_sigkill_twin_exits(tmp_path)
 
 
 # --- import guard --------------------------------------------------------------------------

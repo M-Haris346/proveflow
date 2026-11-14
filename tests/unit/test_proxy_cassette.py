@@ -16,6 +16,7 @@ from proveflow.proxy.cassette import (
     CassetteWriter,
     canonical,
     digest,
+    is_complete,
     load_cassette,
 )
 
@@ -258,6 +259,25 @@ def test_byte_cap_drops_events_calls_on_full_once_and_keeps_room_for_the_end(
     events = load_cassette(path)  # still a valid chain
     assert [e.kind for e in events[-2:]] == ["error", "session_end"]
     assert events[-1].dropped_events == w.dropped > 0  # type: ignore[union-attr]
+
+
+def test_complete_cassette_is_complete(tmp_path: Path) -> None:
+    path = tmp_path / "c.jsonl"
+    write_sample(path)
+    assert is_complete(load_cassette(path)) is True
+
+
+def test_cut_off_cassette_loads_but_is_incomplete(tmp_path: Path) -> None:
+    """A cassette without session_end (proxy SIGKILLed, or read while still running) passes
+    load_cassette's integrity checks; only is_complete flags it."""
+    path = tmp_path / "c.jsonl"
+    write_sample(path)
+    lines = path.read_bytes().splitlines(keepends=True)
+    path.write_bytes(b"".join(lines[:-1]))  # drop session_end: still a valid chain prefix
+    events = load_cassette(path)
+    assert events[-1].kind != "session_end"
+    assert is_complete(events) is False
+    assert is_complete([]) is False
 
 
 def test_no_cap_by_default(tmp_path: Path) -> None:
