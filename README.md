@@ -91,9 +91,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 > - Everything after Phase 3a is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`43582905272` on commit `ec85e53` (Phase 2.1 + kill-test race fix), green on both OSes
-(ubuntu: 859 passed, 15 skipped, all Windows-only tests; windows: 852 passed, 22 skipped, all
-POSIX-only signal tests: 2 kill tests + 20 temporary repetitions, removed afterwards).
+`43613154799` on commit `db3d5b4` (Phase 3a oracle), green on both OSes (ubuntu: 976 passed,
+15 skipped, all Windows-only tests; windows: 989 passed, 2 skipped, both POSIX-only signal
+tests). The POSIX kill tests were also repeated 10x each, all green, in run `43582905272`.
 This README states CI results only for a run id checked with `gh run list`. Local commands:
 
 ```bash

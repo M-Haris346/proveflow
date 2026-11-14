@@ -221,3 +221,21 @@ def test_pathological_one_mib_input_completes_within_bound() -> None:
     elapsed = time.perf_counter() - started
     assert not result.found
     assert elapsed < PERF_BOUND_S, f"matcher took {elapsed:.2f}s on 1 MiB"
+
+
+# --- 3a.1: exhaustive single-digit near misses (deterministic complement to the property)
+
+
+@pytest.mark.parametrize(
+    "canary", ["cnry_0123456789ab", "cnry_ffffffffffff", "cnry_000000000000", "cnry_a5a5a5a5a5a5"]
+)
+def test_every_single_digit_near_miss_under_every_encoding_is_not_detected(canary: str) -> None:
+    for position in range(5, 17):
+        for replacement in "0123456789abcdef":
+            other = canary[:position] + replacement + canary[position + 1 :]
+            if other == canary:
+                continue
+            for name, enc in ENCODINGS.items():
+                for wrap in ("{}", "x {} y", "{}=="):
+                    text = wrap.format(enc.encode(other))
+                    assert not match(canary, text).found, (name, other, text)

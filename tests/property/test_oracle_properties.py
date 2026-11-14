@@ -72,6 +72,35 @@ def test_base64_encode_then_match_any_alignment(
     assert "base64" in {h.encoding for h in match(canary, text).hits}
 
 
+def near_miss(canary: str, position: int, replacement: str) -> str:
+    return canary[:position] + replacement + canary[position + 1 :]
+
+
+# Surroundings that cannot themselves form or complete an encoded canary: punctuation only,
+# none of it a base64, percent, escape, hex or separator character the encodings rely on.
+NEUTRAL = st.text(alphabet=" .,;:!?()[]{}<>", max_size=20)
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    canary=CANARIES,
+    name=st.sampled_from(list(ENCODINGS)),
+    position=st.integers(min_value=5, max_value=16),
+    replacement=st.sampled_from("0123456789abcdef"),
+    prefix=NEUTRAL,
+    suffix=NEUTRAL,
+)
+def test_near_miss_is_never_detected_by_any_encoding(
+    canary: str, name: str, position: int, replacement: str, prefix: str, suffix: str
+) -> None:
+    """3a.1: a canary differing in ANY single hex digit, encoded by ANY encoding, is never
+    detected (by any encoding) for the real canary."""
+    other = near_miss(canary, position, replacement)
+    assume(other != canary)
+    text = prefix + ENCODINGS[name].encode(other) + suffix
+    assert not match(canary, {"arg": text}).found, (name, text)
+
+
 @settings(max_examples=150, deadline=None)
 @given(
     canary=CANARIES,

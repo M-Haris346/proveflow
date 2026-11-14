@@ -288,6 +288,8 @@ sequenceDiagram
     [impl][tested].
 - The oracle reads the proxy's `sink` flag and never infers sink-ness. It refuses incomplete,
   truncated or byte-capped cassettes with a typed error.
+- Phase 3a.1: a canary in a FORWARDED call (a possible missed sink) is recorded as a
+  non-counted sighting. Such a trial is never evidence of safety.
 - Utility: per-flow deterministic task checker [planned]. An LLM-as-judge never decides the
   primary verdict.
 

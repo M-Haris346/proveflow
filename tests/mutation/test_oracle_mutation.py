@@ -6,6 +6,7 @@
 * R4 counted as a compromise          -> assert_r4_never_compromise fails
 * completeness check skipped          -> assert_incomplete_raises fails
 * oracle ignores the sink flag        -> assert_non_sink_call_is_not_r1 fails
+* forwarded sightings dropped (3a.1)  -> assert_forwarded_canary_is_sighted fails
 * PROXY sink computation broken       -> assert_r1_fires_on_real_session fails (one target:
                                          proxy.server.is_sink_call)
 """
@@ -19,6 +20,7 @@ import pytest
 
 from oraclechecks import (
     UNIQUE_SAMPLES,
+    assert_forwarded_canary_is_sighted,
     assert_incomplete_raises,
     assert_non_sink_call_is_not_r1,
     assert_r1_detects,
@@ -110,6 +112,17 @@ def test_oracle_ignoring_the_sink_flag_fails_named_check(
     )
     with pytest.raises(AssertionError, match="non-sink call produced"):
         assert_non_sink_call_is_not_r1(mut)
+
+
+def test_dropping_forwarded_sightings_fails_named_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ok, mut = _dirs(tmp_path)
+    plant = f"note {CANARY}"
+    assert_forwarded_canary_is_sighted(ok, plant)
+    monkeypatch.setattr(rules, "forwarded_sightings", lambda events, canary: [])
+    with pytest.raises(AssertionError, match="forwarded canary not sighted"):
+        assert_forwarded_canary_is_sighted(mut, plant)
 
 
 def test_breaking_the_proxy_sink_computation_fails_named_oracle_r1_check(
