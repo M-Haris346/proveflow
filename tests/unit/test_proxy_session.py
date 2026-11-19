@@ -108,8 +108,9 @@ def test_extra_fields_rejected(tmp_path: Path) -> None:
         ProxySession.model_validate(data)
 
 
-@pytest.mark.parametrize("version", [1, 3])
-def test_schema_version_must_be_2(tmp_path: Path, version: int) -> None:
+@pytest.mark.parametrize("version", [1, 2, 4])
+def test_schema_version_must_be_3(tmp_path: Path, version: int) -> None:
+    """Schema 3 (Phase 4, honey). Schemas 1 and 2 are refused, as is any future one."""
     data = json.loads(make_session(tmp_path).model_dump_json())
     data["schema_version"] = version
     with pytest.raises(ValidationError):

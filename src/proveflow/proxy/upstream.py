@@ -1,8 +1,16 @@
 """stdio transport to the twin upstream, with the ``UpstreamGate`` on the write path.
 
-Before spawn: ``check_twin_argv`` again (interpreter + script under ``TWIN_ROOT``), then the
-script is COPIED into the private temp cwd, the COPY is hashed and must equal the session's
-``twin_sha256``, and the COPY is what runs (no check-then-run gap on the original file).
+Before spawn: ``check_twin_argv`` again (interpreter + script under ``TWIN_ROOT``), then
+``prepare_twin_copy`` (R4, order pinned by a named test):
+1. the script is COPIED into the private temp cwd;
+2. the copy's bytes are read ONCE; their sha256 must equal the session's ``twin_sha256``;
+3. ``twin.guard.check_no_io`` runs on THOSE SAME BYTES (never on the original path), and the
+   result is ``UpstreamState.guard_passed`` (assigned, never OR-ed: a pre-set value cannot
+   survive);
+4. the COPY is what runs (no check-then-run gap on the original file).
+A guard failure does NOT refuse the spawn (R-C1: the guard is not a spawn gate; the fake
+twin fails it and still starts). Its only consequence is that the server's dual-role set is
+empty (ADR-007). The guard is not a sandbox (THREAT_MODEL).
 Spawned through ``introspect.procs.spawn`` (Windows Job Object with KILL_ON_JOB_CLOSE;
 POSIX own process group), with ``introspect.env.child_env`` (minimal environment, no config
 env). The tree is killed on exit.
@@ -46,6 +54,7 @@ from proveflow.introspect.procs import Spawned, spawn
 from proveflow.proxy.gate import GateBlocked, UpstreamGate
 from proveflow.proxy.lines import LineSplitter, LineTooLong
 from proveflow.proxy.policy import TwinUpstream, TwinUpstreamError, check_twin_argv
+from proveflow.twin.guard import check_no_io
 
 STDERR_CAP = 64 * 1024
 GRACE_SECONDS = 2.0
@@ -55,6 +64,8 @@ Record = Callable[..., Any]
 
 @dataclass
 class UpstreamState:
+    # Set ONLY by twin_stdio, from guard_verdict on the hashed bytes (ADR-007).
+    guard_passed: bool = False
     spawned: Spawned | None = None
     stderr: bytearray = field(default_factory=bytearray)
     stderr_truncated: bool = False
@@ -103,6 +114,27 @@ def _dump(message: Any) -> Any:
     return message.model_dump(by_alias=True, mode="json", exclude_unset=True)
 
 
+def guard_verdict(data: bytes) -> bool:
+    """True only if ``check_no_io`` completes on ``data`` decoded as UTF-8. Every failure
+    (guard refusal, syntax error, null bytes, non-UTF-8, nesting too deep) is False."""
+    try:
+        check_no_io(data.decode("utf-8"))
+    except (ValueError, RecursionError):  # TwinGuardError and UnicodeDecodeError are ValueError
+        return False
+    return True
+
+
+def prepare_twin_copy(source: Path, workdir: Path, twin_sha256: str) -> tuple[Path, bool]:
+    """Copy -> read the copy's bytes once -> sha256 of those bytes -> guard on those same
+    bytes. Returns (copy, guard_passed). A hash mismatch raises before the guard runs."""
+    copy = workdir / source.name
+    shutil.copyfile(source, copy)
+    data = copy.read_bytes()
+    if hashlib.sha256(data).hexdigest() != twin_sha256:
+        raise TwinUpstreamError("twin script sha256 does not match the session's twin_sha256")
+    return copy, guard_verdict(data)
+
+
 @asynccontextmanager
 async def twin_stdio(
     upstream: TwinUpstream,
@@ -120,12 +152,10 @@ async def twin_stdio(
     workdir = tempfile.TemporaryDirectory(prefix="proveflow-twin-")
     try:
         # Run a private COPY whose hash is checked: the original file can change after the
-        # check without affecting what runs.
-        source = Path(upstream.argv[1])
-        copy = Path(workdir.name) / source.name
-        shutil.copyfile(source, copy)
-        if hashlib.sha256(copy.read_bytes()).hexdigest() != twin_sha256:
-            raise TwinUpstreamError("twin script sha256 does not match the session's twin_sha256")
+        # check without affecting what runs. The guard verdict is on the same bytes.
+        state.guard_passed = False
+        copy, passed = prepare_twin_copy(Path(upstream.argv[1]), Path(workdir.name), twin_sha256)
+        state.guard_passed = passed
         argv = [upstream.argv[0], str(copy), *upstream.argv[2:]]
         spawned = await spawn(argv, env, cwd=Path(workdir.name))
     except BaseException:

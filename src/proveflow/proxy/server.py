@@ -15,6 +15,15 @@ ADVERTISED tool itself (``flows.roles.classify_tool`` on name, description, inpu
 tool the proxy's classifier marks ``sink`` is never forwarded, whatever the session's labels
 say; the same set goes to the handler (``decide``) and to the gate (``set_advertised``).
 
+Dual-role twin-mode exception (Phase 4, ADR-007): ``forwardable_dual_roles`` is the ONE
+place the dual-role set is computed: empty unless the twin passed the guard
+(``UpstreamState.guard_passed``, computed by ``upstream.twin_stdio`` from the hashed bytes);
+otherwise ``policy.dual_role_names`` (session evidence AND proxy classifier both say
+untrusted_source + sink). The same set goes to ``decide`` and to the gate. A pure sink is
+never in it and is always sandboxed. Every ``upstream_request`` records ``sink`` (the same
+``policy.is_sink_call`` as ``sandboxed_call``), true exactly for such a dual-role forward.
+THIS EXCEPTION MUST NOT SURVIVE INTO ANY ``--real-reads`` MODE.
+
 ``tools/call``: ``policy.decide`` -> sandbox (``sbx_NNNN``) or forward. A forwarded result
 loses ``structuredContent`` (A1; ``outputSchema`` is stripped from every advertised tool,
 D6) and, for an ``inject=True`` tool with an armed attack, gets the payload in its first
@@ -54,7 +63,7 @@ from mcp.shared.exceptions import MCPError
 from mcp.shared.message import SessionMessage
 
 from proveflow import __version__
-from proveflow.core.tools import ToolRole
+from proveflow.core.tools import ToolRole, ToolSpec
 from proveflow.flows.roles import classify_tool
 from proveflow.introspect.limits import MAX_LINE
 from proveflow.introspect.scrub import scrub_stderr
@@ -66,6 +75,7 @@ from proveflow.proxy.policy import (
     Decision,
     ToolPolicy,
     decide,
+    dual_role_names,
     is_sink_call,
     session_sink_names,
 )
@@ -223,12 +233,15 @@ class _CallHandler:
         proxy_sinks: frozenset[str],
         record: Record,
         outcome: ProxyOutcome,
+        *,
+        dual_role: frozenset[str] = frozenset(),
     ) -> None:
         self._session = session
         self._policy = policy
         self._client = client
         self._advertised = advertised
         self._proxy_sinks = proxy_sinks
+        self._dual_role = dual_role
         # For the cassette's ``sink`` flag only (never used to decide forwarding).
         self._sink_names = session_sink_names(session.tools) | proxy_sinks
         self._record = record
@@ -247,7 +260,13 @@ class _CallHandler:
         self._outcome.tool_calls += 1
         if self._outcome.tool_calls > self._session.limits.max_calls:
             return self._error("max_calls_exceeded", name, "tool call limit reached")
-        decision, why = decide(self._policy, self._advertised, name, proxy_sinks=self._proxy_sinks)
+        decision, why = decide(
+            self._policy,
+            self._advertised,
+            name,
+            proxy_sinks=self._proxy_sinks,
+            dual_role=self._dual_role,
+        )
         if decision is not Decision.FORWARD:
             self._outcome.sandboxed_calls += 1
             self._sbx_seq += 1
@@ -266,7 +285,12 @@ class _CallHandler:
         self, name: str, arguments: dict[str, Any] | None
     ) -> mcp_types.CallToolResult:
         self._outcome.forwarded_calls += 1
-        self._record("upstream_request", tool=name, arguments=arguments)
+        self._record(
+            "upstream_request",
+            tool=name,
+            arguments=arguments,
+            sink=is_sink_call(name, self._sink_names),
+        )
         try:
             with anyio.fail_after(self._session.limits.call_timeout_s):
                 raw = await self._client.call_tool(name, arguments)
@@ -318,6 +342,20 @@ def proxy_roles(tool: mcp_types.Tool) -> list[str]:
 def proxy_sink_names(tools: Sequence[mcp_types.Tool]) -> frozenset[str]:
     """Second opinion the session cannot forge: names the proxy's classifier marks sink."""
     return frozenset(t.name for t in tools if ToolRole.SINK.value in proxy_roles(t))
+
+
+def forwardable_dual_roles(
+    session_tools: Sequence[ToolSpec],
+    advertised_tools: Sequence[mcp_types.Tool],
+    *,
+    guard_passed: bool,
+) -> frozenset[str]:
+    """ADR-007: the dual-role names this session may forward. Empty unless the twin passed
+    the guard; then the AND of the session's evidence and the proxy's own classifier."""
+    if not guard_passed:
+        return frozenset()
+    roles = {t.name: proxy_roles(t) for t in advertised_tools}
+    return dual_role_names(session_tools, roles, frozenset(roles))
 
 
 async def _list_upstream_tools(client: Client) -> list[mcp_types.Tool]:
@@ -382,6 +420,7 @@ async def serve(
         },
         attack=session.attack.model_dump(mode="json") if session.attack else None,
         limits=limits.model_dump(mode="json"),
+        honey=[h.model_dump(mode="json") for h in session.honey],
     )
     try:
         with anyio.CancelScope() as scope:
@@ -410,9 +449,19 @@ async def serve(
                 advertised_tools = [t for t, _, _ in stripped]
                 advertised_names = frozenset(t.name for t in tools)
                 sinks = proxy_sink_names(tools)
-                gate.set_advertised(advertised_names, proxy_sinks=sinks)
+                dual = forwardable_dual_roles(
+                    session.tools, tools, guard_passed=upstream_state.guard_passed
+                )
+                gate.set_advertised(advertised_names, proxy_sinks=sinks, dual_role=dual)
                 handler = _CallHandler(
-                    session, policy, client, advertised_names, sinks, record, outcome
+                    session,
+                    policy,
+                    client,
+                    advertised_names,
+                    sinks,
+                    record,
+                    outcome,
+                    dual_role=dual,
                 )
 
                 async def on_list_tools(

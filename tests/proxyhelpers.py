@@ -35,6 +35,7 @@ from mcp.shared.exceptions import MCPError
 from mcp.shared.message import SessionMessage
 
 from proveflow.core.attacks import Attack, Carrier, HijackGoal, Payload
+from proveflow.core.honey import HoneyValue
 from proveflow.core.tools import Granularity, RoleEvidence, RoleSource, ToolRole, ToolSpec
 from proveflow.proxy import policy as policy_module
 from proveflow.proxy.policy import ToolPolicy, TwinUpstream, build_policy
@@ -139,6 +140,7 @@ def make_session(
     cassette: str = "cassette.jsonl",
     roles: dict[str, tuple[ToolRole, ...]] | None = None,
     twin_args: tuple[str, ...] = (),
+    honey: tuple[HoneyValue, ...] = (),
 ) -> ProxySession:
     return ProxySession(
         session_id="test-session",
@@ -155,6 +157,7 @@ def make_session(
         twin_sha256=twin_sha256(),
         tools=twin_specs(roles),
         attack=attack,
+        honey=honey,
         cassette_path=tmp_path / cassette,
         limits=limits or ProxyLimits(),
     )

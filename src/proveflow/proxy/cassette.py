@@ -20,6 +20,14 @@ Phase 5.
 Schema history: 1 (Phase 2); 2 (Phase 3a): ``sandboxed_call`` carries ``sink: bool``,
 computed by the proxy at decision time (``policy.is_sink_call``). Schema-1 cassettes are
 refused (a missing flag must never read as "not a sink").
+3 (Phase 4): ``session_start`` carries ``honey`` (the session's honey values, a second kind
+of needle for the oracle; never the twin's markers, F4), and ``upstream_request`` carries a
+REQUIRED ``sink: bool`` from the same ``policy.is_sink_call``. ``sink=true`` on an
+``upstream_request`` means exactly "a dual-role tool was forwarded to a guard-passing twin"
+(ADR-007): every other forwarded name is, by the forward conditions, neither a session sink,
+nor a proxy-classifier sink, nor in a look-alike group with one (a look-alike of a session
+name is denied by ``build_policy``, of an advertised name by ``decide``). There is no
+separate sandbox reason or event for it. Schema-2 cassettes are refused.
 """
 
 from __future__ import annotations
@@ -35,7 +43,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from proveflow.core._base import FrozenModel
 from proveflow.introspect.limits import MAX_LINE
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 GENESIS = "0" * 64
 TEXT_CAP = 1024 * 1024
 MAX_CASSETTE = 64 * 1024 * 1024
@@ -53,7 +61,7 @@ def digest(body: dict[str, Any]) -> str:
 
 
 class _Event(FrozenModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     seq: int = Field(ge=0)
     prev_sha256: str = Field(pattern=_HEX64)
     sha256: str = Field(pattern=_HEX64)
@@ -68,6 +76,7 @@ class SessionStart(_Event):
     policy: Any
     attack: Any
     limits: Any
+    honey: Any  # required (schema 3): list of HoneyValue dicts, [] when none
 
 
 class ToolsAdvertised(_Event):
@@ -90,6 +99,9 @@ class UpstreamRequest(_Event):
     kind: Literal["upstream_request"]
     tool: str
     arguments: Any
+    # Required (schema 3). True exactly for a dual-role tool forwarded to a guard-passing
+    # twin (ADR-007); the oracle scans these for R1 like sandboxed sink calls.
+    sink: bool
 
 
 class UpstreamResponse(_Event):

@@ -31,6 +31,7 @@ def write_sample(path: Path) -> None:
         policy={},
         attack=None,
         limits={},
+        honey=[],
     )
     w.emit("agent_request", message={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     w.emit("sandboxed_call", tool="send_email", arguments={"to": "ü"}, sandbox_id="sbx_0001",
@@ -78,17 +79,34 @@ def test_schema_2_sandboxed_call_requires_sink(tmp_path: Path) -> None:
     w.close()
 
 
-def test_older_schema_is_refused_with_a_clear_message(tmp_path: Path) -> None:
-    """A schema-1 cassette (no ``sink`` flag) is refused, never read as "not a sink"."""
+def test_schema_3_upstream_request_requires_sink(tmp_path: Path) -> None:
+    w = CassetteWriter(tmp_path / "c.jsonl")
+    with pytest.raises(ValueError, match="sink"):
+        w.emit("upstream_request", tool="t", arguments={})
+    w.close()
+
+
+def test_schema_3_session_start_requires_honey(tmp_path: Path) -> None:
+    w = CassetteWriter(tmp_path / "c.jsonl")
+    with pytest.raises(ValueError, match="honey"):
+        w.emit("session_start", session_id="s", proveflow_version="0", upstream={},
+               policy={}, attack=None, limits={})  # fmt: skip
+    w.close()
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_older_schema_is_refused_with_a_clear_message(tmp_path: Path, version: int) -> None:
+    """Schema-1 (no ``sandboxed_call.sink``) and schema-2 (no ``upstream_request.sink``, no
+    ``session_start.honey``) cassettes are refused, never read as "not a sink"."""
     path = tmp_path / "c.jsonl"
     write_sample(path)
     lines = path.read_bytes().splitlines()
     body = json.loads(lines[0])
-    body["schema_version"] = 1
+    body["schema_version"] = version
     body["sha256"] = digest(body)
     lines[0] = canonical(body).encode()
     path.write_bytes(b"\n".join(lines) + b"\n")
-    with pytest.raises(CassetteError, match="unsupported cassette schema_version 1"):
+    with pytest.raises(CassetteError, match=f"unsupported cassette schema_version {version}"):
         load_cassette(path)
 
 

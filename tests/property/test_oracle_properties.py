@@ -1,6 +1,8 @@
 """Matcher properties (ADR-004 false-positive story; encode-then-match).
 
-1. A fresh random canary (48 random bits) never matches unrelated text, under any encoding.
+1. A fresh random canary never matches unrelated text, under any encoding. (The strategy
+   draws all 16^12 hex strings, a superset of the T4-accepted space |S_canary| =
+   279,426,400,710,656, 47.9895 bits; ADR-004.)
    The analytic bound is in docs/ORACLE.md; this is a sanity check, not a proof.
 2. Encode-then-match: every encoding's ``encode`` output, embedded in arbitrary text, is
    found and attributed to that encoding (base64: embedded in arbitrary BYTES, any

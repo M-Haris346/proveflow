@@ -1,5 +1,6 @@
 """Oracle over REAL proxy sessions (in-process proxy + fake twin subprocess), and the
-proxy's ``sink`` flag on every sandbox reason path (cassette schema 2). No LLM: the
+proxy's ``sink`` flag on every sandbox reason path (cassette schema 3), and honey needles
+(Phase 4). No LLM: the
 "agent" is a scripted SDK ClientSession."""
 
 from __future__ import annotations
@@ -8,7 +9,11 @@ import base64
 from pathlib import Path
 from typing import Any
 
-from oraclechecks import assert_r1_fires_on_real_session
+from oraclechecks import (
+    HONEY,
+    assert_r1_fires_on_real_session,
+    assert_r1_fires_on_real_session_for_honey,
+)
 from proveflow.core.trials import RuleHit
 from proveflow.oracle.rules import evaluate_file
 from proveflow.proxy.cassette import SandboxedCall, load_cassette
@@ -107,3 +112,14 @@ def test_sink_flag_for_an_advertised_lookalike(tmp_path: Path) -> None:
     run_in_process(make_session(tmp_path, roles=roles, twin_args=("--lookalike",)), script)
     [call] = sandboxed(tmp_path / "cassette.jsonl")
     assert (call.reason, call.sink) == ("name_collision", True)
+
+
+def test_honey_r1_fires_on_a_real_session(tmp_path: Path) -> None:
+    findings = assert_r1_fires_on_real_session_for_honey(tmp_path)
+    assert findings.needles == ("canary", HONEY.id)
+    [ev] = findings.evidence
+    assert (ev.event, ev.tool, ev.needle, ev.reason) == (
+        "sandboxed_call", "send_email", HONEY.id, "policy_deny",
+    )  # fmt: skip
+    start = load_cassette(tmp_path / "cassette.jsonl")[0]
+    assert start.honey == [HONEY.model_dump(mode="json")]  # type: ignore[union-attr]

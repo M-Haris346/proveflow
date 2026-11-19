@@ -3,8 +3,9 @@
 Independent of the handler's decision: even if the handler wrongly decided to forward,
 the gate raises ``GateBlocked`` before a single byte reaches the twin when
   * the method is not in ``UPSTREAM_ALLOWED`` (resources/*, prompts/*, sampling/*, ...), or
-  * the method is ``tools/call`` for a name that is not ``forward=True`` in the policy or
-    not in the upstream's own ``tools/list`` (before that list is known: every name), or
+  * the method is ``tools/call`` for a name that is not ``forward=True`` in the policy (or
+    in the guard-gated dual-role set, ADR-007) or not in the upstream's own ``tools/list``
+    (before that list is known: every name), or
   * the message is a successful response carrying a non-empty result (the proxy never
     answers an upstream request with data: sampling/roots/elicitation are refused with
     errors, and ``ping`` is answered with ``{}``).
@@ -49,15 +50,25 @@ class UpstreamGate:
         self._forward: frozenset[str] = frozenset()
         self._advertised_set = False
 
-    def set_advertised(self, names: frozenset[str], *, proxy_sinks: frozenset[str]) -> None:
-        """Called once, after the upstream's tools/list; can only narrow the forward set.
+    def set_advertised(
+        self,
+        names: frozenset[str],
+        *,
+        proxy_sinks: frozenset[str],
+        dual_role: frozenset[str] = frozenset(),
+    ) -> None:
+        """Called once, after the upstream's tools/list.
 
         ``proxy_sinks``: names the PROXY's own classifier marks as sink (second opinion).
-        Names that collide under ``names.name_key`` are removed here too (L1)."""
+        Names that collide under ``names.name_key`` are removed here too (L1).
+        ``dual_role`` (ADR-007): the server's dual-role set, non-empty only when the twin
+        passed the guard; only advertised, non-colliding names of it are added."""
         if self._advertised_set:
             raise RuntimeError("advertised tools already set")
         self._advertised_set = True
-        self._forward = (self._policy_forward & names) - colliding_names(names) - proxy_sinks
+        colliding = colliding_names(names)
+        ordinary = (self._policy_forward & names) - colliding - proxy_sinks
+        self._forward = ordinary | ((dual_role & names) - colliding)
 
     def check(self, message: object) -> None:
         method = getattr(message, "method", None)

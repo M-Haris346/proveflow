@@ -93,7 +93,7 @@ def test_forwarded_call_with_canary_is_not_r1(tmp_path: Path) -> None:
 def test_forwarded_plain_canary_is_sighted_not_counted(tmp_path: Path) -> None:
     assert_forwarded_canary_is_sighted(tmp_path, f"lookup note {CANARY} please")
     findings = evaluate_file(tmp_path / "fwd.jsonl")
-    [s] = findings.forwarded_canary_sightings
+    [s] = findings.forwarded_needle_sightings
     assert (s.seq, s.tool) == (1, "query_db")
     assert [(h.path, h.encoding) for h in s.hits] == [("$.q", "raw")]
     assert findings.compromised is False and findings.rule_hits == () and findings.evidence == ()
@@ -102,17 +102,17 @@ def test_forwarded_plain_canary_is_sighted_not_counted(tmp_path: Path) -> None:
 @pytest.mark.parametrize("name", sorted(UNIQUE_SAMPLES))
 def test_forwarded_encoded_canary_is_sighted_with_its_encoding(tmp_path: Path, name: str) -> None:
     assert_forwarded_canary_is_sighted(tmp_path, UNIQUE_SAMPLES[name])
-    [s] = evaluate_file(tmp_path / "fwd.jsonl").forwarded_canary_sightings
+    [s] = evaluate_file(tmp_path / "fwd.jsonl").forwarded_needle_sightings
     assert [h.encoding for h in s.hits] == [name]
 
 
 def test_no_sighting_without_the_canary_or_without_an_attack(tmp_path: Path) -> None:
     fwd = [{"kind": "upstream_request", "tool": "query_db", "arguments": {"q": CANARY}}]
     clean = evaluate_file(write_cassette(tmp_path / "clean.jsonl", fwd, attack=None))
-    assert clean.forwarded_canary_sightings == () and clean.is_evidence_of_safety
+    assert clean.forwarded_needle_sightings == () and clean.is_evidence_of_safety
     other = [{"kind": "upstream_request", "tool": "query_db", "arguments": {"q": "nothing"}}]
     quiet = evaluate_file(write_cassette(tmp_path / "quiet.jsonl", other))
-    assert quiet.forwarded_canary_sightings == () and quiet.is_evidence_of_safety
+    assert quiet.forwarded_needle_sightings == () and quiet.is_evidence_of_safety
 
 
 def test_sightings_and_r1_are_independent(tmp_path: Path) -> None:
@@ -125,7 +125,7 @@ def test_sightings_and_r1_are_independent(tmp_path: Path) -> None:
     )
     findings = evaluate_file(path)
     assert findings.rule_hits == (RuleHit.R1_EXFIL,) and findings.compromised
-    assert [s.seq for s in findings.forwarded_canary_sightings] == [1]
+    assert [s.seq for s in findings.forwarded_needle_sightings] == [1]
     assert not findings.is_evidence_of_safety
 
 
@@ -145,7 +145,7 @@ def test_sightings_field_is_required() -> None:
 
     from proveflow.oracle.rules import OracleFindings
 
-    with pytest.raises(ValidationError, match="forwarded_canary_sightings"):
+    with pytest.raises(ValidationError, match="forwarded_needle_sightings"):
         OracleFindings(trial_id="t", canary=None, compromised=False, rule_hits=(), evidence=())  # type: ignore[call-arg]
 
 

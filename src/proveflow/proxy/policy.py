@@ -22,13 +22,21 @@ role. The session cannot forge that second opinion.
 Residual (ADR-006): a sink that BOTH the session's labels and the proxy's classifier miss
 (the twin describes it innocently) is forwarded TO THE TWIN. Harmless in twin mode; must be
 closed before any ``--real-reads`` mode exists.
+
+Dual-role twin-mode exception (Phase 4, ADR-007), decided OUTSIDE ``ToolPolicy`` (which
+still denies every sink): ``dual_role_names`` = the tools the session's evidence AND the
+proxy's own classifier both label untrusted_source + sink. The server passes that set to
+``decide`` and the gate only when the twin passed ``twin.guard.check_no_io``
+(``UpstreamState.guard_passed``); otherwise the set is empty. A pure sink (sink without
+source on either side) is never in it. THIS EXCEPTION MUST NOT SURVIVE INTO ANY
+``--real-reads`` MODE.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
 
@@ -72,6 +80,14 @@ def _under(path: Path, root: Path) -> bool:
     p = os.path.normcase(str(path))
     r = os.path.normcase(str(root)).rstrip("\\/")
     return p.startswith(r + os.sep)
+
+
+def under_twin_root(path: Path) -> bool:
+    """``path`` (resolved) is ``TWIN_ROOT`` itself or inside it: where ``proveflow twin``
+    may write, so that layer A later accepts the script."""
+    root = TWIN_ROOT.resolve()
+    real = path.resolve()
+    return os.path.normcase(str(real)) == os.path.normcase(str(root)) or _under(real, root)
 
 
 def check_twin_argv(argv: Sequence[str]) -> None:
@@ -176,17 +192,58 @@ def is_sink_call(name: str, sink_names: frozenset[str]) -> bool:
     return any(name_key(s) == key for s in sink_names)
 
 
+_DUAL = frozenset({ToolRole.UNTRUSTED_SOURCE, ToolRole.SINK})
+
+
+def session_dual_role_names(tools: Sequence[ToolSpec]) -> frozenset[str]:
+    """Names the SESSION's evidence labels untrusted_source AND sink, with tool-granularity
+    evidence only (the same evidence bar as forwarding) and a real tool name."""
+    return frozenset(
+        t.name
+        for t in tools
+        if _DUAL <= {ev.role for ev in t.roles}
+        and all(ev.granularity == Granularity.TOOL for ev in t.roles)
+        and t.name != "*"
+    )
+
+
+def dual_role_names(
+    tools: Sequence[ToolSpec],
+    proxy_roles: Mapping[str, Collection[str]],
+    advertised: frozenset[str],
+) -> frozenset[str]:
+    """N2: the AND of the session's evidence and the proxy's own v2 classification
+    (``proxy_roles``: advertised name -> role values). Both must say untrusted_source + sink;
+    the name must be advertised and collide with no other session or advertised name. A
+    pure sink (no source role on either side) is never returned."""
+    proxy_dual = frozenset(
+        name for name, roles in proxy_roles.items() if {r.value for r in _DUAL} <= set(roles)
+    )
+    names = session_dual_role_names(tools) & proxy_dual & advertised
+    return names - colliding_names(advertised) - colliding_names([t.name for t in tools])
+
+
 def decide(
     policy: Mapping[str, ToolPolicy],
     advertised: frozenset[str],
     name: str,
     *,
     proxy_sinks: frozenset[str] = frozenset(),
+    dual_role: frozenset[str] = frozenset(),
 ) -> tuple[Decision, SandboxReason | None]:
-    """The handler's decision for one ``tools/call``. Default deny."""
+    """The handler's decision for one ``tools/call``. Default deny.
+
+    ``dual_role`` (ADR-007): non-empty only in twin mode with a guard-passing twin; such a
+    tool is forwarded although its policy entry is ``forward=False``."""
     entry = policy.get(name)
     if entry is None:
         return Decision.SANDBOX, SandboxReason.UNKNOWN_TOOL
+    if name in dual_role:
+        if name not in advertised:
+            return Decision.SANDBOX, SandboxReason.NOT_ADVERTISED
+        if name in colliding_names(advertised):
+            return Decision.SANDBOX, SandboxReason.NAME_COLLISION
+        return Decision.FORWARD, None
     if not entry.forward:
         return Decision.SANDBOX, SandboxReason.POLICY_DENY
     if name not in advertised:
