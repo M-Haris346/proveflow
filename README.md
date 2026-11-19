@@ -111,9 +111,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`43613154799` on commit `db3d5b4` (Phase 3a oracle), green on both OSes (ubuntu: 976 passed,
-15 skipped, all Windows-only tests; windows: 989 passed, 2 skipped, both POSIX-only signal
-tests). The POSIX kill tests were also repeated 10x each, all green, in run `43582905272`.
+`44534872688` on commit `c685297` (Phase 4 twin, plus the render-width test fix), green on
+both OSes (ubuntu-24.04: 1345 passed, 15 skipped, all Windows-only tests, 0 failed; the two
+POSIX signal tests ran there; windows-2025: 1358 passed, 2 skipped, both POSIX-only signal
+tests, 0 failed). The POSIX kill tests were also repeated 10x each, all green, in run
+`43582905272`.
 This README states CI results only for a run id checked with `gh run list`. Local commands:
 
 ```bash
