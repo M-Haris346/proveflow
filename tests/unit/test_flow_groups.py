@@ -28,6 +28,7 @@ from proveflow.flows.graph import (
 from proveflow.report.models import ScanReport
 from proveflow.report.sarif import build_sarif
 from proveflow.scan import build_scan
+from widths import TEST_COLUMNS
 
 S, P, K = ToolRole.UNTRUSTED_SOURCE, ToolRole.PRIVATE_DATA, ToolRole.SINK
 
@@ -310,7 +311,7 @@ def test_terminal_shows_one_row_per_group_with_server_marker(tmp_path: Path) -> 
 
     s = full_setup(tmp_path)
     rep = build_scan(run_discovery(s.host, s.project), s.host, s.project, ProveflowConfig())
-    console = Console(record=True, width=250)
+    console = Console(record=True, width=TEST_COLUMNS)
     render_scan(rep, console, limit=3)
     text = console.export_text()
     title = f"Toxic flows: {len(rep.groups)} groups ({len(rep.flows)} flows), all THEORETICAL"

@@ -26,6 +26,7 @@ from proveflow.report.models import IntrospectionStatus, ScanReport, SkipReason
 from proveflow.report.sarif import build_sarif
 from proveflow.report.terminal import render_scan
 from proveflow.scan import build_scan
+from widths import TEST_COLUMNS
 
 runner = CliRunner()
 
@@ -222,7 +223,7 @@ def test_report_that_drops_a_server_is_refused(tmp_path: Path) -> None:
 def test_terminal_shows_skipped_table_and_counts(tmp_path: Path) -> None:
     s = full_setup(tmp_path)
     report = build_scan(run_discovery(s.host, s.project), s.host, s.project, ProveflowConfig())
-    console = Console(record=True, width=250)
+    console = Console(record=True, width=TEST_COLUMNS)
     render_scan(report, console, limit=5)
     text = console.export_text()
     assert f"Skipped servers ({len(report.skipped)}, NOT analyzed)" in text

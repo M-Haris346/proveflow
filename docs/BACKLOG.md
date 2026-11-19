@@ -65,6 +65,19 @@ moves out of this file only with a fix and that test in the repo.
 - **Proposed test:** two calls with different `path` values return different content, the
   same call twice returns the same bytes, and every honey value still appears in some response.
 
+### Readability of wrapped terminal output is untested (F7; low)
+- **Where:** `tests/widths.py` pins every test to `TEST_COLUMNS = 1_000_000`, so exact-text
+  assertions are width-independent. One check opts out on purpose,
+  `tests/narrowchecks.py` (COLUMNS=40, allowlisted in `tests/unit/test_render_width.py`):
+  it verifies only that redaction survives hard wrapping of the consent prompt.
+- **Gap:** no test verifies that wrapped output (the consent prompt, a security warning, in
+  an 80-column terminal) is READABLE, e.g. that the command line and the WARNING line stay
+  recognisable. Only the absence of a planted secret is checked.
+- **Rule for the future:** a narrow-width rendering test goes into the `COLUMNS_USERS`
+  allowlist in `tests/unit/test_render_width.py` with a one-line reason.
+- **Proposed test:** at COLUMNS=80, the WARNING sentence and every line label (`command:`,
+  `env keys:`, `config:`) start a line of the rendered prompt.
+
 ### Dual-role agreement gap (F6; medium for realism, must close before `--real-reads`)
 - **Measured:** v2 12/155, human labels 10/155, both 7, Jaccard 7/15 = 0.47
   (`tools/count_dual_role.py`, pinned by `tests/unit/test_dual_role_count.py`). v2 only:

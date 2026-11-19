@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from proveflow.discover.hostenv import HostEnv
+from widths import TEST_COLUMNS
 
 
 def _refuse() -> HostEnv:
@@ -14,5 +15,6 @@ def _refuse() -> HostEnv:
 @pytest.fixture(autouse=True)
 def _no_real_host(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(HostEnv, "current", staticmethod(_refuse))
-    # Wide terminal so Rich never wraps a value across lines in output assertions.
-    monkeypatch.setenv("COLUMNS", "400")
+    # One pinned render width, far above any line a test can produce (tests/widths.py):
+    # rendered-text assertions must not depend on the path, the terminal or the width.
+    monkeypatch.setenv("COLUMNS", str(TEST_COLUMNS))

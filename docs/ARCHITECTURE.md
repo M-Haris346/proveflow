@@ -444,6 +444,15 @@ proveflow/
 - **Mutation**: disable an encoder / redaction rule / sandbox → named tests must fail.
 - **Determinism**: same cassette ⇒ byte-identical verdict JSON.
 - **Live (opt-in marker)**: small smoke run on free tier; never required for CI green.
+- **Rendered-text assertions are path-, terminal- and width-independent** (found in Phase 4 by
+  the per-commit worktree verification, not by CI): Rich hard-wraps any line longer than its
+  width (`COLUMNS` minus `legacy_windows`, rich 15.0.0 `rich/console.py:685-687`), and many
+  asserted lines carry absolute paths. Every test therefore renders at one pinned width,
+  `tests/widths.py` `TEST_COLUMNS = 1_000_000`, above 30 paths of the Windows extended-length
+  maximum ("a maximum total path length of 32,767 characters", approximate per the page;
+  Microsoft Learn, [Maximum Path Length Limitation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation),
+  updated 2025-04-15). Pinned by `tests/unit/test_render_width.py` (no test sets its own
+  width) and `tests/mutation/test_render_width_mutation.py`.
 - CI matrix: ubuntu + windows, Python 3.12.
 
 ## 9. Phases (one at a time: plan mode → approval → code + tests → real output → Haris commits)
