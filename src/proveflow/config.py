@@ -6,6 +6,11 @@ server = "github"            # profile member key (server name)
 tool = "create_issue"        # optional; omitted = the server-level pseudo tool "*"
 roles = ["sink"]             # replaces heuristic roles entirely; [] = no roles
 sink_severity = "remote_write"  # optional; default network_egress (worst case)
+
+[[twin_override]]            # Phase 4: response archetype for one tool's twin
+server = "github"
+tool = "create_issue"
+archetype = "issue_ticket"   # one of twin.archetypes.ARCHETYPES (checked by `proveflow twin`)
 ```
 """
 
@@ -31,8 +36,15 @@ class RoleOverride(FrozenModel):
     sink_severity: SinkSeverity | None = None
 
 
+class TwinOverride(FrozenModel):
+    server: str
+    tool: str
+    archetype: str
+
+
 class ProveflowConfig(FrozenModel):
     override: tuple[RoleOverride, ...] = Field(default_factory=tuple)
+    twin_override: tuple[TwinOverride, ...] = Field(default_factory=tuple)
 
 
 def load_config(path: Path) -> ProveflowConfig:

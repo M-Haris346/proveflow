@@ -387,6 +387,92 @@ def proxy(
 
 
 @app.command()
+def twin(
+    from_scan: Annotated[
+        Path,
+        typer.Option(
+            "--from",
+            help="A `proveflow scan --json` report made WITH introspection (not --no-launch).",
+            exists=True,
+            dir_okay=False,
+        ),
+    ],
+    profile: Annotated[str, typer.Option("--profile", help="Profile id from the scan.")],
+    out_dir: Annotated[
+        Path,
+        typer.Option(
+            "--out-dir",
+            help="Where to write; must be inside the proveflow twin directory (TWIN_ROOT).",
+            file_okay=False,
+        ),
+    ],
+    config_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            help="proveflow.toml with twin_override tables (server, tool, archetype).",
+            exists=True,
+            dir_okay=False,
+        ),
+    ] = None,
+    seed: Annotated[
+        str, typer.Option("--seed", help="Seed for the twins' synthetic data (default 0).")
+    ] = "0",
+) -> None:
+    """Generate one schema twin and one proxy session per server of a scanned profile.
+
+    Nothing is launched and nothing goes to the network. Each twin is a self-contained
+    script with the servers' real tool names, descriptions and input schemas and synthetic,
+    deterministic responses (one canned response per tool). Existing files are never
+    overwritten. All output goes to stderr.
+    """
+    from pydantic import ValidationError
+
+    from proveflow.twin.plan import (
+        TwinPlanError,
+        load_scan,
+        plan_twins,
+        summary_rows,
+        write_plan,
+    )
+
+    err = Console(stderr=True)
+    try:
+        overrides = load_config(config_path).twin_override if config_path else ()
+        report = load_scan(from_scan)
+        plan = plan_twins(report, profile, out_dir, seed=seed, overrides=overrides)
+        if not plan.twins:
+            raise TwinPlanError("no server in this profile has an introspected tool list")
+        written = write_plan(plan, out_dir)
+    except (TwinPlanError, ConfigError, OSError) as exc:
+        err.print(Text(f"error: {exc}", style="red"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE) from None
+    except ValidationError as exc:
+        err.print(Text(f"error: invalid scan report ({exc.error_count()} errors)", style="red"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE) from None
+    for server, tools, honey, sinks, dual, skipped in summary_rows(plan):
+        err.print(
+            Text(
+                f"{server}: {tools} tools, {honey} honey, {sinks} pure sink, {dual} dual-role, "
+                f"{skipped} with unvalidated schema keywords"
+            )
+        )
+        if sinks + dual == 0:
+            err.print(
+                Text(
+                    f"  {server} has no sink tool: it cannot be attacked for exfiltration "
+                    "(a finding about the server)",
+                    style="yellow",
+                )
+            )
+    for s in plan.skipped:
+        err.print(Text(f"skipped {s.server}: {s.reason}", style="yellow"))
+    for o in plan.unused_overrides:
+        err.print(Text(f"unused twin_override {o.server}/{o.tool}", style="yellow"))
+    err.print(Text(f"wrote {len(written)} files to {out_dir}"))
+
+
+@app.command()
 def prove() -> None:
     """Attack flows in a safe schema twin and report confirmed exploits."""
     _stub("prove", "Phase 7")
