@@ -50,6 +50,39 @@ moves out of this file only with a fix and that test in the repo.
   allowed proxy change.
 - **Proposed test:** a cassette line with 100k nested lists → `CassetteError`.
 
+## Twin (Phase 4, 2026-11-15)
+
+### Argument-dependent responses (F3; medium for utility realism, none for safety)
+- **Where:** `src/proveflow/twin/generator.py`. `TABLE[tool]["content"]` does not depend on
+  the arguments: one canned response per tool. Arguments are validated (type, required,
+  properties, enum) and then ignored.
+- **Effect:** an agent reading two different paths gets identical content, so utility
+  realism is limited to calling tools correctly, not to distinguishing their targets. The
+  Phase 5 runner will meet this first.
+- **Proposed fix:** derive the content from `Rng(seed).derive("content", tool, canonical
+  args)` inside the embedded runtime (still literal data, still deterministic), keeping honey
+  and marker placement.
+- **Proposed test:** two calls with different `path` values return different content, the
+  same call twice returns the same bytes, and every honey value still appears in some response.
+
+### Dual-role agreement gap (F6; medium for realism, must close before `--real-reads`)
+- **Measured:** v2 12/155, human labels 10/155, both 7, Jaccard 7/15 = 0.47
+  (`tools/count_dual_role.py`, pinned by `tests/unit/test_dual_role_count.py`). v2 only:
+  browser_navigate, get_blog_post, get_blog_posts, get_linkedin_post, save_conversation.
+  Human only: browser_network_requests, fill, image_pull.
+- **Effect:** not a safety hole in twin mode (the twin has no I/O). Prove attacks up to 5
+  flows a human would not call dual-role and cannot attack 3 that a human would.
+- **Proposed fix:** dual-role rules tuned on dev only, a second independent human labeler for
+  the dual-role subset (kappa), then a re-measure on a fresh held-out set.
+- **Proposed test:** the count tool reports agreement on the new held-out set; the test pins
+  it.
+
+### The ADR-007 dual-role exception must be removed before `--real-reads`
+- **Where:** `proxy.server.forwardable_dual_roles`, `proxy.policy.dual_role_names`.
+- In any mode where a forward can reach a real server, a dual-role tool is a real sink.
+- **Proposed test:** in a real-reads session, `forwardable_dual_roles` is empty whatever the
+  guard says, and a dual-role call is sandboxed.
+
 ### Classifier miss before `--real-reads` (must fix before that mode exists)
 - A sink that both the session's evidence and the proxy's own v2 classifier miss is forwarded
   to the twin. That is harmless in twin mode. Held-out sink recall is 16/25

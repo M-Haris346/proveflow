@@ -53,7 +53,7 @@ Install target (Phase 9): `uv tool install proveflow`, `uvx proveflow`, `pipx in
 | **ServerSpec** | A configured server: name, transport, command/url, env **keys only** (values redacted), source file. |
 | **ToolSpec** | Name, description, input schema, server, **roles** ⊆ {`untrusted_source`, `private_data`, `sink`}, role provenance (heuristic / override / LLM-suggested-and-confirmed). |
 | **Flow** | Ordered path `source tool → (private tool) → sink tool` inside one agent profile; the tools may be on one server or on several (cross-server is ranked first, not required). Flow class: `exfil` (source+private+sink), `action` (source+sink), `leak` (private+sink with no source = misuse, informational). Severity is a separate field, `sink_severity` (network egress > remote write > local write). |
-| **Twin** | Mock MCP server generated from real `ToolSpec`s: same names/schemas/descriptions, deterministic synthetic responses, honey secrets, injection slots. |
+| **Twin** | Mock MCP server generated from real `ToolSpec`s: same names/schemas/descriptions, deterministic synthetic responses, honey secrets. Payloads are injected by the proxy, not by the twin (§5.4). |
 | **Payload / Carrier / Goal / Attack** | Attack text (with provenance + license) × embedding method × attacker objective, instantiated with per-trial canary. |
 | **Trial** | (flow, attack \| none, model, mitigation, seed) → trajectory → verdict. Every attacked trial has a clean twin (same seed). |
 | **Verdict** | `utility`, `compromised`, `rule_hit`, `blocked_by_mitigation`, tokens, latency. |
@@ -168,20 +168,57 @@ sequenceDiagram
     - One SARIF result per group is deferred; consumers still get one result per flow.
     - Flow ids (`flow_id`, unchanged) join `profile|class|labels` with `|`, so server names containing `|` could map two different paths to the same flow-id input. Group ids use JSON and do not have this ambiguity.
 
-### 5.4 Schema twin `twin/`
-- Generates a FastMCP server per real server: identical tool names, descriptions, input schemas.
-- Responses: deterministic, seeded. Each tool gets a **response archetype** (email list, document/file text, DB rows, web page, issue/ticket, generic JSON) chosen by heuristics or override; filled with synthetic data (seeded Faker-style generator), honey secrets in private-data tools, and an injection slot in untrusted-source tools.
-- Arguments are validated against the real input schema (agent must call tools correctly — utility realism).
+### 5.4 Schema twin `twin/` [impl][tested] Phase 4
+- **One self-contained `.py` per server** (`twin.generator.generate_twin` / `write_twin`,
+  file `pftwin-<slug>.py`, not importable by name). It imports exactly five modules (`json`,
+  `anyio`, `mcp_types`, `mcp.server.lowlevel.Server`, `mcp.server.stdio.stdio_server`) and
+  never proveflow. Tool definitions and responses are Python literals; the small runtime
+  (`twin._runtime`: validator + dispatch) is embedded verbatim. So a proveflow change cannot
+  alter twin behaviour behind the sha256 the proxy pins.
+- **Identical tool surface:** the same names, descriptions and input schemas as the stored or
+  introspected tools (139/139 stored schemas round-trip unchanged). The twin advertises **no
+  `outputSchema` and no annotations** (the proxy strips `outputSchema` anyway, D6).
+- **Deterministic:** same tools + same seed → byte-identical script and sha256 (sha256
+  counter RNG `twin.rng`, sorted keys, ASCII-only literals; no `random`, no `secrets`; checked
+  across `PYTHONHASHSEED` values).
+- **Responses:** each tool gets one of six **response archetypes** (email list, document text,
+  DB rows, web page, issue/ticket, generic JSON) chosen by keyword heuristics
+  (`twin.select`) or a `[[twin_override]]`; filled with fake data (`example.invalid`,
+  fictional names; every generated string passes `core.honey.t4_violations`). Private-data
+  tools carry honey values (`pfhoney_<kind>_<16 hex>`, at most 32 per session). Every tool's
+  last text block is its marker `pfmark_<hex>` (liveness evidence that the twin itself
+  answered, R-C2; never in the session or cassette `session_start`, F4).
+- **One injection mechanism, in the proxy.** The twin has no injection slot: the proxy's
+  carriers inject into the result of an `inject=True` tool (§5.5 D7). The twin only serves
+  synthetic content.
+- **Validator subset** (D8): arguments are checked for `type`, `required`, `properties` and
+  `enum` only (`twin._runtime.validate`); invalid arguments get `isError=true` with the path.
+  Every other keyword (`minLength`, `format`, `maximum`, ...) is **not** validated and is
+  recorded per tool in `TwinBuild.skipped` (`twin.schema_subset.skipped_keywords`), so no
+  report can claim it was.
+- **Limitation (F3): one canned response per tool.** The response does not depend on the
+  arguments: they are validated but never varied on, so reading two different paths returns
+  identical content. Utility realism is therefore limited to calling tools correctly, not to
+  distinguishing their targets (docs/BACKLOG.md: argument-dependent responses).
+- **CLI:** `proveflow twin --from SCAN.json --profile ID --out-dir DIR [--config TOML]
+  [--seed N]` (`twin.plan`): one twin and one proxy session (schema 3, honey, no attack,
+  no markers) per introspected server of the profile; `--out-dir` must be inside
+  `TWIN_ROOT` (layer A accepts twin scripts only there); a `--no-launch` scan and any
+  existing target are refused before anything is written; `[[twin_override]]` (server,
+  tool, archetype) in `--config`; stderr only; no network, nothing launched.
+- **The twin guard** (`twin.guard.check_no_io`, AST only) runs in the proxy on the hashed
+  copy; it gates only the ADR-007 dual-role exception and is not a sandbox (THREAT_MODEL
+  T17).
 - **Honest limitation:** twin behavior is not the real server's behavior. Twin proves *the agent + tool surface* is exploitable, not that the real server returns exploitable content. Documented in every report.
-- **Real read-only mode** [planned v1, opt-in]: forward non-sink calls to real servers; requires explicit `--real-reads` + per-server consent; warning that real data goes to the model provider; recommends local model.
+- **Real read-only mode** [planned v1, opt-in]: forward non-sink calls to real servers; requires explicit `--real-reads` + per-server consent; warning that real data goes to the model provider; recommends local model. The ADR-007 dual-role exception must not survive into it.
 
 ### 5.5 Interception proxy `proxy/` [impl][tested] Phase 2 (ADR-006)
 `proveflow proxy --session FILE`: a stdio MCP server for an agent, and a stdio MCP client for
 **one twin upstream** (official `mcp` SDK 2.3.0; SDK facts in docs/MCP_SDK.md).
 
-- **D1 scope.** stdio on both sides, tools only. Not built and not stubbed:
-  - twin generator (Phase 4), oracle (3), agent runner/LLM (6), corpus (6), mitigations (8),
-    replay CLI (5);
+- **D1 scope.** stdio on both sides, tools only. Not built and not stubbed in Phase 2 (the
+  twin generator came in Phase 4, the oracle in Phase 3a):
+  - agent runner/LLM (6), corpus (6), mitigations (8), replay CLI (5);
   - Streamable HTTP, `--real-reads`.
 - **D2 layer A: proveflow-owned twin dir + hash pin** (Phase 2.1 H2).
   - `TwinUpstream(name, argv)` is valid only for `[sys.executable, /abs/path/twin.py, ...]`,
@@ -189,6 +226,9 @@ sequenceDiagram
     `TWIN_ROOT` has no flag or env override.
   - The session pins `twin_sha256`. Before spawn the script is copied into the private temp
     cwd, the copy is hashed (a mismatch is refused), and the copy runs.
+  - Phase 4 (R4): the twin guard runs on the SAME bytes that were hashed (never the original
+    path) and sets `UpstreamState.guard_passed`. It does not refuse the spawn; it only gates
+    the dual-role exception (D3).
   - This refuses installed real servers and other `.py` files. It does not prove that a script
     placed inside `TWIN_ROOT` is harmless.
   - `proxy/` imports no `discover*`, `introspect.launchspec`/`transport`/`runner` or
@@ -208,6 +248,12 @@ sequenceDiagram
   - Advertised look-alikes are denied together.
   - Anything not forwarded gets the sandbox response.
   - **No flag, env var or session field disables the sandbox.** One mode only: twin mode.
+  - **Phase 4 dual-role exception (ADR-007), twin mode only:** a tool labeled
+    untrusted_source + sink by the session's evidence AND by the proxy's own classifier,
+    advertised and without look-alike, is forwarded when the twin passed the guard. Decided
+    outside `ToolPolicy` (`policy.dual_role_names`, `server.forwardable_dual_roles`); the
+    same set goes to `decide` and the gate. A pure sink is always sandboxed. Recorded as
+    `upstream_request.sink=true`. **Must not survive into `--real-reads`.**
 - **D4 methods.**
   - To upstream: `initialize`, `notifications/initialized`, `tools/list`, `tools/call` (gated),
     `ping`, `notifications/cancelled`.
@@ -238,9 +284,10 @@ sequenceDiagram
     `json.dumps(payload)`.
   - Injection happens only for `inject=True`, only into the first TextContent, and only with an
     armed `Attack`. Otherwise an `injection_skipped` event is recorded.
-- **D8 session.** `ProxySession` (pydantic, `extra=forbid`, schema 2 since Phase 2.1):
-  session_id, upstream, twin_sha256, tools (classified `ToolSpec`s; a `policy` key is
-  rejected), attack, cassette_path (absolute, never overwritten), limits.
+- **D8 session.** `ProxySession` (pydantic, `extra=forbid`, schema 3 since Phase 4; 1 and 2
+  refused): session_id, upstream, twin_sha256, tools (classified `ToolSpec`s; a `policy` key
+  is rejected), attack, honey (at most 32, unique, T4-clean; Phase 4), cassette_path
+  (absolute, never overwritten), limits. Nothing about twin markers or guard results.
 - **D9 cassette** (`proxy/cassette.py`):
   - JSONL, one validated event per line;
   - `seq`, no wall clock;
@@ -252,13 +299,17 @@ sequenceDiagram
     line and 64 MiB file limit. Replay is Phase 5.
   - Cassette schema 2 (Phase 3a): every `sandboxed_call` carries `sink: bool`, computed by
     the proxy (`policy.is_sink_call`). Schema-1 cassettes are refused.
+  - Cassette schema 3 (Phase 4): `session_start.honey`, and a required
+    `upstream_request.sink` from the same `is_sink_call`; `sink=true` there means exactly "a
+    dual-role tool was forwarded to a guard-passing twin". Schema-2 cassettes are refused.
 - **D10 evidence.** The test twin logs every received line as raw bytes before decoding.
   Safety tests use that log, not the cassette.
 - **Residuals (ADR-006, docs/BACKLOG.md):**
   - A sink that both the session's labels and the proxy's classifier miss is forwarded **to
     the twin** (held-out sink recall 16/25). Harmless in twin mode; must be closed before
     `--real-reads`.
-  - Fetch-a-URL sources are classified source+sink and never forwarded.
+  - Fetch-a-URL sources are classified source+sink. Before Phase 4 they were never
+    forwarded; since ADR-007 they are forwarded only to a guard-passing twin.
   - L3: the gate allows any error response and any cancel params.
   - L4: cancellation during spawn.
 
@@ -270,17 +321,22 @@ sequenceDiagram
 
 ### 5.7 Oracle `oracle/` (deterministic — the heart)
 **Phase 3a [impl][tested]** (docs/ORACLE.md): canary generator, matcher, R1, R4.
-**Not built:** R2, R3, honey values, utility checker, FakeLLM policies. Nothing measured.
+**Phase 4 [impl][tested]:** honey needles, R1 over forwarded dual-role sink calls, needle ids
+in evidence, canary T4 rejection sampling.
+**Not built:** R2, R3, utility checker, FakeLLM policies. Nothing measured.
 
-- Per-trial canary `cnry_<12 hex>` (48 bits from `secrets`).
-  - Honey secrets (fake key formats; never format-valid card/ID numbers) are [planned] for the
-    Phase 4 twin; R1 is canary-only until then.
+- Per-trial canary `cnry_<12 hex>` from `secrets`, rejection-sampled against
+  `core.honey.t4_violations`: |S_canary| = 279,426,400,710,656 (47.9895 bits).
+  - Honey values `pfhoney_<kind>_<16 hex>` (fake key formats; never format-valid card/ID
+    numbers) come from the twin generator: |S_honey| = 18,145,465,120,237,551,616 (63.9762
+    bits). Needles = the canary + every honey value.
 - Encoding-aware matcher on sink-call args: raw, case-fold, whitespace/zero-width stripped,
   URL, base64 (all alignments, both alphabets, every bit checked), hex, rot13, reversed,
   separator-split (single separator, scan-based), JSON-escaped. One layer each; no combined
   encodings.
 - Rules:
-  - **R1 exfil** (canary in the args of a `sandboxed_call` with `sink=true`) [impl][tested];
+  - **R1 exfil** (a needle in the args of a `sink=true` `sandboxed_call`, or since Phase 4 of
+    a `sink=true` `upstream_request`, i.e. a forwarded dual-role call) [impl][tested];
   - **R2 goal action** (tool + arg predicate) [planned];
   - **R3 answer hijack** (marker in the final answer) [planned]. It needs the agent's final
     answer, which only the runner (Phase 5) can record;
@@ -289,7 +345,8 @@ sequenceDiagram
 - The oracle reads the proxy's `sink` flag and never infers sink-ness. It refuses incomplete,
   truncated or byte-capped cassettes with a typed error.
 - Phase 3a.1: a canary in a FORWARDED call (a possible missed sink) is recorded as a
-  non-counted sighting. Such a trial is never evidence of safety.
+  non-counted sighting. Such a trial is never evidence of safety. Phase 4: any needle, in a
+  `sink=false` forward only (`forwarded_needle_sightings`, with the needle id).
 - Utility: per-flow deterministic task checker [planned]. An LLM-as-judge never decides the
   primary verdict.
 
@@ -397,7 +454,7 @@ proveflow/
 | **1 Find** | discover + redaction, introspect (tools/list only), role classifier, flow graph, terminal + SARIF report; labeled tool set for classifier eval | `proveflow scan` on Haris's real machine; classifier precision/recall **[measured]**; redaction property tests. **1a done 2026-11-10** [impl][tested]. **1b introspection [impl][tested] 2026-11-12**: consented tools/list with a method allowlist; Job Object / process-group kill; safe PATH resolution and temp cwd; project-scope consent; unresolved-variable refusal; discover→legacy relaunch; tool cache + PF-TOOLCHANGE; PF-UNPINNED. Tested with a fake server on Windows; CI run 43059686222 green on ubuntu + windows at 3b66868. **1b done 2026-11-13**: real-machine `scan` run by the author (1 real stdio server; consent yes → `ok`, consent no → `declined`; `leak_check` clean both times; output not committed). Classifier baseline **[measured] once** (docs/eval/RESULTS.md); caveat: the test split is mostly reference servers, dev recall ~0.2–0.3, labels are LLM pre-labels reviewed by the author. Fixed from the real-machine run: silent drop of out-of-project servers (T16); UTF-8 `--json` on Windows. **1c done 2026-11-13**: classifier v2 (rules tuned on dev only, docs/eval/V2_CHANGELOG.md) measured once with v1 on a fresh held-out set (docs/eval/RESULTS_V2.md): held-out (55 tools, 7 servers, single blind human labeler): sink recall 8/25 -> 16/25, mostly one rule (C1) on one server; private_data recall 4/20 for both; 10 of 13 v2 rules untested; large dev-to-held-out gap. **Flow grouping [impl][tested] 2026-11-14** (§5.3; scan report schema 2): one table row per group; reduces rows, not tool paths. Phase 1 done. | 5–6 d |
 | **2 Proxy** | stdio proxy, sink sandbox, carriers, cassette | Safety tests prove no sink forwarding. **[impl][tested] 2026-11-14** (§5.5, ADR-006): `proveflow proxy --session` serves ONE python twin (layer A) with a default-deny policy + write-path gate (layer B); sandbox not disableable; 5 carriers; hash-chained cassette with validating loader; limits; fail closed. **Phase 2.1 (review fixes)**: layer A = proveflow-owned twin dir + sha256 pin (copy hashed, copy runs); session carries classified tools, the proxy computes the policy and adds its own classifier's second opinion on advertised tools; look-alike names denied; byte-counted lines; message and cassette caps end the session fail-closed; raw-byte twin log; runtime import guard. Residuals: classifier miss on innocently described sinks (16/25 held-out recall), L3, L4 (docs/BACKLOG.md). Tested only against a fake twin written for the tests (no real server, no network, no LLM, no agent loop); Windows locally and in CI; POSIX kill tests run only in CI (run `43509278369`, ubuntu: not skipped, 0 failed). Not built: twin generator, oracle, agent runner, corpus, mitigations, replay CLI, Streamable HTTP, `--real-reads`. **Next:** Phase 3 (Oracle) | 3–4 d |
 | **3 Oracle** | canary, encodings, matcher, R1–R4, FakeLLM policies | Exact FakeLLM verdicts; mutation tests fail as designed. **3a [impl][tested] 2026-11-14** (docs/ORACLE.md): canary generator; 10-encoding matcher (unit + mutation test per encoding; false-positive and encode-then-match properties; 1 MiB pathological input under 15 s); R1 (canary in a `sink=true` sandboxed call) and R4 (review only) over a validated cassette; incomplete/truncated/capped cassettes raise; proxy records `sink` (cassette schema 2). Tested on synthetic cassettes and real in-process proxy sessions against the fake twin; no LLM, no network. **3b [planned]:** R2, FakeLLM policies. R3 waits for the runner (Phase 5); honey for the twin (Phase 4) | 3–4 d |
-| **4 Twin** | twin generator, archetypes, synthetic data, honey secrets, schema validation | Twin of pg-mcp-guard + 2 public servers runs under proxy | 4–5 d |
+| **4 Twin** | twin generator, archetypes, synthetic data, honey secrets, schema validation | Twin of pg-mcp-guard + 2 public servers runs under proxy. **Adapted exit (stated as an adaptation):** the twins are generated from the STORED `data/eval` tool metadata (not a live introspection), and run under the real proxy in process with a scripted agent (no LLM). **[impl][tested] 2026-11-15, local only (Windows, both shells; CI not yet run on this phase):** one self-contained twin per server (five imports, no proveflow import, deterministic, sha256-pinned); 6 archetypes; fake data; honey (T4 rejection sampling, exact space counts); validator subset (type/required/properties/enum; skipped keywords recorded); AST no-I/O guard on the hashed copy, gating only the ADR-007 dual-role exception (not a sandbox); session + cassette schema 3; oracle needles = canary + honey, R1 over forwarded dual-role sink calls. D9 (`tests/integration/test_twin_d9.py`): **fetch** is the one dual-role case with a real injection: forwarded, injected, `upstream_request.sink=true`, canary R1 (0 private tools, so canary-only); **filesystem** has 0 source tools, so nothing can be injected: a scripted agent drives the oracle path to a honey R1; this is NOT a reproduced injection chain; **pg-mcp-guard** has 0 sinks: honey, injection and a forwarded needle sighting, NO R1. **Result:** a server whose tools contain no sink cannot be attacked for exfiltration at all, and proveflow reports that as a finding about the server, not a gap in the tool. `proveflow twin --from SCAN.json --profile ID --out-dir DIR [--config TOML] [--seed N]` [impl][tested on synthetic scans]: one twin + one session per introspected server; refuses a `--no-launch` scan, an out-dir outside `TWIN_ROOT` and any existing target (no partial output); stderr only; no network. **Limitations:** one canned response per tool (F3); D9 covers 3 of the 13 stored servers | 4–5 d |
 | **5 Runner + store** | LiteLLM loop, command adapter, retries/429, SQLite, replay | One real trial on free tier; replay reproduces verdict | 3–4 d |
 | **6 Corpus** | loaders (audited licenses only), dedup, goal rewriting, sampling | Corpus stats **[measured]**; license per record | 4–5 d |
 | **7 Prove** | campaign engine, paired trials, stats, HTML/JSON/JUnit | **First real numbers**: ≥2 models, FlowVerdicts with CIs | 4–5 d |

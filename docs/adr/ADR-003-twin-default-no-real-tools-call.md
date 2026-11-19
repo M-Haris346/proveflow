@@ -23,4 +23,8 @@ timeout. The sink sandbox is always on in twin mode and cannot be disabled.
   not that the real server returns exploitable content.
 - A future opt-in `--real-reads` mode (v1) may forward **non-sink** calls with explicit per-server
   consent; sink calls stay sandboxed even then.
-- Safety tests assert zero `tools/call` to real servers and zero forwarded sink calls.
+- Safety tests assert zero `tools/call` to real servers and zero forwarded pure-sink calls.
+- **Amended by ADR-007 (Phase 4):** in twin mode only, a dual-role tool (untrusted_source +
+  sink by the session's evidence AND the proxy's own classifier) is forwarded to a twin that
+  passed the twin guard, so injection into fetch-style sources can be tested. Pure sinks stay
+  sandboxed always. That exception must not survive into `--real-reads`.

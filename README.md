@@ -14,7 +14,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 ## Status
 
-> **Phase 1 (Find) done. Phase 2 (Proxy) [impl][tested]. Not released.**
+> **Phase 1 (Find) done. Phase 2 (Proxy), Phase 3a (Oracle) and Phase 4 (Twin) [impl][tested].
+> Not released.**
 >
 > - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
 >   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
@@ -79,16 +80,35 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 >     Residuals: a sink that both the session's labels and the proxy's classifier miss (the
 >     twin describes it innocently; held-out sink recall is 16/25) is forwarded to the twin,
 >     harmless in twin mode but must be closed before any real-reads mode; fetch-a-URL sources
->     count as sinks and are never forwarded; two low-severity items (L3, L4) are listed in
->     docs/BACKLOG.md
+>     count as sinks (since Phase 4 they are forwarded only to a twin that passed the twin
+>     guard, see below); two low-severity items (L3, L4) are listed in docs/BACKLOG.md
 > - Oracle, Phase 3a [impl][tested] (docs/ORACLE.md): canary generator; a deterministic
 >   matcher for 10 encodings (raw, case, zero-width, separator, URL, base64, hex, rot13,
 >   reversed, JSON-escaped); rule R1 (canary in a call the proxy sandboxed as a sink) and R4
 >   (review only) over a validated cassette; incomplete cassettes give no verdict. No LLM.
->   Not built: R2, R3 (needs the agent runner), honey values (needs the twin), utility
->   checker. Nothing measured
+>   Not built: R2, R3 (needs the agent runner), utility checker. Nothing measured
+> - Twin, Phase 4 [impl][tested, local only: Windows, both shells; CI not yet run on it]
+>   (docs/ARCHITECTURE.md §5.4, docs/adr/ADR-007-dual-role-twin-exception.md):
+>   - one self-contained, deterministic twin script per server (five imports, no proveflow
+>     import; same tool names, descriptions and input schemas; 6 response archetypes; fake
+>     data; honey values in private-data tools; a per-tool marker)
+>   - honey and canaries are rejection-sampled against a structural T4 rule (no 12-digit
+>     run, no NINO shape): canary space 47.9895 bits (|S| = 279,426,400,710,656), honey
+>     63.9762 bits (|S| = 18,145,465,120,237,551,616), counted exactly by
+>     `tools/count_t4_space.py`
+>   - the oracle now searches for the canary and every honey value, and also checks dual-role
+>     tools (e.g. fetch) that the proxy forwards only to a twin passing the AST no-I/O guard.
+>     That guard is not a sandbox; this exception must not survive into any real-reads mode
+>   - tested on twins generated from stored metadata (no server launched except the generated
+>     twins, no network, no LLM): fetch (injection + canary R1), filesystem (honey R1 by a
+>     scripted agent; no source tool, so not an injection chain), pg-mcp-guard (0 sink tools:
+>     no exfiltration is possible, reported as a finding about the server)
+>   - limitation: one canned response per tool (arguments are validated, never varied on)
+>   - `proveflow twin --from SCAN.json --profile ID --out-dir DIR` [impl][tested on synthetic
+>     scans]: one twin and one proxy session per introspected server; refuses a `--no-launch`
+>     scan, an out-dir outside the twin directory and any existing file; prints to stderr only
 > - **Next:** Phase 3b (R2, FakeLLM policies).
-> - Everything after Phase 3a is [planned]. No releases.
+> - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
 `43613154799` on commit `db3d5b4` (Phase 3a oracle), green on both OSes (ubuntu: 976 passed,

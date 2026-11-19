@@ -26,10 +26,17 @@ sink call from leaving the proxy. A third, separate piece of evidence proves it.
 - **Hash pin.** The session pins `twin_sha256`. Right before spawn, `upstream.twin_stdio`:
   1. re-runs the argv check;
   2. copies the script into the private, empty temp cwd;
-  3. hashes the **copy** and refuses on any mismatch;
-  4. runs the copy.
+  3. reads the copy's bytes once, hashes **those bytes** and refuses on any mismatch;
+  4. (Phase 4) runs `twin.guard.check_no_io` on **the same bytes** (never on the original
+     path) and records the result as `UpstreamState.guard_passed` (assigned, never OR-ed);
+  5. runs the copy.
 
-  A change to the original file after the check cannot change what runs.
+  A change to the original file after the check cannot change what runs, nor the guard
+  verdict (`upstream.prepare_twin_copy`; order pinned by a named test).
+- **The guard is not a spawn gate.** A guard failure does not refuse the spawn (the test fake
+  twin fails it and still starts). Its only consequence is that the ADR-007 dual-role set is
+  empty. The guard stops accidental I/O and casual misuse; it is NOT a sandbox against a
+  hostile script (THREAT_MODEL T17).
 - Refused before anything is spawned:
   - `npx`, `uvx`, `node`, `docker`, URLs, bare `python`, `-c`, `-m`, relative paths;
   - an installed package module (e.g. the MCP SDK's own `server/__main__.py`);
@@ -57,7 +64,8 @@ sink call from leaving the proxy. A third, separate piece of evidence proves it.
 
 ### Layer B: default-deny policy, second opinion, write-path gate (D3, D5, Phase 2.1 H1/L1)
 - **The session carries classified tools, never decisions.**
-  - `ProxySession` (schema 2) has `tools: tuple[ToolSpec, ...]` (roles plus evidence).
+  - `ProxySession` (schema 2; schema 3 since Phase 4 adds `honey`, and nothing about markers or
+    guard results) has `tools: tuple[ToolSpec, ...]` (roles plus evidence).
   - The proxy computes `build_policy(tools)` itself.
   - A `policy` key is rejected (`extra=forbid`). Schema 1's `policy` field let a session file
     set `forward: true` on a sink; the review demonstrated this, and schema 1 is gone.
@@ -124,8 +132,10 @@ sink call from leaving the proxy. A third, separate piece of evidence proves it.
     opinion catches a forged or wrong session label, not a sink the classifier itself misses.
   - Harmless in twin mode (synthetic twin); a real sink call with real reads.
 - **Second-opinion cost:** the classifier marks fetch-a-URL tools as sinks (a GET can carry
-  data). Such sources (source+sink) are never forwarded, so injection into them cannot be tested
-  in twin mode. This is consistent with D3's source+sink deny.
+  data). Under this ADR alone such sources (source+sink) are never forwarded, so injection into
+  them cannot be tested in twin mode. **Phase 4: amended by ADR-007**: in twin mode a
+  dual-role tool (session evidence AND proxy classifier both say source+sink) is forwarded
+  to a guard-passing twin; `ToolPolicy` itself is unchanged and still denies every sink.
 - **L3 (not fixed, docs/BACKLOG.md):** the gate allows any JSON-RPC error response and any
   `notifications/cancelled` params.
   - Today only the proxy or the SDK generates them, with fixed text.
