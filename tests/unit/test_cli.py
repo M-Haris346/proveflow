@@ -28,7 +28,7 @@ STUBS = {
     "prove": "Phase 7",
     "fix": "Phase 8",
     "verify": "Phase 8",
-    "replay": "Phase 5",
+    "replay": "Phase 7",
 }
 
 

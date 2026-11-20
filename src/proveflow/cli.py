@@ -493,4 +493,4 @@ def verify() -> None:
 @app.command()
 def replay() -> None:
     """Deterministically re-check a stored run from its cassette."""
-    _stub("replay", "Phase 5")
+    _stub("replay", "Phase 7")
