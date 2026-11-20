@@ -20,7 +20,7 @@ released, and no attack-success rate has been measured.
 | Stage | State | What exists | What does not |
 |---|---|---|---|
 | Find | built (Phase 1) | `discover`, `scan` (static flow map; consented `tools/list` introspection), SARIF | |
-| Prove | partial | the twin proxy (Phase 2), the deterministic oracle R1 + R4 (Phase 3a), schema twins and `proveflow twin` (Phase 4) | the agent runner (Phase 5, in progress), rules R2 and R3 (Phase 3b), the attack corpus and campaigns (Phase 6), `prove` (Phase 7) |
+| Prove | partial | the twin proxy (Phase 2), the deterministic oracle R1 + R4 (Phase 3a), schema twins and `proveflow twin` (Phase 4), the agent runner (Phase 5, code-complete, NOT closed: tested only on hand-authored recordings; no LLM provider has ever answered) | one real trial on a real provider (closes Phase 5), rules R2 and R3 (Phase 3b), the attack corpus and campaigns (Phase 6), `prove` (Phase 7) |
 | Fix | not started (Phase 8) | | mitigations, patch files |
 | Verify | not started (Phase 8) | | re-running attacks with a fix applied |
 

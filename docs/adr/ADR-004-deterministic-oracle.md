@@ -79,6 +79,20 @@ most V ≤ 91 variant checks per string and at most H ≤ 32 honey values per se
 | 1 MiB | 0 | 3.4149e-07 | 3.3900e-07 | 1.0073 |
 | 1 MiB | 32 | 3.4166e-07 | 3.3900e-07 | 1.0078 |
 
+**Phase 5: H is the TRIAL's total needles.** A trial with N proxies is evaluated with the
+union of every session's honey (`oracle.evaluate_trial`), so H counts all honey values of
+all twins in the trial, not one session's. There is no trial-level cap; the bound is
+computed instead (same counter, n = 1 MiB, V = 91):
+
+| H | bound | vs n · 91 · 2^-48 = 3.3900e-07 |
+|---|---|---|
+| 32 | 3.4166e-07 | ×1.0078 |
+| 64 | 3.4182e-07 | ×1.0083 |
+| 128 | 3.4216e-07 | ×1.0093 |
+| 256 (eight servers at the per-session cap) | 3.4283e-07 | ×1.0113 |
+
+Each honey value adds n·V/|S_honey| = 5.2586e-12; the canary term (3.4149e-07) dominates.
+
 This is a union bound, not a measurement. The honey cap H ≤ 32 (`twin.generator.MAX_HONEY`,
 `proxy.session.MAX_HONEY`, equal by test) is a **statement-bounding device**: it keeps the
 bound above true as written. It is not a safety-critical number; raising it changes the

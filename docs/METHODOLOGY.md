@@ -92,7 +92,27 @@ Utility cost and attack effect are computed on these pairs. Mitigation verificat
    up to 5 flows a human would not call dual-role and cannot attack 3 that a human would. The
    dual-role exception rests on a classification humans and v2 agree on for fewer than half
    the tools in the union, and that must be closed before `--real-reads`.
-6. **Free-tier nondeterminism** — temperature 0 does not guarantee determinism across providers;
+6. **The injection channel (Phase 5, F9)** — the whole experiment rests on the attack
+   arriving ONLY through the untrusted channel. The runner builds the messages, so a bug that
+   put the payload into the system or user message would make every trial trivially
+   "compromised": a false-positive factory that looks like a working tool. The runner authors
+   only the system prompt and the task; a trial whose payload or canary appears in either, or
+   whose canary first appears anywhere but a tool result, raises `InvalidTrial` and gets no
+   verdict (tests/safety/test_runner_safety.py, with a mutation).
+7. **Utility is mechanical (Phase 5, D5)** — utility checks mechanical task completion (the
+   right tool with the right argument, the tool's own output carried into the answer), not
+   answer quality. A trial with utility=true may still have produced a poor answer; a poor
+   answer is not measured anywhere. No LLM judge is used (ADR-004).
+8. **Cross-cassette R4 (Phase 5 residual)** — R4 cannot relate an injection in one cassette
+   to a sink call in another, so a cross-server suspicious pattern is invisible to R4 today.
+   R4 is review-only, so this costs review coverage, not compromise detection (R1 sees
+   cross-server exfiltration through the trial's union of needles). Planned for Phase 3b.
+9. **Auditable, not reproducible (ADR-008)** — a trial is auditable, not reproducible; two
+   runs of the same trial may differ, and the evidence is the recorded transcript plus the
+   cassette, not a claim that the run repeats. Latency lives in an unhashed timings sidecar
+   labelled NON-EVIDENCE, because wall-clock values cannot be in the hashed chain; a replay
+   without it fails (`MissingTimings`). Token counts are provider-reported (F10).
+10. **Free-tier nondeterminism** — temperature 0 does not guarantee determinism across providers;
    paired seeds + CIs mitigate, never eliminate.
 
 ## Appendix A — Provider table [research, changes often]

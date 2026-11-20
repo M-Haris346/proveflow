@@ -50,6 +50,50 @@ moves out of this file only with a fix and that test in the repo.
   allowed proxy change.
 - **Proposed test:** a cassette line with 100k nested lists → `CassetteError`.
 
+## Runner (Phase 5, 2026-11-19)
+
+### httpx2 is a direct dependency chosen by mcp (low; re-check on every mcp change)
+- `httpx2==2.16.0` is declared with an exact pin because `mcp==2.3.0` already brings it.
+- **If mcp is ever upgraded or unpinned,** re-check httpx2's version and availability: mcp
+  may move to another http stack, and then the runner pins a package nothing else needs.
+- **Proposed test:** `uv tree --package mcp` lists the declared httpx2 version (CI step).
+
+### Cross-cassette R4 (medium for review coverage; Phase 3b)
+- R4 cannot relate an injection in one cassette to a sink call in another, so a cross-server
+  suspicious pattern is invisible to R4 today. R4 is review-only, so this costs review
+  coverage, not compromise detection (R1 sees cross-server exfiltration).
+- **Proposed fix:** order events across cassettes by the transcript's tool_call order.
+- **Proposed test:** an injection in the source cassette followed by a needle-free sink call
+  in another cassette gives R4.
+
+### The replay CLI (Phase 7)
+- `proveflow replay` stays a stub, now pointing at Phase 7: re-evaluating a recorded trial is
+  what a user wants once `prove` exists. `runner.trial.replay_trial` already does the work.
+
+### 429 and retries (a real gap, deferred deliberately; must not be half-built in Phase 6)
+- **Today:** the client fails closed. HTTP 400, 401, 429 and 500 each raise
+  `ProviderError("HTTP <status>")` and the trial ends `provider_error`, recorded in the
+  transcript (tests/unit/test_runner_llm.py). No request is retried.
+- **Three design questions to answer before any retry exists:**
+  1. How does a retried request appear in the transcript without breaking the hash chain or
+     strict replay (one `llm_request` per attempt? a separate attempt event? how does replay
+     pair them)?
+  2. How are a 429 that consumed no tokens, and a retry after a partial response that did
+     consume some, accounted against the per-trial caps and the run budget (both enforced on
+     provider-reported usage, F10)?
+  3. Is a tool-calling request safe to retry at all, given the agent loop's state (messages
+     already appended, tool calls already forwarded through a proxy)?
+- **Proposed test:** a recorded 429 then 200 replays to the same transcript, and the budget
+  counts exactly the provider-reported tokens of the attempt that answered.
+
+### SQLite store (deferred to Phase 7)
+- Not built in Phase 5. Phase 7 aggregates across trials and needs it there; a trial today is
+  its transcript, cassettes and timings sidecar on disk.
+
+### Design caps are not measured (revisit after the first manual run)
+- The runner's caps (16 turns, 32 tool calls, 1024 tokens/request, 120,000 in, 8,000 out,
+  300 s, 500,000/run) are design caps. Revisit them with the first real transcript.
+
 ## Twin (Phase 4, 2026-11-15)
 
 ### Argument-dependent responses (F3; medium for utility realism, none for safety)

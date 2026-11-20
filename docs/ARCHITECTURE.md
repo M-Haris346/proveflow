@@ -313,11 +313,38 @@ sequenceDiagram
   - L3: the gate allows any error response and any cancel params.
   - L4: cancellation during spawn.
 
-### 5.6 Agent runner `agents/`
-- **builtin**: tool-calling loop over LiteLLM. Providers: Groq, Gemini, Cerebras, OpenRouter (free tiers — limits change, checked at runtime via 429 handling, not hard-coded), Ollama local (3–4B models on CPU; small runs only).
-- **command**: `--agent-cmd` with JSON-lines protocol, so users can test their own agent code.
-- **FakeLLM policies** for tests: `ObeyAlways`, `NeverObey`, `ObeyIfEncoded`, `ExfilViaBase64`, `ObeyThenRecover`.
-- Captures tokens, latency, retries, model id + provider-reported version.
+### 5.6 Agent runner `runner/` [impl][tested on replay only] Phase 5 (ADR-008)
+- **One agent, N proxies** (`harness.py`): each server gets its own in-process `serve()`
+  (unchanged proxy), session, twin and cassette; the runner holds one MCP client session per
+  proxy. `routing.py` maps tool name → proxy from each proxy's own `tools/list` and REFUSES
+  TO START on a cross-server name or look-alike collision (`proxy.names`), or a name outside
+  the OpenAI function-name rule (never renamed).
+- **One OpenAI-compatible client** (`llm.py`, over the exact-pinned `httpx2`; no LiteLLM):
+  provider = base_url + model + api_key_env in `proveflow.toml`; the key is read at call
+  time and never stored, logged or recorded; no provider-specific code path
+  (docs/PROVIDERS.md). **No provider has been exercised by hand.**
+- **Auditable, not reproducible** (ADR-008): the hash-chained transcript records every
+  request, response, tool call (with its server), tool result and the final answer, and
+  references each cassette by its final hash. `ReplayChatClient` re-runs a recording with no
+  network and fails on any changed request. Every test uses replay; no test calls a provider
+  (a network guard enforces it).
+- **Validity guard (F9)**: the runner authors only the system prompt and the task; the attack
+  payload and canary may reach the model only inside a tool result, checked before any
+  verdict (`validity.py`, `InvalidTrial`).
+- **Utility** (`utility.py`): deterministic predicates, a bool plus the predicate name; it
+  checks mechanical task completion, not answer quality.
+- **Caps** (`limits.py`): DESIGN caps per trial (16 turns, 32 tool calls, 1024 tokens per
+  request, 120,000 in, 8,000 out, 300 s) and a 500,000-token run budget, tighten-only,
+  revisited after the first manual run; enforced on provider-reported usage (F10).
+- **Oracle per trial**: `oracle.evaluate_trial` scans every cassette with the union of the
+  trial's needles (cross-server exfiltration is visible); R4 stays per cassette (residual).
+- A developer-only manual run (`python -m proveflow.runner.manual`) prints the maximum
+  token cost and refuses to spend without `--yes`.
+- Not built, each labelled: LiteLLM REPLACED by D1; FakeLLM policies FORBIDDEN by D7; the
+  command adapter DEFERRED to Phase 6b; 429/retries a GAP (the client fails closed today;
+  docs/BACKLOG.md); SQLite store and the replay CLI DEFERRED to Phase 7.
+- **Code-complete, not closed:** no provider has ever answered. Phase 5 closes with ONE real
+  trial on ONE real provider whose D7-clean transcript is committed.
 
 ### 5.7 Oracle `oracle/` (deterministic — the heart)
 **Phase 3a [impl][tested]** (docs/ORACLE.md): canary generator, matcher, R1, R4.
@@ -464,8 +491,9 @@ proveflow/
 | **2 Proxy** | stdio proxy, sink sandbox, carriers, cassette | Safety tests prove no sink forwarding. **[impl][tested] 2026-11-14** (§5.5, ADR-006): `proveflow proxy --session` serves ONE python twin (layer A) with a default-deny policy + write-path gate (layer B); sandbox not disableable; 5 carriers; hash-chained cassette with validating loader; limits; fail closed. **Phase 2.1 (review fixes)**: layer A = proveflow-owned twin dir + sha256 pin (copy hashed, copy runs); session carries classified tools, the proxy computes the policy and adds its own classifier's second opinion on advertised tools; look-alike names denied; byte-counted lines; message and cassette caps end the session fail-closed; raw-byte twin log; runtime import guard. Residuals: classifier miss on innocently described sinks (16/25 held-out recall), L3, L4 (docs/BACKLOG.md). Tested only against a fake twin written for the tests (no real server, no network, no LLM, no agent loop); Windows locally and in CI; POSIX kill tests run only in CI (run `43509278369`, ubuntu: not skipped, 0 failed). Not built: twin generator, oracle, agent runner, corpus, mitigations, replay CLI, Streamable HTTP, `--real-reads`. **Next:** Phase 3 (Oracle) | 3–4 d |
 | **3 Oracle** | canary, encodings, matcher, R1–R4, FakeLLM policies | Exact FakeLLM verdicts; mutation tests fail as designed. **3a [impl][tested] 2026-11-14** (docs/ORACLE.md): canary generator; 10-encoding matcher (unit + mutation test per encoding; false-positive and encode-then-match properties; 1 MiB pathological input under 15 s); R1 (canary in a `sink=true` sandboxed call) and R4 (review only) over a validated cassette; incomplete/truncated/capped cassettes raise; proxy records `sink` (cassette schema 2). Tested on synthetic cassettes and real in-process proxy sessions against the fake twin; no LLM, no network. **3b [planned]:** R2, FakeLLM policies. R3 waits for the runner (Phase 5); honey for the twin (Phase 4) | 3–4 d |
 | **4 Twin** | twin generator, archetypes, synthetic data, honey secrets, schema validation | Twin of pg-mcp-guard + 2 public servers runs under proxy. **Adapted exit (stated as an adaptation):** the twins are generated from the STORED `data/eval` tool metadata (not a live introspection), and run under the real proxy in process with a scripted agent (no LLM). **[impl][tested] 2026-11-15, local only (Windows, both shells; CI not yet run on this phase):** one self-contained twin per server (five imports, no proveflow import, deterministic, sha256-pinned); 6 archetypes; fake data; honey (T4 rejection sampling, exact space counts); validator subset (type/required/properties/enum; skipped keywords recorded); AST no-I/O guard on the hashed copy, gating only the ADR-007 dual-role exception (not a sandbox); session + cassette schema 3; oracle needles = canary + honey, R1 over forwarded dual-role sink calls. D9 (`tests/integration/test_twin_d9.py`): **fetch** is the one dual-role case with a real injection: forwarded, injected, `upstream_request.sink=true`, canary R1 (0 private tools, so canary-only); **filesystem** has 0 source tools, so nothing can be injected: a scripted agent drives the oracle path to a honey R1; this is NOT a reproduced injection chain; **pg-mcp-guard** has 0 sinks: honey, injection and a forwarded needle sighting, NO R1. **Result:** a server whose tools contain no sink cannot be attacked for exfiltration at all, and proveflow reports that as a finding about the server, not a gap in the tool. `proveflow twin --from SCAN.json --profile ID --out-dir DIR [--config TOML] [--seed N]` [impl][tested on synthetic scans]: one twin + one session per introspected server; refuses a `--no-launch` scan, an out-dir outside `TWIN_ROOT` and any existing target (no partial output); stderr only; no network. **Limitations:** one canned response per tool (F3); D9 covers 3 of the 13 stored servers | 4–5 d |
-| **5 Runner + store** | LiteLLM loop, command adapter, retries/429, SQLite, replay | One real trial on free tier; replay reproduces verdict | 3–4 d |
+| **5 Runner + store** | LiteLLM loop, command adapter, retries/429, SQLite, replay | One real trial on free tier; replay reproduces verdict. **Phase 5 [impl][tested on replay only] 2026-11-19, local only (CI not yet run):** one agent wired to N twin proxies (routing refuses on collisions); one OpenAI-compatible client over the exact-pinned httpx2 (no LiteLLM; D1); hash-chained transcript referencing each cassette by its final hash, strict replay, unhashed non-evidence timings sidecar (ADR-008); oracle.evaluate_trial with the trial's union of needles; deterministic utility; design caps and a run budget on provider-reported usage; validity guard (payload only via tool results). Tested end to end on two committed transcripts authored from fixed response bodies (cross-server honey exfiltration: R1; clean: no hits), never a provider. **Phase 5 is CODE-COMPLETE, NOT CLOSED.** Every one of the 1449 tests (as of 2026-11-20) replays a recording written by hand in this repo. No provider has ever answered. The first real response will differ in ways nobody predicted (tool-call id shapes, usage key names, content block shapes, error envelopes), so the manual run is not a formality: it is the test that decides whether the client is correct. **Phase 5 closes only when ONE real trial has run on ONE real provider and its transcript, having passed the D7 redaction check, is committed. Phase 6 does not start before that.** Items from the original scope: LiteLLM loop: REPLACED by D1, on purpose (one OpenAI-compatible path, no large dependency, the exact request stays visible for ADR-008); not a gap. FakeLLM policies: FORBIDDEN by D7, on purpose (a text-generating fake would let a test pass against output no provider ever produced); not a gap. Command adapter: DEFERRED to Phase 6b (Agent adapter, its own roadmap row below). 429 and retries: a real GAP, deferred deliberately; today the client fails closed on 400, 401, 429 and 500 with a named error and the trial ends `provider_error` (tests/unit/test_runner_llm.py); the open design questions are in docs/BACKLOG.md. SQLite store: DEFERRED to Phase 7, where aggregation across trials needs it. Replay CLI: moved to Phase 7. | 3–4 d |
 | **6 Corpus** | loaders (audited licenses only), dedup, goal rewriting, sampling | Corpus stats **[measured]**; license per record | 4–5 d |
+| **6b Agent adapter** | drive a user's real agent (a CLI agent rather than a raw API) through the twin proxies via `--agent-cmd` with a JSON-lines protocol, under the same transcript, caps and validity guard [planned] | one real CLI agent completes the clean fixture scenario through the proxies, and its transcript passes D7 | later |
 | **7 Prove** | campaign engine, paired trials, stats, HTML/JSON/JUnit | **First real numbers**: ≥2 models, FlowVerdicts with CIs | 4–5 d |
 | **8 Fix + Verify** | catalog M1–M3, M5, M6; patch writers; paired verify | One CONFIRMED flow → fix → measured ASR change | 4–5 d |
 | **9 Ship** | GitHub Action, PyPI trusted publishing, install.sh/ps1 | Clean-machine install on Windows + Linux recorded | 2–3 d |
