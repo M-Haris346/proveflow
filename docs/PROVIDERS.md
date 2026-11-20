@@ -44,3 +44,15 @@ provider-reported counts, not on anything proveflow measures. A response without
 counts ends the trial (`usage_missing`). For Ollama and Gemini the docs do not state that
 chat completions return `usage`; if they do not, every trial with them ends `usage_missing`.
 That is unverified until someone runs it.
+
+## Committing a manual run
+
+A real run's transcript is EVIDENCE, committed under `evidence/provider-runs/<provider>-<model>-<date>/`
+with its `scenario.json` and a `README.md`, never under the replay fixtures
+(`evidence/provider-runs/README.md`). Two independent checks must pass first:
+- the exact-key check: the real key, in any of the matcher's 10 encodings, appears in no file
+  of the run's output directory (`exact_key_hits`; prints file names only);
+- the evidence check: the hash chain plus the D7 shape scan
+  (`tests/safety/test_transcript_layers.py`). D7 skips only the exact paths in
+  `STRUCTURAL_PATHS` (chain hashes and the provider's completion id `llm_response.body.id`).
+  Any other field that trips D7 goes to a ruling, never into that set by itself.

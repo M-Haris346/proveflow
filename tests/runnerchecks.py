@@ -108,26 +108,46 @@ def assert_cross_server_collision_refused() -> None:
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "runner"
 _BS = chr(92)
-# Chain hashes are public integrity values, not secrets: the envelope hashes and each
-# referenced cassette's final hash.
-_ENVELOPE_HASHES = frozenset({"sha256", "prev_sha256", "final_sha256"})
+EVIDENCE = Path(__file__).resolve().parents[1] / "evidence" / "provider-runs"
+LIST = "[]"  # a list position in a JSON path
+EVENT_KINDS = ("trial_start", "llm_request", "llm_response", "tool_call", "tool_result",
+               "final_answer", "limit_hit", "error", "trial_end")  # fmt: skip
+
+# The ONLY values the D7 shape scan skips, as EXACT JSON paths (event kind, then keys; a
+# list position is LIST). Compared by exact-set equality in tests/safety/test_transcript_layers.py,
+# so adding a path is a visible diff. Not a pattern, not a prefix, not a key name.
+# * the chain hashes: every event's envelope ``sha256`` / ``prev_sha256``, and each referenced
+#   cassette's ``final_sha256``: public integrity values;
+# * ``llm_response.body.id`` (R1): the provider's opaque completion id, the field that lets a
+#   transcript be correlated with the provider's own logs in an audit. It is high-entropy, so
+#   the shape scan would flag it. Nothing proveflow SENDS can land at this path: the API key
+#   travels only in an HTTP header, and headers are never recorded. An error body
+#   (``llm_response.body.error.message``) is a different path and stays scanned.
+STRUCTURAL_PATHS = frozenset(
+    {(kind, "sha256") for kind in EVENT_KINDS}
+    | {(kind, "prev_sha256") for kind in EVENT_KINDS}
+    | {("trial_end", "cassettes", LIST, "final_sha256"), ("llm_response", "body", "id")}
+)
 
 
 def committed_transcripts() -> list[Path]:
     return sorted(FIXTURES.rglob("transcript.jsonl"))
 
 
-def _strings(value: Any, key: str = "") -> list[tuple[str, str]]:
+def _strings(value: Any, path: tuple[str, ...]) -> list[tuple[tuple[str, ...], str]]:
+    """Every string value and dict key with its JSON path; a path in STRUCTURAL_PATHS is
+    skipped (its value only; nothing below or beside it)."""
+    if path in STRUCTURAL_PATHS:
+        return []
     if isinstance(value, str):
-        return [(key, value)]
+        return [(path, value)]
     if isinstance(value, dict):
-        return [
-            s
-            for k, v in value.items()
-            for s in (_strings(v, k) if k not in _ENVELOPE_HASHES else [])
-        ] + [(key, k) for k in value]
+        out = [(path, str(k)) for k in value]
+        for k, v in value.items():
+            out += _strings(v, (*path, str(k)))
+        return out
     if isinstance(value, list):
-        return [s for v in value for s in _strings(v, key)]
+        return [s for v in value for s in _strings(v, (*path, LIST))]
     return []
 
 
@@ -165,8 +185,10 @@ def transcript_problems(path: Path) -> list[str]:
         + r"|AppData|pytest-of-|proveflow-twin-"
     )
     for e in events:
-        for key, text in _strings(e.model_dump(mode="json")):
-            where = f"{path.parent.name} seq {e.seq} {e.kind}.{key}"
+        body = e.model_dump(mode="json")
+        strings = [s for k, v in body.items() for s in _strings(v, (e.kind, k))]
+        for json_path, text in strings:
+            where = f"{path.parent.name} seq {e.seq} {'.'.join(json_path)}"
             if path_like.search(text):
                 problems.append(f"{where}: absolute path or temp dir")
             if any(m.lower() in text.lower() for m in machine):
@@ -209,7 +231,7 @@ SYNTHETIC_TIMINGS_NOTE = "SYNTHETIC test timings (written by the test, not measu
 def fixture_scenario(name: str) -> Any:
     from proveflow.runner.scenario import Scenario
 
-    return Scenario.model_validate_json((FIXTURES / name / "scenario.json").read_text("utf-8"))
+    return Scenario.model_validate_json((_fixture_dir(name) / "scenario.json").read_text("utf-8"))
 
 
 def staged_recording(tmp_path: Path, name: str, *, timings: bool = True) -> Path:
@@ -220,7 +242,7 @@ def staged_recording(tmp_path: Path, name: str, *, timings: bool = True) -> Path
     rec = tmp_path / "recorded"
     rec.mkdir(exist_ok=True)
     path = rec / f"{name}.transcript.jsonl"
-    shutil.copyfile(FIXTURES / name / "transcript.jsonl", path)
+    shutil.copyfile(_fixture_dir(name) / "transcript.jsonl", path)
     if timings:
         last = load_transcript(path)[-1].sha256
         (rec / f"{name}.timings.json").write_text(json.dumps(
@@ -495,3 +517,115 @@ def assert_no_spend_without_yes(tmp_path: Path, monkeypatch: Any, capsys: Any) -
         raise AssertionError(f"spent without --yes (exit {code}, calls {len(calls)})")
     if "up to 120000 tokens in + 8000 out = 128000" not in err or "some-model" not in err:
         raise AssertionError(f"cost line missing: {err!r}")
+
+
+# --- two independent layers: D7 catches SHAPES, the exact-key check catches THE KEY ----------
+
+
+def exact_key_hits(files: list[Path], key: str) -> list[str]:
+    """The exact-value key check: every file whose text contains ``key`` in ANY of the
+    matcher's 10 encodings. It has no notion of JSON paths, so no D7 path exclusion can ever
+    narrow it. This is the layer that protects a real key; it prints file names only."""
+    from proveflow.oracle.matcher import match
+
+    return [f.name for f in files
+            if match(key, f.read_text(encoding="utf-8")).found
+            or match(key, {"v": f.read_text(encoding="utf-8")}).found]  # fmt: skip
+
+
+def transcript_with_key_at_body_id(tmp_path: Path, key: str) -> Path:
+    """A crafted transcript whose only copy of ``key`` sits at llm_response.body.id, the
+    path D7 skips (R1), plus a scenario.json so the D7 scan can run on it."""
+    import shutil
+
+    run = tmp_path / "crafted"
+    run.mkdir()
+    shutil.copyfile(FIXTURES / "clean_utility" / "scenario.json", run / "scenario.json")
+    w = TranscriptWriter(run / "transcript.jsonl")
+    w.emit("trial_start", trial_id="t", scenario_id="clean_utility",
+           provider={"name": "p", "base_url": "https://example.invalid/v1", "model": "m"},
+           parameters={"temperature": 0.0, "max_tokens": 8, "seed": None, "seed_sent": False},
+           limits={}, budget_remaining=1, servers=[])  # fmt: skip
+    w.emit("llm_request", turn=1, body={"model": "m", "messages": []})
+    message = {"role": "assistant", "content": "ok"}
+    w.emit("llm_response", turn=1, status=200, tokens_in=1, tokens_out=1,
+           body={"id": key, "choices": [{"message": message}]})  # fmt: skip
+    w.emit("final_answer", text="ok")
+    w.emit("trial_end", reason="final_answer", tokens_in=1, tokens_out=1, cassettes=[])
+    w.close()
+    return run / "transcript.jsonl"
+
+
+def assert_exact_key_check_sees_past_the_path_exclusion(tmp_path: Path) -> None:
+    """Named check (R1): the planted key at llm_response.body.id is invisible to D7 BY
+    DESIGN (the path is excluded) and still caught by the exact-key check."""
+    key = PLANTED_KEY
+    transcript = transcript_with_key_at_body_id(tmp_path, key)
+    shape_problems = [p for p in transcript_problems(transcript) if "body.id" in p]
+    if shape_problems:
+        raise AssertionError(f"premise broken: D7 scanned an excluded path: {shape_problems}")
+    if exact_key_hits([transcript], key) != [transcript.name]:
+        raise AssertionError("exact-key check missed the key at an excluded D7 path")
+
+
+def assert_error_body_stays_scanned(tmp_path: Path) -> None:
+    """Named check (R1): a secret-shaped value in llm_response.body.error.message is flagged;
+    only the exact path llm_response.body.id is excluded."""
+    run = tmp_path / "errbody"
+    run.mkdir()
+    import shutil
+
+    shutil.copyfile(FIXTURES / "clean_utility" / "scenario.json", run / "scenario.json")
+    w = TranscriptWriter(run / "transcript.jsonl")
+    w.emit("llm_response", turn=1, status=200, tokens_in=1, tokens_out=1,
+           body={"error": {"message": f"bad key {PLANTED_KEY}"}})  # fmt: skip
+    w.close()
+    problems = [p for p in transcript_problems(run / "transcript.jsonl")
+                if "llm_response.body.error.message" in p]  # fmt: skip
+    if not problems:
+        raise AssertionError("a secret-shaped value in body.error.message was not flagged")
+
+
+# --- R2: committed real-run transcripts are EVIDENCE, not replay fixtures ---------------------
+
+
+def evidence_transcripts(root: Path = EVIDENCE) -> list[Path]:
+    return sorted(root.rglob("transcript.jsonl")) if root.is_dir() else []
+
+
+def evidence_problems(transcript: Path) -> list[str]:
+    """The evidence check: the hash CHAIN (load_transcript: models, seq, chain, canonical
+    form) and the D7 shape scan over the file. It NEVER resolves cassette references: a
+    real run's cassettes hold absolute interpreter and twin paths and are not committed."""
+    problems: list[str] = []
+    try:
+        events = load_transcript(transcript)
+    except TranscriptError as exc:
+        return [f"{transcript.parent.name}: {exc}"]
+    from proveflow.runner.transcript import is_complete_transcript
+
+    if not is_complete_transcript(events):
+        problems.append(f"{transcript.parent.name}: not a complete transcript")
+    if not (transcript.parent / "README.md").is_file():
+        problems.append(f"{transcript.parent.name}: no README.md stating what this run is")
+    return problems + transcript_problems(transcript)
+
+
+def assert_evidence_runs_are_clean(root: Path = EVIDENCE) -> int:
+    """Named check (R2): every committed real-run transcript passes chain + D7. Returns how
+    many were checked (zero until the first manual run is committed)."""
+    runs = evidence_transcripts(root)
+    problems = [p for t in runs for p in evidence_problems(t)]
+    if problems:
+        raise AssertionError("evidence run not clean: " + "; ".join(problems[:10]))
+    return len(runs)
+
+
+def _fixture_dir(name: str) -> Path:
+    """Replay fixtures are addressed by a plain directory name under FIXTURES only."""
+    path = (FIXTURES / name).resolve()
+    if "/" in name or chr(92) in name or name in ("", ".", "..") or path.parent != FIXTURES:
+        raise ValueError(f"not a replay fixture name: {name!r}")
+    if not (path / "transcript.jsonl").is_file():
+        raise ValueError(f"no replay fixture named {name!r}")
+    return path

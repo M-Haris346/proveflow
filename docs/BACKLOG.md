@@ -86,6 +86,14 @@ moves out of this file only with a fix and that test in the repo.
 - **Proposed test:** a recorded 429 then 200 replays to the same transcript, and the budget
   counts exactly the provider-reported tokens of the attempt that answered.
 
+### The D7 provider-prefix list has no Groq key prefix (low; wait for the key holder)
+- `tests/twinchecks.py` `PROVIDER_PREFIXES` lists no Groq prefix: no documented source for
+  Groq's key format was found, so none is guessed.
+- The real protection for a manual run is the exact-value key check
+  (`tests/runnerchecks.py` `exact_key_hits`, docs/PROVIDERS.md), independent of D7.
+- **Fix:** after the first run, the key holder states the prefix; it goes into the list with
+  "reported by the key holder" as its source. Never read off a key by code.
+
 ### SQLite store (deferred to Phase 7)
 - Not built in Phase 5. Phase 7 aggregates across trials and needs it there; a trial today is
   its transcript, cassettes and timings sidecar on disk.
