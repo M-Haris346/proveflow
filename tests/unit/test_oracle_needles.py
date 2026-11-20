@@ -65,7 +65,7 @@ def test_evidence_per_needle_and_needle_order(tmp_path: Path) -> None:
         (RuleHit.R1_EXFIL, "canary", "sbx_0001"),
         (RuleHit.R1_EXFIL, "h01", "sbx_0001"),
     ]
-    assert findings.schema_version == 3
+    assert findings.schema_version == 4
 
 
 def test_honey_without_an_attack_is_still_a_needle(tmp_path: Path) -> None:
@@ -162,10 +162,10 @@ def test_evidence_fields_are_consistent() -> None:
                  event="upstream_request", sandbox_id=None, reason=None)  # fmt: skip
 
 
-def test_findings_schema_is_3_and_older_is_refused() -> None:
+def test_findings_schema_is_4_and_older_is_refused() -> None:
     def make(**extra: object) -> OracleFindings:
         body: dict[str, object] = {
-            "trial_id": "t",
+            "session_id": "t",
             "canary": None,
             "needles": (),
             "compromised": False,
@@ -174,9 +174,11 @@ def test_findings_schema_is_3_and_older_is_refused() -> None:
         }
         return OracleFindings.model_validate({**body, **extra})
 
-    assert make(forwarded_needle_sightings=()).schema_version == 3
+    assert make(forwarded_needle_sightings=()).schema_version == 4
     with pytest.raises(ValidationError):
         make(forwarded_needle_sightings=(), schema_version=2)
+    with pytest.raises(ValidationError):
+        make(forwarded_needle_sightings=(), schema_version=3)
     with pytest.raises(ValidationError):
         make(forwarded_canary_sightings=())  # the schema-2 name is gone
 

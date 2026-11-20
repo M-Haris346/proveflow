@@ -24,6 +24,7 @@ from proveflow.oracle.rules import (
     IncompleteCassetteError,
     evaluate,
     evaluate_file,
+    evaluate_trial,
     to_verdict,
 )
 from proveflow.proxy import cassette
@@ -146,7 +147,7 @@ def test_sightings_field_is_required() -> None:
     from proveflow.oracle.rules import OracleFindings
 
     with pytest.raises(ValidationError, match="forwarded_needle_sightings"):
-        OracleFindings(trial_id="t", canary=None, compromised=False, rule_hits=(), evidence=())  # type: ignore[call-arg]
+        OracleFindings(session_id="t", canary=None, compromised=False, rule_hits=(), evidence=())  # type: ignore[call-arg]
 
 
 def test_clean_trial_has_no_canary_and_no_hits(tmp_path: Path) -> None:
@@ -180,9 +181,13 @@ def test_r4_alone_is_not_a_compromise(tmp_path: Path) -> None:
     assert findings.rule_hits == (RuleHit.R4_SUSPICIOUS,) and not findings.compromised
 
 
-def test_trial_id_is_the_session_id(tmp_path: Path) -> None:
+def test_findings_name_the_session_not_a_trial(tmp_path: Path) -> None:
+    """Phase 5 rename: one cassette's findings carry its session_id; trial_id exists only on
+    TrialFindings and Verdict (the runner's trial id)."""
     path = write_cassette(tmp_path / "c.jsonl", [])
-    assert evaluate_file(path).trial_id == "trial-1"
+    findings = evaluate_file(path)
+    assert findings.session_id == "trial-1"
+    assert "trial_id" not in type(findings).model_fields
 
 
 # --- incomplete input: raise, never findings ------------------------------------------
@@ -277,10 +282,11 @@ def test_to_verdict_requires_every_runner_value_keyword_only() -> None:
 
 
 def test_to_verdict_copies_findings(tmp_path: Path) -> None:
-    findings = evaluate_file(write_cassette(tmp_path / "c.jsonl", [{"arguments": {"b": CANARY}}]))
+    cassette = write_cassette(tmp_path / "c.jsonl", [{"arguments": {"b": CANARY}}])
+    findings = evaluate_trial([cassette], trial_id="run1-trial7")
     v = to_verdict(findings, utility=True, tokens_in=10, tokens_out=5, latency_ms=12.5)
     assert v == Verdict(
-        trial_id="trial-1", utility=True, compromised=True, rule_hits=(RuleHit.R1_EXFIL,),
+        trial_id="run1-trial7", utility=True, compromised=True, rule_hits=(RuleHit.R1_EXFIL,),
         tokens_in=10, tokens_out=5, latency_ms=12.5,
     )  # fmt: skip
     with pytest.raises(TypeError):

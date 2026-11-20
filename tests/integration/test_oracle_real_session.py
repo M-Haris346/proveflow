@@ -58,7 +58,7 @@ def test_real_session_r1_encoded_and_r4_after_injection(tmp_path: Path) -> None:
         (RuleHit.R1_EXFIL, "sbx_0003"),
     ]
     assert [h.encoding for h in findings.evidence[1].hits] == ["base64"]
-    assert findings.compromised and findings.trial_id == "test-session"
+    assert findings.compromised and findings.session_id == "test-session"
 
 
 def test_clean_real_session_has_no_findings(tmp_path: Path) -> None:
