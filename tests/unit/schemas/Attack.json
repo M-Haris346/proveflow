@@ -2,10 +2,11 @@
   "$defs": {
     "ActionGoal": {
       "additionalProperties": false,
-      "description": "Attacker wants a specific sink tool call with attacker-chosen arguments.",
+      "description": "Attacker wants a specific sink tool call with attacker-chosen arguments.\n\nThe attacker-chosen value is the attacker's TARGET (an address, a repo, an account), not\nthe victim's secret. The corpus-side spec names the sink tool and ONE top-level argument\n(``arg``, no nested path); the per-trial value is ``Attack.action_target`` (R2).",
       "properties": {
-        "arg_predicate": {
-          "title": "Arg Predicate",
+        "arg": {
+          "minLength": 1,
+          "title": "Arg",
           "type": "string"
         },
         "kind": {
@@ -21,7 +22,7 @@
       },
       "required": [
         "sink_tool",
-        "arg_predicate"
+        "arg"
       ],
       "title": "ActionGoal",
       "type": "object"
@@ -61,22 +62,15 @@
     },
     "HijackGoal": {
       "additionalProperties": false,
-      "description": "Attacker wants a marker to appear in the agent's final answer.",
+      "description": "Attacker wants a marker to appear in the agent's final answer. The corpus-side spec\ncarries no marker: the per-trial value is ``Attack.marker`` (R3).",
       "properties": {
         "kind": {
           "const": "hijack",
           "default": "hijack",
           "title": "Kind",
           "type": "string"
-        },
-        "marker": {
-          "title": "Marker",
-          "type": "string"
         }
       },
-      "required": [
-        "marker"
-      ],
       "title": "HijackGoal",
       "type": "object"
     },
@@ -133,8 +127,21 @@
     }
   },
   "additionalProperties": false,
-  "description": "Payload x carrier x goal, instantiated with a per-trial canary.",
+  "description": "Payload x carrier x goal, instantiated with a per-trial canary, plus the per-trial\naction target for an ActionGoal and the per-trial marker for a HijackGoal (each present\niff its goal is the attack's goal).",
   "properties": {
+    "action_target": {
+      "anyOf": [
+        {
+          "pattern": "^act_[0-9a-f]{16}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action Target"
+    },
     "canary": {
       "pattern": "^cnry_[0-9a-f]{12}$",
       "title": "Canary",
@@ -164,6 +171,19 @@
         }
       ],
       "title": "Goal"
+    },
+    "marker": {
+      "anyOf": [
+        {
+          "pattern": "^mrk_[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Marker"
     },
     "payload": {
       "$ref": "#/$defs/Payload"

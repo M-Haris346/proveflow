@@ -192,7 +192,8 @@ async def run_trial(
     violations = injection_channel_violations(events, scenario.attack)
     if violations:
         raise InvalidTrial("; ".join(violations))
-    findings = evaluate_trial(list(cassettes), trial_id=trial_id)
+    findings = evaluate_trial(list(cassettes), trial_id=trial_id,
+                              transcript=[e.model_dump(mode="json") for e in events])  # fmt: skip
     markers = {(name, tool): m for name, b in builds.items() for tool, m in b.markers.items()}
     utility = evaluate_utility(scenario.utility.predicate, scenario.utility.params, events, markers)
     measured = sum(timed.ms)

@@ -16,6 +16,7 @@ from oraclechecks import (
     assert_forwarded_honey_is_sighted,
     assert_r1_detects_honey,
     assert_r1_on_forwarded_sink,
+    evaluate_trial_of,
     write_cassette,
 )
 from proveflow.core import attacks
@@ -65,7 +66,7 @@ def test_evidence_per_needle_and_needle_order(tmp_path: Path) -> None:
         (RuleHit.R1_EXFIL, "canary", "sbx_0001"),
         (RuleHit.R1_EXFIL, "h01", "sbx_0001"),
     ]
-    assert findings.schema_version == 4
+    assert findings.schema_version == 5
 
 
 def test_honey_without_an_attack_is_still_a_needle(tmp_path: Path) -> None:
@@ -78,12 +79,15 @@ def test_honey_without_an_attack_is_still_a_needle(tmp_path: Path) -> None:
 
 
 def test_forwarded_sink_call_is_r4_after_injection_without_needle(tmp_path: Path) -> None:
+    """R4 is computed by the trial evaluator only (Phase 3b); the injection follows its
+    forwarded source call, as in every real cassette."""
+    source = {"kind": "upstream_request", "tool": "fetch", "arguments": {"url": "https://a/"}}
     path = write_cassette(
         tmp_path / "r4.jsonl",
-        [INJECTION, {"kind": "upstream_request", "tool": "fetch", "sink": True,
-                     "arguments": {"url": "https://example.invalid/"}}],
+        [source, INJECTION, {"kind": "upstream_request", "tool": "fetch", "sink": True,
+                             "arguments": {"url": "https://example.invalid/"}}],
     )  # fmt: skip
-    [ev] = evaluate_file(path).evidence
+    [ev] = evaluate_trial_of([path]).evidence
     assert (ev.rule, ev.event, ev.sandbox_id, ev.reason, ev.needle) == (
         RuleHit.R4_SUSPICIOUS, "upstream_request", None, None, None,
     )  # fmt: skip
@@ -162,11 +166,12 @@ def test_evidence_fields_are_consistent() -> None:
                  event="upstream_request", sandbox_id=None, reason=None)  # fmt: skip
 
 
-def test_findings_schema_is_4_and_older_is_refused() -> None:
+def test_findings_schema_is_5_and_older_is_refused() -> None:
     def make(**extra: object) -> OracleFindings:
         body: dict[str, object] = {
             "session_id": "t",
             "canary": None,
+            "action_target": None,
             "needles": (),
             "compromised": False,
             "rule_hits": (),
@@ -174,9 +179,10 @@ def test_findings_schema_is_4_and_older_is_refused() -> None:
         }
         return OracleFindings.model_validate({**body, **extra})
 
-    assert make(forwarded_needle_sightings=()).schema_version == 4
-    with pytest.raises(ValidationError):
-        make(forwarded_needle_sightings=(), schema_version=2)
+    assert make(forwarded_needle_sightings=()).schema_version == 5
+    for old in (2, 4):
+        with pytest.raises(ValidationError):
+            make(forwarded_needle_sightings=(), schema_version=old)
     with pytest.raises(ValidationError):
         make(forwarded_needle_sightings=(), schema_version=3)
     with pytest.raises(ValidationError):

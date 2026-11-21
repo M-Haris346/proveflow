@@ -852,3 +852,113 @@ def _fixture_dir(name: str) -> Path:
     if not (path / "transcript.jsonl").is_file():
         raise ValueError(f"no replay fixture named {name!r}")
     return path
+
+
+# --- R4's ordering precondition: the agent never overlaps tool calls (Phase 3b) ------------
+
+
+def _drive_agent(
+    tmp_path: Path, tool_calls: list[dict[str, Any]]
+) -> tuple[Any, list[Any], dict[str, int]]:
+    """Run ``run_agent`` for one response carrying ``tool_calls`` then a final answer. The
+    provider side is HttpChatClient over httpx2.MockTransport serving two hand-written bodies
+    (socket-free); the proxies are fakes for sessions ``s-a`` (tool read_a) and ``s-b``
+    (tool read_b) that count calls in flight and yield to the event loop inside every call,
+    so concurrency, if any, shows. Returns (outcome, transcript event dicts, counters)."""
+    import anyio
+    import httpx2
+
+    from proveflow.config import ProviderConfig
+    from proveflow.runner.agent import run_agent
+    from proveflow.runner.limits import TrialLimits
+    from proveflow.runner.llm import HttpChatClient
+    from proveflow.runner.routing import RoutingTable
+
+    usage = {"prompt_tokens": 1, "completion_tokens": 1}
+    assistant = {"role": "assistant", "content": None, "tool_calls": tool_calls}
+    bodies = [
+        {"choices": [{"message": assistant}], "usage": usage},
+        {"choices": [{"message": {"role": "assistant", "content": "done"}}], "usage": usage},
+    ]
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=bodies.pop(0))
+
+    llm = HttpChatClient(ProviderConfig(**AUTHORED), environ={"PF_AUTHORED_UNUSED": "x"},
+                         transport=httpx2.MockTransport(handler))  # fmt: skip
+    state = {"in_flight": 0, "max": 0, "calls": 0}
+
+    class _Client:
+        async def call_tool(self, name: str, arguments: Any) -> Any:
+            state["in_flight"] += 1
+            state["calls"] += 1
+            state["max"] = max(state["max"], state["in_flight"])
+            for _ in range(3):
+                await anyio.sleep(0)
+            state["in_flight"] -= 1
+            return mcp_types.CallToolResult(content=[mcp_types.TextContent(type="text", text="ok")])
+
+    class _Proxy:
+        client = _Client()
+
+    routing = RoutingTable.build([("a", "s-a", [tool("read_a")]), ("b", "s-b", [tool("read_b")])])
+    writer = TranscriptWriter(tmp_path / "agent.jsonl")
+
+    async def go() -> Any:
+        return await run_agent(
+            llm=llm, model="m", temperature=0.0, seed=None, system_prompt="s", task="t",
+            routing=routing, proxies={"s-a": _Proxy(), "s-b": _Proxy()},  # type: ignore[dict-item]
+            limits=TrialLimits(), record=writer,
+        )  # fmt: skip
+
+    out = anyio.run(go)
+    writer.close()
+    events = [e.model_dump(mode="json") for e in load_transcript(tmp_path / "agent.jsonl")]
+    return out, events, state
+
+
+def _call(i: int, name: str, arguments: str = "{}") -> dict[str, Any]:
+    return {"id": f"call_{i}", "type": "function",
+            "function": {"name": name, "arguments": arguments}}  # fmt: skip
+
+
+def assert_agent_never_overlaps_tool_calls(tmp_path: Path) -> None:
+    """Named check: when the model asks for several tool calls in ONE response, the agent runs
+    them one at a time, so no call starts before the previous one returned, and the transcript
+    records each result before the next call. The oracle's R4 orders a trial's cassettes by
+    this transcript and pairs the k-th call of a session with the k-th tools/call in its
+    cassette (docs/ORACLE.md); concurrent calls would make that pairing a guess."""
+    from proveflow.oracle.rules import transcript_calls
+
+    calls = [_call(i, n) for i, n in enumerate(("read_a", "read_b", "read_a"), start=1)]
+    out, events, state = _drive_agent(tmp_path, calls)
+    if out.tool_calls != 3 or state["calls"] != 3:
+        raise AssertionError(f"premise broken: {state['calls']} of 3 tool calls reached a proxy")
+    if state["max"] != 1:
+        raise AssertionError(f"overlapping tool calls: {state['max']} in flight at once")
+    try:
+        per = transcript_calls(events)
+    except ValueError as exc:
+        raise AssertionError(f"overlapping tool calls in the transcript: {exc}") from None
+    order = {sid: [name for _, name in calls] for sid, calls in per.items()}
+    if order != {"s-a": ["read_a", "read_a"], "s-b": ["read_b"]}:
+        raise AssertionError(f"the transcript's per-session call order is wrong: {per}")
+
+
+def assert_unsent_calls_name_no_session(tmp_path: Path) -> None:
+    """Named check (the ``-`` sentinel): a tool call the runner never sends (an unknown tool,
+    invalid JSON arguments, or arguments that are not an object) names server and session
+    ``-`` in the transcript, reaches no proxy, and gets the runner's own error result; a
+    sent call names its proxy. R4 pairs a session's tool_call events with that session's
+    cassette one to one, so an unsent call naming a real session would break the pairing."""
+    calls = [_call(1, "nope"), _call(2, "read_a", "{not json"), _call(3, "read_b", "[1, 2]"),
+             _call(4, "read_a")]  # fmt: skip
+    _, events, state = _drive_agent(tmp_path, calls)
+    named = [(e["server"], e["session_id"]) for e in events if e["kind"] == "tool_call"]
+    if named != [("-", "-"), ("-", "-"), ("-", "-"), ("a", "s-a")]:
+        raise AssertionError(f"an unsent tool call names a proxy session: {named}")
+    if state["calls"] != 1:
+        raise AssertionError(f"{state['calls']} calls reached a proxy; only the valid one may")
+    refused = [e["content"] for e in events if e["kind"] == "tool_result" and e["is_error"]]
+    if len(refused) != 3 or not all(c.startswith("proveflow runner: ") for c in refused):
+        raise AssertionError(f"unsent calls did not get the runner's error result: {refused}")

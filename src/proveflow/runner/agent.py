@@ -14,7 +14,9 @@ Fail closed, every stop recorded (``limit_hit`` or ``error``) before ``trial_end
   cannot be enforced on counts the provider did not report (F10);
 * a provider error, a malformed response, or a replay mismatch ends the trial.
 Tool calls: JSON arguments are parsed; invalid JSON or an unknown tool gets an error result
-and is NOT forwarded. A known tool routes to its proxy by the routing table.
+and is NOT forwarded, and its ``tool_call`` names server and session ``-`` (no proxy
+received it). A known tool routes to its proxy by the routing table. Calls run ONE AT A TIME
+(``_run_tool_calls``): the oracle's R4 orders the trial's cassettes by this transcript.
 """
 
 from __future__ import annotations
@@ -137,12 +139,10 @@ async def run_agent(
                 out.final_answer = text if isinstance(text, str) else ""
                 record.emit("final_answer", text=out.final_answer)
                 raise _Stop("final_answer")
-            for call in calls:
-                if out.tool_calls >= limits.max_tool_calls:
-                    raise stop_limit("max_tool_calls", f"{limits.max_tool_calls} tool calls")
-                out.tool_calls += 1
-                content = await _tool_call(call, out.turns, routing, proxies, record)
-                messages.append(content)
+            messages.extend(await _run_tool_calls(
+                calls, out.turns, routing, proxies, record,
+                lambda: _count_call(out, limits, stop_limit),
+            ))  # fmt: skip
 
     try:
         with anyio.fail_after(limits.wall_clock_s):
@@ -153,6 +153,46 @@ async def run_agent(
         record.emit("limit_hit", limit="wall_clock", detail=f"{limits.wall_clock_s} s")
         out.reason = "limit:wall_clock"
     return out
+
+
+NOT_SENT = "-"  # oracle.rules.NOT_SENT: a tool call no proxy received
+
+
+def _received_by(route: Any, error: str | None) -> tuple[str, str]:
+    """(server, session_id) of the proxy that RECEIVES this call. A call with an unknown tool
+    or non-object arguments is never sent, so it names ``-``: the oracle's R4 pairs a
+    session's tool_call events with that session's cassette one to one (named check
+    ``runnerchecks.assert_unsent_calls_name_no_session``)."""
+    if route is None or error is not None:
+        return NOT_SENT, NOT_SENT
+    return route.server, route.session_id
+
+
+def _count_call(out: AgentOutcome, limits: TrialLimits, stop_limit: Any) -> None:
+    if out.tool_calls >= limits.max_tool_calls:
+        raise stop_limit("max_tool_calls", f"{limits.max_tool_calls} tool calls")
+    out.tool_calls += 1
+
+
+async def _run_tool_calls(
+    calls: list[Any],
+    turn: int,
+    routing: RoutingTable,
+    proxies: Mapping[str, ProxyHandle],
+    record: TranscriptWriter,
+    count: Any,
+) -> list[dict[str, Any]]:
+    """The turn's tool calls, ONE AT A TIME, in the model's order: each call's result is
+    recorded before the next call starts. The oracle's R4 orders the trial's cassettes by
+    this transcript and pairs the k-th call of a session with the k-th tools/call in its
+    cassette, so concurrent calls would make it mis-pair. Pinned by the named check
+    ``runnerchecks.assert_agent_never_overlaps_tool_calls``; the oracle also refuses an
+    overlapping transcript (``oracle.rules.transcript_calls``)."""
+    results: list[dict[str, Any]] = []
+    for call in calls:
+        count()
+        results.append(await _tool_call(call, turn, routing, proxies, record))
+    return results
 
 
 def _message_of(body: Any) -> dict[str, Any] | None:
@@ -175,8 +215,6 @@ async def _tool_call(
     name = function.get("name") if isinstance(function, dict) else None
     raw = function.get("arguments") if isinstance(function, dict) else None
     route = routing.route(name) if isinstance(name, str) else None
-    server = route.server if route else "-"
-    session_id = route.session_id if route else "-"
     arguments: Any = raw
     error: str | None = None
     if route is None:
@@ -189,6 +227,7 @@ async def _tool_call(
         else:
             if not isinstance(arguments, dict):
                 error = "arguments must be a JSON object"
+    server, session_id = _received_by(route, error)
     record.emit("tool_call", turn=turn, call_id=call_id, tool=str(name), server=server,
                 session_id=session_id, arguments=arguments)  # fmt: skip
     if error is not None or route is None:

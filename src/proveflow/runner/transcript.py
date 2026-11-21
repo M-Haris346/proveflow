@@ -52,6 +52,11 @@ class TranscriptError(ValueError):
 
 
 class _Event(FrozenModel):
+    # Still 1 after Phase 3b, on purpose: no field, type or shape changed. The ``-`` sentinel
+    # for ``ToolCall.session_id`` existed since Phase 5 (unknown tool); Phase 3b only makes a
+    # call with non-object arguments use it too, i.e. it narrows WHICH calls name a real
+    # session. Every committed transcript (fixtures and the Phase 5 evidence run) is checked to
+    # fit that reading (oraclechecks.assert_committed_transcripts_fit_the_sentinel_reading).
     schema_version: Literal[1] = 1
     seq: int = Field(ge=0)
     prev_sha256: str = Field(pattern=_HEX64)
@@ -86,6 +91,13 @@ class LlmResponse(_Event):
 
 
 class ToolCall(_Event):
+    """One tool call the model asked for. ``server`` / ``session_id`` name the proxy that
+    RECEIVED it. The sentinel ``-`` (``NOT_SENT``) means no proxy received it: an unknown
+    tool (since Phase 5) or arguments that are not a JSON object (since Phase 3b; before, such
+    a call carried its route's session although it was never sent). ``-`` can never be a real
+    session id (``proxy.session.SESSION_ID_PATTERN`` starts with a letter or digit). The
+    oracle's R4 pairs a session's tool calls with that session's cassette by this field."""
+
     kind: Literal["tool_call"]
     turn: int = Field(ge=1)
     call_id: str

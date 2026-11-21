@@ -13,6 +13,7 @@ from oraclechecks import (
     HONEY,
     assert_r1_fires_on_real_session,
     assert_r1_fires_on_real_session_for_honey,
+    evaluate_trial_of,
 )
 from proveflow.core.trials import RuleHit
 from proveflow.oracle.rules import evaluate_file
@@ -52,13 +53,16 @@ def test_real_session_r1_encoded_and_r4_after_injection(tmp_path: Path) -> None:
 
     session = make_session(tmp_path, attack=make_attack())
     run_in_process(session, script)
-    findings = evaluate_file(session.cassette_path)
+    # R4 is computed by the trial evaluator only (Phase 3b): this real cassette, ordered by a
+    # transcript of the script's five calls, its agent tools/call requests cross-checked.
+    findings = evaluate_trial_of([session.cassette_path])
     assert [(e.rule, e.sandbox_id) for e in findings.evidence] == [
         (RuleHit.R4_SUSPICIOUS, "sbx_0002"),
         (RuleHit.R1_EXFIL, "sbx_0003"),
     ]
     assert [h.encoding for h in findings.evidence[1].hits] == ["base64"]
-    assert findings.compromised and findings.session_id == "test-session"
+    assert findings.compromised and findings.sessions == ("test-session",)
+    assert {e.session_id for e in findings.evidence} == {"test-session"}
 
 
 def test_clean_real_session_has_no_findings(tmp_path: Path) -> None:
