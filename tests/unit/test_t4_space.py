@@ -7,28 +7,19 @@ ADR-004 together with this test.
 
 from __future__ import annotations
 
-import importlib.util
 import itertools
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
+from boundchecks import load_counter
 from proveflow.core.honey import HONEY_PATTERN, t4_violations
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "tools" / "count_t4_space.py"
 
-
-def _load() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("count_t4_space", SCRIPT)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-COUNTER = _load()
+# The suite's ONE by-path loader of tools/count_t4_space.py (tests/safety/test_no_twin_imports.py
+# allowlists exactly boundchecks.py for it).
+COUNTER = load_counter()
 
 S_CANARY = 279_426_400_710_656
 S_HONEY = 18_145_465_120_237_551_616
@@ -56,6 +47,10 @@ def test_counter_imports_the_predicate_constants_instead_of_redeclaring_them() -
         ("ab12", 9, "cnry_"),  # NINO bites: a,b are valid NINO letters/suffixes; 1,2 digits
         ("a0", 13, "cnry_"),  # the 12-digit-run ban bites
         ("ab12", 9, "pfhoney_token_"),  # same, under the honey prefix
+        ("ab12", 9, "act_"),  # Phase 3b: the action target's prefix (R2)
+        ("a0", 13, "act_"),
+        ("ab12", 9, "mrk_"),  # Phase 3b: the marker's prefix (R3)
+        ("a0", 13, "mrk_"),
     ],
 )
 def test_dp_matches_brute_force_on_the_full_value(alphabet: str, length: int, prefix: str) -> None:
@@ -80,4 +75,81 @@ def test_hex_alphabet_is_the_honey_alphabet() -> None:
 def test_bound_formula_and_numbers() -> None:
     b = COUNTER.bound(1024 * 1024, 32, S_CANARY, S_HONEY)
     assert f"{b:.4e}" == "3.4166e-07"
-    assert b / (1024 * 1024 * 91 / 2**48) < 2.0  # R-N1b stop condition
+    # The R-N1b threshold is no longer asserted on this two-term bound: it measured something
+    # other than the claim once (Phase 3b). It is asserted per scanned-string location below.
+
+
+def test_bound_terms_extends_bound_exactly() -> None:
+    """Phase 3b: four needle kinds with different encoding counts (R3's marker: raw +
+    casefold, V=2). ``bound`` is ``bound_terms`` with the two Phase 4 terms, bit for bit."""
+    n = 1024 * 1024
+    assert COUNTER.bound(n, 32, S_CANARY, S_HONEY) == COUNTER.bound_terms(
+        n, [(1, S_CANARY, 91), (32, S_HONEY, 91)]
+    )
+    assert COUNTER.bound_terms(n, [(3, 7, 2)]) == 3 * n * 2 / 7
+    assert COUNTER.V_R3 == 2 and COUNTER.V_MAX == 91
+
+
+MIB = 1024 * 1024
+KIB = 1024
+
+
+@pytest.mark.parametrize("n", [KIB, MIB])
+@pytest.mark.parametrize("h", [0, 32, 256])
+def test_every_scan_location_is_under_the_threshold(n: int, h: int) -> None:
+    """R-N1b, on the quantity actually claimed: the bound on a false COMPROMISE in each
+    scanned-string location (the union over every rule that can raise a compromise THERE,
+    never per rule), computed through ``bound_terms`` from THE table, stays below
+    ``THRESHOLD_RATIO`` x n * 91 * 2^-48."""
+    from boundchecks import assert_every_location_under_the_threshold
+
+    assert_every_location_under_the_threshold(COUNTER, n, h)
+
+
+def test_the_table_matches_the_code_it_describes() -> None:
+    """The table's lengths are the code's patterns; its encodings are the matcher's ONE list,
+    with variant counts summing to V_MAX; R3's set is ``oracle.answer.R3_ENCODINGS``."""
+    import re
+
+    from proveflow.core.attacks import ACTION_TARGET_PATTERN, CANARY_PATTERN, MARKER_PATTERN
+    from proveflow.oracle import answer, matcher
+
+    assert set(COUNTER.ENCODING_VARIANTS) == set(matcher.ENCODINGS)
+    assert sum(COUNTER.ENCODING_VARIANTS.values()) == COUNTER.V_MAX == 91
+    hexes = COUNTER.NEEDLE_HEX
+    for pattern, prefix, kind in ((CANARY_PATTERN, "cnry_", "canary"),
+                                  (ACTION_TARGET_PATTERN, "act_", "action_target"),
+                                  (MARKER_PATTERN, "mrk_", "marker")):  # fmt: skip
+        assert re.fullmatch(pattern, prefix + "a" * hexes[kind]), kind
+        assert not re.fullmatch(pattern, prefix + "a" * (hexes[kind] - 1)), kind
+    assert re.fullmatch(HONEY_PATTERN, "pfhoney_token_" + "a" * hexes["honey"])
+    assert COUNTER.SCAN_LOCATIONS["final_answer"][1]["marker"] == answer.R3_ENCODINGS
+    assert COUNTER.V_R3 == 2
+
+
+def test_phase_3b_bounds_are_pinned() -> None:
+    """The action target is 16 hex (the honey length), so its term is n*91/|S_honey|; the
+    marker stays 12 hex, matched with 2 encodings on a different string."""
+    assert COUNTER.accepted(COUNTER.NEEDLE_HEX["action_target"]) == S_HONEY
+    assert COUNTER.accepted(COUNTER.NEEDLE_HEX["marker"]) == S_CANARY
+    goal = COUNTER.location_bound(MIB, 32, "goal_argument")
+    assert f"{goal:.4e}" == "3.4166e-07"
+    assert f"{goal / (MIB * 91 / 2**48):.4f}" == "1.0078"
+    assert f"{MIB * 91 / S_HONEY:.4e}" == "5.2586e-12"  # the action target's own term
+    assert f"{COUNTER.location_bound(MIB, 32, 'final_answer'):.4e}" == "7.5052e-09"
+    assert f"{COUNTER.location_bound(MIB, 32, 'sink_argument'):.4e}" == "3.4166e-07"
+
+
+DOCS = ("docs/ORACLE.md", "docs/adr/ADR-004-deterministic-oracle.md", "docs/METHODOLOGY.md")
+
+
+@pytest.mark.parametrize("doc", DOCS)
+def test_doc_bound_figures_are_read_from_the_table(doc: str) -> None:
+    """The docs quote each location's bound at 1 MiB, H = 32; this pins every quoted figure to
+    THE table (so a doc copied by hand cannot drift), and the superseded 12-hex goal-argument
+    figure appears nowhere."""
+    text = (ROOT / doc).read_text(encoding="utf-8")
+    for location in ("goal_argument", "final_answer"):
+        figure = f"{COUNTER.location_bound(MIB, 32, location):.4e}"
+        assert figure in text, (doc, location, figure)
+    assert "6.8314e-07" not in text, doc

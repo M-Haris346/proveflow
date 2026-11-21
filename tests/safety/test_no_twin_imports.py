@@ -19,7 +19,9 @@ ALLOWED_BY_PATH_LOADERS = {
     ("unit/test_handpick.py", "eval_handpick"),
     ("unit/test_leak_check.py", "leak_check"),
     ("unit/test_registry_rule.py", "eval_registry_select"),
-    ("unit/test_t4_space.py", "count_t4_space"),  # R10: tools/count_t4_space.py
+    # R10: tools/count_t4_space.py. Phase 3b: the ONE loader of it is boundchecks.load_counter
+    # (unit/test_t4_space.py and the bound-table checks all call it): one entry, no drift.
+    ("boundchecks.py", "count_t4_space"),
     ("unit/test_dual_role_count.py", "count_dual_role"),  # ADR-007: tools/count_dual_role.py
 }
 

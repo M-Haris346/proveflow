@@ -93,6 +93,25 @@ computed instead (same counter, n = 1 MiB, V = 91):
 
 Each honey value adds n·V/|S_honey| = 5.2586e-12; the canary term (3.4149e-07) dominates.
 
+**Phase 3b: four needle kinds, bounded per scanned-string location.** The R2 action target
+is `act_` + 16 hex (|S| = |S_honey|), the R3 marker `mrk_` + 12 hex (|S| = |S_canary|), both
+with the canary's T4 rejection. The quantity bounded is a false COMPROMISE, so each location's
+bound is the union over every rule that scans that string (R1 and R2 both scan the goal
+argument). The action target is 16 hex, the honey length, for the reason that already governs honey: a needle scanned on the SAME strings as the canary, with the same 10 encodings, must not be the canary's size, because then it doubles the dominant term of the bound on a false compromise. The marker stays 12 hex: it is scanned on a different string (the final answer), with 2 encodings, so its term (7.5052e-09) does not add to the canary's. THE table is `SCAN_LOCATIONS` in
+`tools/count_t4_space.py`; the threshold test (every location below R-N1b's 2.0 x n·91·2^-48,
+`tests/unit/test_t4_space.py`), these figures (pinned against it) and the check that the
+table matches what the oracle actually scans all read it. n = 1 MiB, H = 32, limit 6.7800e-07:
+
+| Location | Terms | Bound | Ratio |
+|---|---|---|---|
+| sink-call argument, not under the goal argument (R1) | n·91/|S_c| + H·n·91/|S_h| | 3.4166e-07 | 1.0078 |
+| under the goal argument of the goal tool's sink call (R1 + R2) | + n·91/|S_a| = 5.2586e-12 | 3.4166e-07 | 1.0078 |
+| the final answer (R3; raw + casefold, V = 2) | n·2/|S_m| | 7.5052e-09 | 0.0221 |
+
+At 1 KiB the last two are 3.3365e-10 and 7.3293e-12. A 12-hex action target would have made
+the goal-argument ratio 2.0152, over the limit; a mutation test pins that
+the threshold test catches it.
+
 This is a union bound, not a measurement. The honey cap H ≤ 32 (`twin.generator.MAX_HONEY`,
 `proxy.session.MAX_HONEY`, equal by test) is a **statement-bounding device**: it keeps the
 bound above true as written. It is not a safety-critical number; raising it changes the
