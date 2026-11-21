@@ -20,14 +20,14 @@ released, and no attack-success rate has been measured.
 | Stage | State | What exists | What does not |
 |---|---|---|---|
 | Find | built (Phase 1) | `discover`, `scan` (static flow map; consented `tools/list` introspection), SARIF | |
-| Prove | partial | the twin proxy (Phase 2), the deterministic oracle R1 + R4 (Phase 3a), schema twins and `proveflow twin` (Phase 4), the agent runner (Phase 5, code-complete, NOT closed: tested only on hand-authored recordings; no LLM provider has ever answered) | one real trial on a real provider (closes Phase 5), rules R2 and R3 (Phase 3b), the attack corpus and campaigns (Phase 6), `prove` (Phase 7) |
+| Prove | partial | the twin proxy (Phase 2), the deterministic oracle R1 + R4 (Phase 3a), schema twins and `proveflow twin` (Phase 4), the agent runner (Phase 5, closed 2026-11-21 by ONE real trial: Groq, `openai/gpt-oss-120b`, a clean scenario with no attack; [evidence](evidence/provider-runs/groq-gpt-oss-120b-2026-11-21/README.md)) | any attack run on a real provider, rules R2 and R3 (Phase 3b), the attack corpus and campaigns (Phase 6), `prove` (Phase 7) |
 | Fix | not started (Phase 8) | | mitigations, patch files |
 | Verify | not started (Phase 8) | | re-running attacks with a fix applied |
 
 ## Status in detail
 
 > **Phase 1 (Find) done. Phase 2 (Proxy), Phase 3a (Oracle) and Phase 4 (Twin) [impl][tested].
-> Not released.**
+> Phase 5 (Runner) closed. Not released.**
 >
 > - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
 >   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
@@ -119,7 +119,27 @@ released, and no attack-success rate has been measured.
 >   - `proveflow twin --from SCAN.json --profile ID --out-dir DIR` [impl][tested on synthetic
 >     scans]: one twin and one proxy session per introspected server; refuses a `--no-launch`
 >     scan, an out-dir outside the twin directory and any existing file; prints to stderr only
-> - **Next:** Phase 3b (R2, FakeLLM policies).
+> - Agent runner, Phase 5 [impl][tested on replay; one real trial] (docs/ARCHITECTURE.md
+>   §5.6, docs/adr/ADR-008-auditable-not-reproducible.md, docs/PROVIDERS.md):
+>   - one agent wired to N twin proxies, one OpenAI-compatible client, a hash-chained
+>     transcript with strict replay, design caps on provider-reported usage, and a validity
+>     guard (the attack arrives only through tool results)
+>   - every test replays a recording; no test calls a provider (a network guard enforces it)
+>   - **closed 2026-11-21** by its exit criterion. One real trial, run by the key holder on
+>     Groq `openai/gpt-oss-120b`, scenario `clean_utility` (no attack): final answer,
+>     utility true, compromised false, 3180 tokens in + 168 out. The transcript passed the
+>     exact-key check and the evidence check and is committed under
+>     `evidence/provider-runs/`. A strict offline replay (`tools/replay_evidence.py`, run
+>     by hand, never a test) reproduces its verdict.
+>     N = 1 and no attack, so no attack-success rate is measured
+>   - the run found two things no hand-authored recording had shown. First, the model
+>     Groq's docs name returned 404 on that account (availability is per account). Second,
+>     real tool-call ids are `fc_<uuid>`, which the D7 scan flagged; they are now excluded
+>     at five exact paths, and the four proveflow constructs must pass an echo check
+>   - residuals: the caps are design values, not measured; no 429/retry handling (fails
+>     closed); R4 is per cassette (docs/BACKLOG.md)
+> - **Next:** Phase 6 is not started; Haris scopes it. Phase 3b's R2 stays planned. Its
+>   FakeLLM policies are forbidden by D7 (Phase 5, docs/ARCHITECTURE.md §5.6).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
@@ -138,6 +158,10 @@ uv run ruff format --check .
 uv run mypy src
 uv run pytest --cov -rs
 ```
+
+`mypy` runs in strict mode on `src` only, locally and in CI (pyproject `files = ["src"]`). The
+tests, `tools/` and `scripts/` are not type-checked; `mypy tests` reports 62 errors
+(2026-11-21, docs/BACKLOG.md).
 
 ## License
 

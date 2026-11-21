@@ -98,9 +98,31 @@ moves out of this file only with a fix and that test in the repo.
 - Not built in Phase 5. Phase 7 aggregates across trials and needs it there; a trial today is
   its transcript, cassettes and timings sidecar on disk.
 
-### Design caps are not measured (revisit after the first manual run)
+### Design caps are not measured (still open after the first manual run)
 - The runner's caps (16 turns, 32 tool calls, 1024 tokens/request, 120,000 in, 8,000 out,
-  300 s, 500,000/run) are design caps. Revisit them with the first real transcript.
+  300 s, 500,000/run) are design caps.
+- The first real run (Groq, `openai/gpt-oss-120b`, 2026-11-21, clean scenario, no attack)
+  used 2 turns, 1 tool call, 3,180 tokens in + 168 out (largest response 125 out) and about
+  1.5 s. That is far below every cap, but N = 1 on the smallest scenario, so it justifies
+  no change. Revisit with attack scenarios (Phase 6), whose transcripts are longer.
+
+## Tooling (2026-11-21)
+
+### Tests are not type-checked (a stated decision, not an oversight; low)
+- **What:** `mypy` runs with `strict = true` on `src` only: pyproject `[tool.mypy] files =
+  ["src"]`, and CI runs `uv run mypy src` (.github/workflows/ci.yml). `tests/`, `tools/` and
+  `scripts/` are not type-checked anywhere.
+- **Count, 2026-11-21:** `uv run mypy tests` reports 62 errors in 27 files (127 checked).
+  That is the same count as at commit 83e364e, so Phase 5's close added none. The largest
+  groups are 20 `unused-ignore`, 20 `attr-defined` (mostly untyped result objects in the
+  runner helpers) and 5 `import-untyped`. `uv run mypy tools scripts` reports 7 errors in 3
+  files.
+- **Why it is acceptable today:** the safety and mutation suites are executed on every push
+  on two OSes, and a type error in a test shows up as a failing test. The product claims
+  (`mypy --strict` in README and ARCHITECTURE) are stated for `src`. No doc may say or imply
+  that the tests are type-checked.
+- **Fix, if decided:** clear the 62, add `tests` to `files`, add the step to CI. Then pin the
+  count at 0 in a test, so it cannot grow back silently.
 
 ## Twin (Phase 4, 2026-11-15)
 

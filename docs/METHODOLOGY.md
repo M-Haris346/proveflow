@@ -85,6 +85,10 @@ Utility cost and attack effect are computed on these pairs. Mitigation verificat
    attacker can do (the F1 research track measures this gap).
 4. **Model drift** — provider-hosted models change without notice; provider version is recorded,
    and replay reproduces verdicts only from stored cassettes, not from re-querying the model.
+   The Phase 5 evidence replay (`tools/replay_evidence.py`) is different. A real run's
+   cassettes are not stored (they hold absolute paths), so the tool re-runs the twins from the
+   transcript and rewrites the cassettes without comparing them. It reproduces the verdict and
+   the transcript's events, not the cassettes.
 5. **Dual-role agreement (Phase 4, ADR-007)** — v2 marks 12 of the 155 labeled tools
    untrusted_source + sink, the human labels 10, and only 7 are in both (Jaccard 7/15 = 0.47;
    `uv run python tools/count_dual_role.py`). This is a measurement limitation, not a safety
@@ -130,6 +134,12 @@ Utility cost and attack effect are computed on these pairs. Mitigation verificat
 | Ollama (local) | Yes — `/api/chat` with `tools`; parallel + streaming supported. Docs exemplify `qwen3`; which 3–4B models support tools must be checked per model at pull time | n/a (local; CPU-only on dev machine → 3–4B Q4, smoke runs only) | `ollama/<model>` | <https://docs.ollama.com/capabilities/tool-calling> |
 
 LiteLLM prefix source: <https://docs.litellm.ai/docs/providers> (accessed 2026-11-10).
+
+**2026-11-21, first real run:** `llama-3.3-70b-versatile`, listed above from Groq's docs,
+returned HTTP 404 on the key holder's account, although `/models` returned 200. A model in
+this table is not a model an account can call; model availability is per account
+(docs/PROVIDERS.md). The run used `openai/gpt-oss-120b`, taken from the account's `/models`
+list.
 
 Open item [research]: exact Groq and Gemini free-tier numbers must be read from the logged-in
 account pages before Phase 5 runner work; record them here with a date when done.

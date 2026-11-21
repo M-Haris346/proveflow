@@ -59,7 +59,7 @@ Claude Code must fetch official docs, not rely on memory. Haris reviews each tab
 ## G. Exit criteria (all required)
 - [ ] CI green on ubuntu + windows (link to run).
 - [ ] `uv run proveflow --version` works; stubs exit 2 with honest message.
-- [ ] `ruff`, `mypy --strict` clean; model + schema + redaction property tests pass (real output shown).
+- [ ] `ruff`, `mypy --strict` clean (mypy on `src` only, pyproject `files = ["src"]`; tests are not type-checked, see docs/BACKLOG.md); model + schema + redaction property tests pass (real output shown).
 - [ ] CLIENT_CONFIGS, permission syntax, DATASETS, provider tables filled with source links + access date; Haris reviewed.
 - [ ] Any dataset with unclear/incompatible license marked DROP.
 - [ ] README status says Phase 0, nothing usable.
