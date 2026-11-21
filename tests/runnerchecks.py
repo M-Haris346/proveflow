@@ -123,11 +123,62 @@ EVENT_KINDS = ("trial_start", "llm_request", "llm_response", "tool_call", "tool_
 #   the shape scan would flag it. Nothing proveflow SENDS can land at this path: the API key
 #   travels only in an HTTP header, and headers are never recorded. An error body
 #   (``llm_response.body.error.message``) is a different path and stays scanned.
+# * the provider's TOOL-CALL id (ruling after the first real run, Groq 2026-11-21): the same
+#   class as the completion id, a provider-minted correlation identifier, not a secret. Real
+#   Groq mints ``fc_<uuid>``, which the shape scan flags; the made-up id an earlier probe used
+#   did not, which is why a guessed response shape is not evidence. It is MINTED at
+#   TOOL_CALL_ID_MINTED and ECHOED by the runner at TOOL_CALL_ID_ECHOES. The echo paths are
+#   values proveflow CONSTRUCTS, weaker ground than a recorded response field, so their
+#   exclusion holds only together with ``tool_call_id_echo_problems`` (part of every D7 scan
+#   below): each echoed value must equal an id an EARLIER llm_response minted.
+TOOL_CALL_ID_MINTED = ("llm_response", "body", "choices", LIST, "message", "tool_calls", LIST, "id")
+TOOL_CALL_ID_ECHOES = frozenset({
+    ("llm_request", "body", "messages", LIST, "tool_calls", LIST, "id"),
+    ("llm_request", "body", "messages", LIST, "tool_call_id"),
+    ("tool_call", "call_id"),
+    ("tool_result", "call_id"),
+})  # fmt: skip
 STRUCTURAL_PATHS = frozenset(
     {(kind, "sha256") for kind in EVENT_KINDS}
     | {(kind, "prev_sha256") for kind in EVENT_KINDS}
     | {("trial_end", "cassettes", LIST, "final_sha256"), ("llm_response", "body", "id")}
+    | {TOOL_CALL_ID_MINTED}
+    | TOOL_CALL_ID_ECHOES
 )
+UNMINTED = "carries a tool_call_id no response minted"
+
+
+def _values_at(value: Any, path: tuple[str, ...], targets: frozenset[tuple[str, ...]]
+               ) -> list[tuple[tuple[str, ...], Any]]:  # fmt: skip
+    """Every value (of any type) sitting at one of the exact ``targets`` paths."""
+    if path in targets:
+        return [(path, value)]
+    if isinstance(value, dict):
+        return [s for k, v in value.items() for s in _values_at(v, (*path, str(k)), targets)]
+    if isinstance(value, list):
+        return [s for v in value for s in _values_at(v, (*path, LIST), targets)]
+    return []
+
+
+def tool_call_id_echo_problems(events: list[Any]) -> list[str]:
+    """The runner may only ECHO tool-call ids the provider minted: every value at a
+    TOOL_CALL_ID_ECHOES path must equal a value at TOOL_CALL_ID_MINTED in an llm_response
+    EARLIER in the same transcript. An id no response produced is a bug, and the D7 path
+    exclusion must not hide it."""
+    minted: set[Any] = set()
+    problems: list[str] = []
+    for e in events:
+        body = e.model_dump(mode="json")
+        echoes = [s for k, v in body.items()
+                  for s in _values_at(v, (e.kind, k), TOOL_CALL_ID_ECHOES)]  # fmt: skip
+        for json_path, value in echoes:
+            if not isinstance(value, str) or value not in minted:
+                who = "request" if e.kind == "llm_request" else e.kind
+                problems.append(f"seq {e.seq} {'.'.join(json_path)}: {who} {UNMINTED}")
+        minted |= {v for k, x in body.items()
+                   for _, v in _values_at(x, (e.kind, k), frozenset({TOOL_CALL_ID_MINTED}))
+                   if isinstance(v, str)}  # fmt: skip
+    return problems
 
 
 def committed_transcripts() -> list[Path]:
@@ -207,6 +258,8 @@ def transcript_problems(path: Path) -> list[str]:
                 # secret-shaped is left once every needle is removed (Q1: never a pattern).
                 if residue == span or secret_spans(residue):
                     problems.append(f"{where}: secret-shaped text {span[:12]!r}...")
+    # The request-side tool-call id exclusion is earned here, never assumed.
+    problems += [f"{path.parent.name} {p}" for p in tool_call_id_echo_problems(events)]
     return problems
 
 
@@ -519,6 +572,42 @@ def assert_no_spend_without_yes(tmp_path: Path, monkeypatch: Any, capsys: Any) -
         raise AssertionError(f"cost line missing: {err!r}")
 
 
+def assert_existing_out_dir_is_refused_cleanly(tmp_path: Path, monkeypatch: Any,
+                                               capsys: Any) -> None:  # fmt: skip
+    """Named check: --yes with an existing --out-dir prints one refusal line and exits 2. No
+    traceback, no trial (``run_trial`` is a spy that aborts), and the old output untouched."""
+    from proveflow.runner import manual, trial
+
+    calls: list[object] = []
+
+    async def spy(*args: Any, **kwargs: Any) -> Any:
+        calls.append(args)
+        raise _Spent
+
+    monkeypatch.setattr(trial, "run_trial", spy)
+    out = tmp_path / "run1"
+    out.mkdir()
+    (out / "earlier.transcript.jsonl").write_bytes(b"earlier run\n")
+    argv = ["--scenario", str(FIXTURES / "clean_utility" / "scenario.json"),
+            "--config", str(manual_config(tmp_path)), "--provider", "groq",
+            "--out-dir", str(out), "--yes"]  # fmt: skip
+    try:
+        code: object = manual.main(argv)
+    except _Spent:
+        raise AssertionError("a trial started over an existing --out-dir") from None
+    except FileExistsError as exc:
+        raise AssertionError(f"raw traceback instead of a refusal: {exc!r}") from None
+    err = capsys.readouterr().err
+    if code != manual.EXIT_OUT_DIR_EXISTS or code != 2 or calls:
+        raise AssertionError(f"existing --out-dir not refused (exit {code}, calls {len(calls)})")
+    if "refusing to overwrite: --out-dir 'run1' already exists" not in err or "Traceback" in err:
+        raise AssertionError(f"refusal line missing: {err!r}")
+    if sorted(p.name for p in out.iterdir()) != ["earlier.transcript.jsonl"]:
+        raise AssertionError("the earlier run's output was touched")
+    if (out / "earlier.transcript.jsonl").read_bytes() != b"earlier run\n":
+        raise AssertionError("the earlier run's output was changed")
+
+
 # --- two independent layers: D7 catches SHAPES, the exact-key check catches THE KEY ----------
 
 
@@ -586,6 +675,99 @@ def assert_error_body_stays_scanned(tmp_path: Path) -> None:
         raise AssertionError("a secret-shaped value in body.error.message was not flagged")
 
 
+# SYNTHETIC ids in the shape real Groq mints (fc_<uuid>); written by hand for these tests.
+MINTED_ID = "fc_0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+NEVER_MINTED_ID = "fc_9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f"
+
+
+def transcript_with_echo(tmp_path: Path, echoed: str) -> Path:
+    """A complete crafted transcript, a README and a scenario.json: one response mints
+    MINTED_ID, tool_call/tool_result carry it, and the next request echoes ``echoed`` as the
+    assistant's tool_calls[].id and the tool message's tool_call_id."""
+    import shutil
+
+    tmp_path.mkdir(parents=True)
+    shutil.copyfile(FIXTURES / "clean_utility" / "scenario.json", tmp_path / "scenario.json")
+    (tmp_path / "README.md").write_bytes(b"A crafted transcript for a test.\n")
+    call = {"id": MINTED_ID, "type": "function",
+            "function": {"name": "read_text_file", "arguments": "{}"}}  # fmt: skip
+    echo = {**call, "id": echoed}
+    w = TranscriptWriter(tmp_path / "transcript.jsonl")
+    w.emit("trial_start", trial_id="t", scenario_id="clean_utility",
+           provider={"name": "p", "base_url": "https://example.invalid/v1", "model": "m"},
+           parameters={"temperature": 0.0, "max_tokens": 8, "seed": None, "seed_sent": False},
+           limits={}, budget_remaining=1, servers=[])  # fmt: skip
+    user = {"role": "user", "content": "go"}
+    w.emit("llm_request", turn=1, body={"model": "m", "messages": [user]})
+    w.emit("llm_response", turn=1, status=200, tokens_in=1, tokens_out=1,
+           body={"choices": [{"message": {"role": "assistant", "content": None,
+                                          "tool_calls": [call]}}]})  # fmt: skip
+    w.emit("tool_call", turn=1, call_id=MINTED_ID, tool="read_text_file", server="filesystem",
+           session_id="t.filesystem", arguments={})  # fmt: skip
+    w.emit("tool_result", call_id=MINTED_ID, content="ok", is_error=False)
+    w.emit("llm_request", turn=2, body={"model": "m", "messages": [
+        user,
+        {"role": "assistant", "content": None, "tool_calls": [echo]},
+        {"role": "tool", "tool_call_id": echoed, "content": "ok"}]})  # fmt: skip
+    w.emit("llm_response", turn=2, status=200, tokens_in=1, tokens_out=1,
+           body={"choices": [{"message": {"role": "assistant", "content": "done"}}]})  # fmt: skip
+    w.emit("final_answer", text="done")
+    w.emit("trial_end", reason="final_answer", tokens_in=2, tokens_out=2, cassettes=[])
+    w.close()
+    return tmp_path / "transcript.jsonl"
+
+
+def assert_unminted_tool_call_id_is_caught(tmp_path: Path) -> None:
+    """Named check (ruling after the first real run): a request that echoes a tool-call id
+    no response minted fails the EVIDENCE check, although D7 skips both request paths. Only
+    the echo check can catch it: the shape layer is silent there by design."""
+    from proveflow.core.redact_rules import secret_spans
+
+    if not secret_spans(NEVER_MINTED_ID):
+        raise AssertionError("premise broken: the synthetic id is not secret-shaped")
+    good = evidence_problems(transcript_with_echo(tmp_path / "echo", MINTED_ID))
+    if good:
+        raise AssertionError(f"a correct echo was refused: {good}")
+    bad = evidence_problems(transcript_with_echo(tmp_path / "unminted", NEVER_MINTED_ID))
+    others = [p for p in bad if UNMINTED not in p]
+    if others:
+        raise AssertionError(f"premise broken: D7 flagged more than the echo: {others}")
+    flagged = {p.split(": ")[0].split(" ")[-1] for p in bad if f"request {UNMINTED}" in p}
+    expected = {".".join(p) for p in TOOL_CALL_ID_ECHOES if p[0] == "llm_request"}
+    if flagged != expected:
+        raise AssertionError(f"request {UNMINTED}, and the evidence check passed it "
+                             f"(flagged {sorted(flagged)}, want {sorted(expected)})")  # fmt: skip
+
+
+def assert_an_echo_before_its_mint_is_refused(tmp_path: Path) -> None:
+    """Named check: the minting response must come EARLIER. The correct transcript with its
+    turn-2 request moved before the turn-1 response carries an id nothing had minted yet."""
+    events = load_transcript(transcript_with_echo(tmp_path / "order", MINTED_ID))
+    kinds = [e.kind for e in events]
+    if tool_call_id_echo_problems(events):
+        raise AssertionError("premise broken: the correct order was refused")
+    request2 = max(i for i, k in enumerate(kinds) if k == "llm_request")
+    response1 = kinds.index("llm_response")
+    early = [*events[:response1], events[request2], *events[response1:request2],
+             *events[request2 + 1:]]  # fmt: skip
+    if not [p for p in tool_call_id_echo_problems(early) if f"request {UNMINTED}" in p]:
+        raise AssertionError("an echo before the response that minted it was accepted")
+
+
+def assert_every_constructed_exclusion_is_echo_checked() -> None:
+    """Named check: every D7-excluded path in an event proveflow CONSTRUCTS (anything but a
+    recorded llm_response, and not a chain hash) is an echo path the echo check verifies.
+    A constructed path excluded from D7 without that check would hide whatever lands there."""
+    hashes = ({(k, "sha256") for k in EVENT_KINDS} | {(k, "prev_sha256") for k in EVENT_KINDS}
+              | {("trial_end", "cassettes", LIST, "final_sha256")})  # fmt: skip
+    constructed = {p for p in STRUCTURAL_PATHS - hashes if p[0] != "llm_response"}
+    if constructed != set(TOOL_CALL_ID_ECHOES):
+        raise AssertionError(f"D7-excluded constructed paths not echo-checked: "
+                             f"{sorted(constructed - set(TOOL_CALL_ID_ECHOES))}")  # fmt: skip
+    if TOOL_CALL_ID_MINTED not in STRUCTURAL_PATHS:
+        raise AssertionError("the minting path is not excluded, the echoes are")
+
+
 # --- R2: committed real-run transcripts are EVIDENCE, not replay fixtures ---------------------
 
 
@@ -613,12 +795,53 @@ def evidence_problems(transcript: Path) -> list[str]:
 
 def assert_evidence_runs_are_clean(root: Path = EVIDENCE) -> int:
     """Named check (R2): every committed real-run transcript passes chain + D7. Returns how
-    many were checked (zero until the first manual run is committed)."""
+    many were checked (one since the first manual run, 2026-11-21)."""
     runs = evidence_transcripts(root)
     problems = [p for t in runs for p in evidence_problems(t)]
     if problems:
         raise AssertionError("evidence run not clean: " + "; ".join(problems[:10]))
     return len(runs)
+
+
+EVIDENCE_REPLAY_TOOL = "replay_evidence"  # the dev-only module in tools/, by name only
+
+
+def evidence_replay_reach(root: Path) -> list[str]:
+    """Every .py file under ``root`` that imports the dev-only evidence replay tool, or
+    names its script file in a string (a subprocess or runpy call). The twin generator's
+    output may change legitimately, so a committed replay of evidence would break and push
+    toward weakening it or deleting real evidence; the tool is run by hand only."""
+    import ast
+
+    script = EVIDENCE_REPLAY_TOOL + ".py"
+    hits: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            mods: list[str] = []
+            if isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                mods = [node.module or ""] + [a.name for a in node.names]
+            reached = any(m.split(".")[-1] == EVIDENCE_REPLAY_TOOL for m in mods) or (
+                isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and script in node.value
+            )  # fmt: skip
+            if reached:
+                hits.append(path.relative_to(root).as_posix())
+    return sorted(set(hits))
+
+
+def assert_no_test_reaches_the_evidence_replay(root: Path | None = None) -> None:
+    """Named check: no test imports or runs the evidence replay tool, and it is not
+    importable from the test path."""
+    import importlib.util
+
+    root = root or Path(__file__).resolve().parent
+    if importlib.util.find_spec(EVIDENCE_REPLAY_TOOL) is not None:
+        raise AssertionError("the evidence replay tool is importable from the tests")
+    hits = evidence_replay_reach(root)
+    if hits:
+        raise AssertionError(f"a test reaches the evidence replay tool: {hits}")
 
 
 def _fixture_dir(name: str) -> Path:
