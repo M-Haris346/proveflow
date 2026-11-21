@@ -58,13 +58,35 @@ moves out of this file only with a fix and that test in the repo.
   may move to another http stack, and then the runner pins a package nothing else needs.
 - **Proposed test:** `uv tree --package mcp` lists the declared httpx2 version (CI step).
 
-### Cross-cassette R4 (medium for review coverage; Phase 3b)
-- R4 cannot relate an injection in one cassette to a sink call in another, so a cross-server
-  suspicious pattern is invisible to R4 today. R4 is review-only, so this costs review
-  coverage, not compromise detection (R1 sees cross-server exfiltration).
-- **Proposed fix:** order events across cassettes by the transcript's tool_call order.
-- **Proposed test:** an injection in the source cassette followed by a needle-free sink call
-  in another cassette gives R4.
+### R2 and R3 are built but DORMANT until Phase 6 payloads carry the per-trial values (high)
+- Two of the three compromise rules (R2 and R3) are built but DORMANT: neither can fire on a
+  real trial until a payload carries the trial's per-trial value. R2 needs a payload that asks
+  for the goal's sink tool with the trial's ACTION TARGET in the goal argument; R3 needs a
+  payload that carries the trial's MARKER separator-split (`oracle.canary.spaced_marker`) with
+  the instruction to rejoin it. No payload does either yet.
+- **The payload design in Phase 6 is load-bearing for R2 and R3.** Phase 6 must deliver
+  payloads that instantiate the action target and the split marker per trial, or R2 and R3
+  stay dormant and only R1 can ever produce a compromise. Until then both are tested on
+  authored fixtures only.
+- **Reason it stays open:** it is corpus work, not oracle work, and Phase 6 is not started.
+
+### The committed fixture transcripts' cassette hashes are NOT a replay invariant (low)
+- The `trial_end.cassettes[].final_sha256` values in the committed replay fixtures
+  (`tests/fixtures/runner/*/transcript.jsonl`) were NEVER reproducible by replay, neither
+  after Phase 3b nor at its base commit: a cassette's `session_start` holds absolute
+  interpreter and twin paths. Nothing checks those committed values: the only
+  `verify_cassette_refs` test compares the REPLAYED transcript with the REPLAYED cassettes.
+- Measured 2026-11-22 on `cross_server_exfil`: committed `b0c6...`/`ebe0...`; a replay at the
+  base commit gave `9b78...`/`9b83...`, and after Phase 3b `10ce...`/`8779...`. Every event
+  before `trial_end` was identical.
+- **Do not read those committed hashes as meaning anything:** replay compares requests.
+- **Reason it stays open:** making them meaningful needs path-free cassettes, a format change.
+
+### R4 is computed only for runner trials (low; by design)
+- R4 needs the runner's transcript as the trial's clock. A cassette recorded by the
+  standalone `proveflow proxy` (stdio agent, no transcript) gets R1 and R2 only.
+- **Reason it stays open:** there is no transcript to order such a session by; it is not a
+  trial.
 
 ### The replay CLI (Phase 7)
 - `proveflow replay` stays a stub, now pointing at Phase 7: re-evaluating a recorded trial is
@@ -112,17 +134,23 @@ moves out of this file only with a fix and that test in the repo.
 - **What:** `mypy` runs with `strict = true` on `src` only: pyproject `[tool.mypy] files =
   ["src"]`, and CI runs `uv run mypy src` (.github/workflows/ci.yml). `tests/`, `tools/` and
   `scripts/` are not type-checked anywhere.
-- **Count, 2026-11-21:** `uv run mypy tests` reports 62 errors in 27 files (127 checked).
-  That is the same count as at commit 83e364e, so Phase 5's close added none. The largest
-  groups are 20 `unused-ignore`, 20 `attr-defined` (mostly untyped result objects in the
-  runner helpers) and 5 `import-untyped`. `uv run mypy tools scripts` reports 7 errors in 3
-  files.
+- **Count, 2026-11-22 (Phase 3b):** `uv run mypy tests` reports 84 errors in 33 files (137
+  checked), up from 62 in 27 (127 checked) at bf1e063, measured in a detached worktree. All 22
+  added errors are of kinds that already existed (`attr-defined` 20->32, `unused-ignore`
+  20->26, `arg-type` 3->7). THIS PHASE INTRODUCED NO NEW ERROR KIND: the two it first added
+  (`list-item`, `type-var`, both in tests/oraclechecks.py) were fixed before its commits.
+  `uv run mypy tools scripts` reports 7 errors in 3 files (8 checked), unchanged from
+  bf1e063. (2026-11-21, Phase 5's close: 62 in 27, the same as at 83e364e.)
+- **How the figure is kept honest:** re-measure it each phase, against the previous phase's
+  last commit in a detached worktree, and state whether any NEW error kind appeared. Do NOT
+  build a test that pins "no new error kinds": `mypy tests` is not in CI, so such a test would
+  be slow and local-only. The figure here plus that re-measurement is the check.
 - **Why it is acceptable today:** the safety and mutation suites are executed on every push
   on two OSes, and a type error in a test shows up as a failing test. The product claims
   (`mypy --strict` in README and ARCHITECTURE) are stated for `src`. No doc may say or imply
   that the tests are type-checked.
-- **Fix, if decided:** clear the 62, add `tests` to `files`, add the step to CI. Then pin the
-  count at 0 in a test, so it cannot grow back silently.
+- **Fix, if decided:** clear the 84, add `tests` to `files`, add the step to CI. Then pin the
+  count at 0 in a test, so it cannot grow back silently. CI type-checks `src` only until then.
 
 ## Twin (Phase 4, 2026-11-15)
 

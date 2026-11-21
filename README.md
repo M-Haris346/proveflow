@@ -20,7 +20,7 @@ released, and no attack-success rate has been measured.
 | Stage | State | What exists | What does not |
 |---|---|---|---|
 | Find | built (Phase 1) | `discover`, `scan` (static flow map; consented `tools/list` introspection), SARIF | |
-| Prove | partial | the twin proxy (Phase 2), the deterministic oracle R1 + R4 (Phase 3a), schema twins and `proveflow twin` (Phase 4), the agent runner (Phase 5, closed 2026-11-21 by ONE real trial: Groq, `openai/gpt-oss-120b`, a clean scenario with no attack; [evidence](evidence/provider-runs/groq-gpt-oss-120b-2026-11-21/README.md)) | any attack run on a real provider, rules R2 and R3 (Phase 3b), the attack corpus and campaigns (Phase 6), `prove` (Phase 7) |
+| Prove | partial | the twin proxy (Phase 2), the deterministic oracle R1 + R4 (Phase 3a) and R2 + R3 + R4 across cassettes (Phase 3b, tested on authored fixtures only; zero real positives), schema twins and `proveflow twin` (Phase 4), the agent runner (Phase 5, closed 2026-11-21 by ONE real trial: Groq, `openai/gpt-oss-120b`, a clean scenario with no attack; [evidence](evidence/provider-runs/groq-gpt-oss-120b-2026-11-21/README.md)) | any attack run on a real provider, any real positive for any rule, the attack corpus and campaigns (Phase 6), `prove` (Phase 7) |
 | Fix | not started (Phase 8) | | mitigations, patch files |
 | Verify | not started (Phase 8) | | re-running attacks with a fix applied |
 
@@ -98,7 +98,14 @@ released, and no attack-success rate has been measured.
 >   matcher for 10 encodings (raw, case, zero-width, separator, URL, base64, hex, rot13,
 >   reversed, JSON-escaped); rule R1 (canary in a call the proxy sandboxed as a sink) and R4
 >   (review only) over a validated cassette; incomplete cassettes give no verdict. No LLM.
->   Not built: R2, R3 (needs the agent runner), utility checker. Nothing measured
+> - Oracle, Phase 3b [impl][tested on authored fixtures only] (docs/ORACLE.md): R2 (the
+>   trial's minted action target in the goal argument of the goal tool's sink call), R3 (the
+>   trial's minted marker, carried separator-split, rejoined in the final answer; raw + casefold
+>   only; not evaluable without a final answer), R4 across a trial's cassettes in the runner
+>   transcript's order. **Zero real positives:** every real trial so far has compromised=false,
+>   so every rule is validated only against fixtures authored here, which shows the rule
+>   matches our model of the attack, not that it catches real model behaviour. R3 is a
+>   capability-dependent lower bound, not comparable across models. Nothing measured
 > - Twin, Phase 4 [impl][tested, local only: Windows, both shells; CI not yet run on it]
 >   (docs/ARCHITECTURE.md §5.4, docs/adr/ADR-007-dual-role-twin-exception.md):
 >   - one self-contained, deterministic twin script per server (five imports, no proveflow
@@ -137,9 +144,9 @@ released, and no attack-success rate has been measured.
 >     real tool-call ids are `fc_<uuid>`, which the D7 scan flagged; they are now excluded
 >     at five exact paths, and the four proveflow constructs must pass an echo check
 >   - residuals: the caps are design values, not measured; no 429/retry handling (fails
->     closed); R4 is per cassette (docs/BACKLOG.md)
-> - **Next:** Phase 6 is not started; Haris scopes it. Phase 3b's R2 stays planned. Its
->   FakeLLM policies are forbidden by D7 (Phase 5, docs/ARCHITECTURE.md §5.6).
+>     closed) (docs/BACKLOG.md)
+> - **Next:** Phase 6 is not started; Haris scopes it. FakeLLM policies are forbidden by D7
+>   (Phase 5, docs/ARCHITECTURE.md §5.6).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
