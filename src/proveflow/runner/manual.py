@@ -8,8 +8,9 @@ Without ``--yes`` it prints the provider, the model and the trial's MAXIMUM toke
 exits without spending anything (no twin, no proxy, no HTTP client is created): a dev tool
 that can spend money on the first keystroke is not acceptable. The key is read from the
 environment variable named in the config, at call time, and never written anywhere.
-A transcript from a real run is committed only after it passes the D7 checks
-(tests/safety/test_runner_safety.py), and the commit names the provider and model.
+A transcript from a real run is committed only after it passes the exact-key check and the
+evidence check (tests/safety/test_transcript_layers.py), and the commit names the provider
+and model. An existing ``--out-dir`` is refused (exit 2): a run's output is never overwritten.
 """
 
 from __future__ import annotations
@@ -28,10 +29,21 @@ from proveflow.runner.limits import RunBudget, TrialLimits
 from proveflow.runner.scenario import Scenario
 
 EXIT_NOT_CONFIRMED = 2
+EXIT_OUT_DIR_EXISTS = 2
 
 
 class NotConfirmed(SystemExit):
     pass
+
+
+def claim_out_dir(path: Path) -> str | None:
+    """Create the output directory, or return the refusal when it already exists: a real
+    run's output is never overwritten or mixed with another run's."""
+    try:
+        path.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        return f"refusing to overwrite: --out-dir {path.name!r} already exists; choose a new one"
+    return None
 
 
 def parse(argv: Sequence[str]) -> argparse.Namespace:
@@ -75,7 +87,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     from proveflow.runner.llm import HttpChatClient
     from proveflow.runner.trial import run_trial
 
-    args.out_dir.mkdir(parents=True, exist_ok=False)
+    refusal = claim_out_dir(args.out_dir)
+    if refusal is not None:
+        print(refusal, file=sys.stderr)
+        return EXIT_OUT_DIR_EXISTS
     twin_dir = policy.TWIN_ROOT / "manual"
     twin_dir.mkdir(parents=True, exist_ok=True)
 
