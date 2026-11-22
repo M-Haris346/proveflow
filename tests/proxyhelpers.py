@@ -186,7 +186,46 @@ def twin_tool_calls(tmp_path: Path) -> list[str]:
     return [m["params"]["name"] for m in twin_messages(tmp_path) if m.get("method") == "tools/call"]
 
 
+def cassette_story(path: Path) -> str:
+    """What a cassette recorded, for a failure message: its error events with their details,
+    its tail from the last upstream_request onward, and its session_end reason."""
+    from proveflow.proxy.cassette import load_cassette
+
+    try:
+        events = load_cassette(path)
+    except Exception as exc:  # the cassette itself is unreadable: say so, never hide it
+        return f"cassette {path.name} unreadable ({type(exc).__name__}: {exc})"
+
+    def show(e: Any) -> str:
+        if e.kind == "error":
+            return f"error[{e.error_kind}: {e.detail}]"
+        if e.kind == "session_end":
+            return f"session_end[{e.reason}]"
+        if e.kind in ("upstream_request", "sandboxed_call"):
+            return f"{e.kind}[{e.tool}]"
+        return str(e.kind)
+
+    errors = [show(e) for e in events if e.kind == "error"]
+    starts = [i for i, e in enumerate(events) if e.kind == "upstream_request"]
+    tail = [show(e) for e in events[starts[-1] if starts else 0 :]]
+    end = events[-1].reason if events and events[-1].kind == "session_end" else "<no session_end>"
+    return f"errors recorded: {errors or 'none'}; tail: {tail}; session_end reason: {end}"
+
+
+# The facts of the most recent run_in_process (test diagnostics only; read by text_of when a
+# call returned no result, so the failure says what the session did instead).
+LAST_RUN: dict[str, Any] = {}
+
+
 def text_of(result: mcp_types.CallToolResult) -> str:
+    if result is None:
+        run = dict(LAST_RUN)
+        raise AssertionError(
+            "the proxy call returned NO result at all: run_in_process swallowed the client's "
+            f"error ({run.get('client_error')!r}) because the proxy ended the session first "
+            f"(outcome reason {run.get('reason')!r}). The session recorded: "
+            f"{cassette_story(run['cassette']) if 'cassette' in run else 'unknown'}"
+        )
     first = result.content[0]
     assert isinstance(first, mcp_types.TextContent)
     return first.text
@@ -236,6 +275,9 @@ def run_in_process(
                 raise err
 
     anyio.run(main)
+    LAST_RUN.clear()
+    LAST_RUN.update(cassette=session.cassette_path, reason=box["outcome"].reason,
+                    client_error=box.get("client_error"))  # fmt: skip
     return box.get("result"), box["outcome"]
 
 

@@ -82,6 +82,49 @@ moves out of this file only with a fix and that test in the repo.
 - **Do not read those committed hashes as meaning anything:** replay compares requests.
 - **Reason it stays open:** making them meaningful needs path-free cassettes, a format change.
 
+### Real-session tests failed once under full-suite load, cause not yet known (medium)
+- **Observed once:** real-session tests that spawn a twin failed under full-suite load on
+  Windows (commit 6f08b42, 2026-11-22, its per-commit worktree run): three at once, all in a
+  test's baseline pass, before any mutant:
+  `test_oracle_r4_mutation.py::test_ignoring_the_cap_refusal_refuses_a_valid_real_trial` and
+  `::test_a_record_moved_below_the_gate_fails_the_real_session_check` ("upstream_crash: the
+  scenario did not reach the upstream_error site"), and the protected
+  `test_proxy_mutation.py::test_f_second_opinion_disabled_fails_forged_session_check` (the
+  proxy call returned no result).
+- **Did not reproduce:** in 5 isolated reruns, in 80 measured crash-scenario runs (40
+  isolated, 40 under parallel load, all recording upstream_error), or in a full-suite rerun of
+  the same commit (1563 passed, 2 skipped, 0 failed). Observed frequency: 1 red of 2 full-suite
+  runs of 6f08b42. The diagnostics are now in place so the NEXT occurrence is interpretable.
+- **This item must NEVER be cited to dismiss a failure of these tests:** a recurrence is to be
+  diagnosed from the new output, not waved at this item.
+- **LEADING HYPOTHESIS, explicitly UNVERIFIED: a proxy-side early stop whose kind nothing
+  recorded, one mechanism for all three failures at once.** The reasoning:
+  - `run_in_process` returns no result in exactly one case: the PROXY ended the session first
+    (`outcome.reason != "agent_closed"`, tests/proxyhelpers.py). So the forged-session failure
+    had a proxy-side early stop.
+  - A missed upstream_error site is consistent with the same thing: the session ending before
+    the error was recorded.
+  - All three failures occurred in the same run.
+  The default session timeout is 600 s (proxy/session.py), so a timeout is unlikely but not
+  excluded.
+- **The open question the diagnostics answer next time:** serve() records `error[proxy_failure]`
+  on an exception and sets `session_end.reason` on every early stop. So an early stop that
+  recorded NEITHER an error event NOR a non-agent_closed reason would itself be a gap in the
+  proxy's own recording. We do not know which path it was, because the original run discarded
+  it; that is precisely what the diagnostics now capture.
+- **Not done, on purpose:** the fixtures are not tuned to make it less likely. Raising a
+  timeout or shortening a scenario would hide a symptom we have not explained, which is the same
+  error as widening the check.
+- **Done:** diagnostics only, no assertion changed. A real-session check that misses now prints
+  the errors the cassette recorded, its tail and its session_end reason
+  (`proxyhelpers.cassette_story`), and `text_of(None)` names the swallowed client error and the
+  outcome reason (`tests/unit/test_failure_diagnostics.py`).
+- **NOT done, on purpose:** no check was widened and no other error kind is accepted. An
+  unexplained failure is not a reason to loosen a safety check.
+- **Next time it happens:** read the message, which now says which path the session took, and
+  record it here. It is NOT "the known flake": any failure of these tests is a finding until
+  explained.
+
 ### R4 is computed only for runner trials (low; by design)
 - R4 needs the runner's transcript as the trial's clock. A cassette recorded by the
   standalone `proveflow proxy` (stdio agent, no transcript) gets R1 and R2 only.

@@ -15,7 +15,7 @@ from proveflow.core.honey import HoneyKind, HoneyValue
 from proveflow.core.trials import RuleHit
 from proveflow.oracle.rules import IncompleteCassetteError, OracleFindings, evaluate_file
 from proveflow.proxy.cassette import CassetteWriter
-from proxyhelpers import CANARY, make_attack, make_session, run_in_process
+from proxyhelpers import CANARY, cassette_story, make_attack, make_session, run_in_process
 
 BS = chr(92)
 
@@ -797,11 +797,18 @@ def assert_real_sessions_order_as_r4_assumes(tmp_path: Path) -> None:
         with pytest.MonkeyPatch.context() as mp:
             if fault is not None:
                 fault(mp)
+            run_error: Exception | None = None
             try:
                 run_in_process(session, script)
-            except Exception:  # noqa: S110 - a crashed twin or a cut session may end the run
-                pass
+            except Exception as exc:  # a crashed twin or a cut session may end the run
+                run_error = exc
         events = load_cassette(session.cassette_path)
+
+        def story(error: Exception | None = run_error, path: Path = session.cassette_path) -> str:
+            """What actually happened, appended to every failure below (diagnostics only)."""
+            raised = f"the run raised {error!r}; " if error is not None else ""
+            return f" [{raised}{cassette_story(path)}]"
+
         for i, e in enumerate(events):
             if not isinstance(e, Injection):
                 continue
@@ -812,28 +819,34 @@ def assert_real_sessions_order_as_r4_assumes(tmp_path: Path) -> None:
                 or not isinstance(before[-1], UpstreamResponse)
                 or {before[-2].tool, before[-1].tool} != {e.tool}
             ):
-                raise AssertionError(f"{label}: injection seq {e.seq} is not after its own call")
+                raise AssertionError(
+                    f"{label}: injection seq {e.seq} is not after its own call{story()}"
+                )
         if site is not None:
             hits = [i for i, e in enumerate(events)
                     if isinstance(e, ErrorEvent) and e.error_kind == site]  # fmt: skip
             if not hits:
-                raise AssertionError(f"{label}: the scenario did not reach the {site} site")
+                raise AssertionError(
+                    f"{label}: the scenario did not reach the {site} site{story()}"
+                )
             for i in hits:
                 prior = [x for x in events[:i] if rules._is_decision(x) or rules._is_tools_call(x)]
                 first = prior[-1] if prior else None
                 if site == rules.MAX_CALLS_REFUSAL:
                     if not rules._is_tools_call(first):
-                        raise AssertionError(f"{label}: {site} is not the call's only answer")
+                        raise AssertionError(
+                            f"{label}: {site} is not the call's only answer{story()}"
+                        )
                 elif not isinstance(first, UpstreamRequest):
                     raise AssertionError(
                         f"{label}: {site} answered a tools/call with no decision record "
-                        "before it (R4 would refuse a valid trial)"
+                        f"before it (R4 would refuse a valid trial){story()}"
                     )
         try:
             evaluate_trial([session.cassette_path], trial_id="t",
                            transcript=transcript_of_calls(session.session_id, tools))  # fmt: skip
         except TrialOrderError as exc:
-            raise AssertionError(f"{label}: a valid trial was refused: {exc}") from None
+            raise AssertionError(f"{label}: a valid trial was refused: {exc}{story()}") from None
 
 
 # --- the "-" sentinel: a tool call no proxy received (Phase 3b) ----------------------------
