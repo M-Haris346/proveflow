@@ -92,9 +92,13 @@ moves out of this file only with a fix and that test in the repo.
   `test_proxy_mutation.py::test_f_second_opinion_disabled_fails_forged_session_check` (the
   proxy call returned no result).
 - **Did not reproduce:** in 5 isolated reruns, in 80 measured crash-scenario runs (40
-  isolated, 40 under parallel load, all recording upstream_error), or in a full-suite rerun of
-  the same commit (1563 passed, 2 skipped, 0 failed). Observed frequency: 1 red of 2 full-suite
-  runs of 6f08b42. The diagnostics are now in place so the NEXT occurrence is interpretable.
+  isolated, 40 under parallel load, all recording upstream_error), or in two later full-suite
+  runs of the same commit, both green (1563 passed, 2 skipped, 0 failed): its rerun in the same
+  worktree (2026-11-22) and its per-commit verification in a fresh worktree beside 0d604d5,
+  b5de916 and 7dc1fa6, all four green (2026-11-22). Observed frequency, as of 2026-11-22: 1 red
+  of 3 full-suite runs of 6f08b42. CI run 45028306407 (head 7dc1fa6, 2026-11-22) also ran these
+  tests green on ubuntu and windows. The diagnostics are now in place so the NEXT occurrence is
+  interpretable.
 - **This item must NEVER be cited to dismiss a failure of these tests:** a recurrence is to be
   diagnosed from the new output, not waved at this item.
 - **LEADING HYPOTHESIS, explicitly UNVERIFIED: a proxy-side early stop whose kind nothing

@@ -150,10 +150,11 @@ released, and no attack-success rate has been measured.
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`44896838991` on commit `8be6608` (Phase 5 closed), green on both OSes (ubuntu-24.04: 1457
-passed, 15 skipped, all Windows-only tests, 0 failed; the two POSIX signal tests ran there;
-windows-2025: 1470 passed, 2 skipped, both POSIX-only signal tests, 0 failed). No test calls
-an LLM provider. The POSIX kill tests were also repeated 10x each,
+`45028306407` on commit `7dc1fa6` (Phase 3b), green on both OSes (ubuntu-24.04: 1574 passed,
+15 skipped, all Windows-only tests, 0 failed; the two POSIX signal tests ran there;
+windows-2025: 1587 passed, 2 skipped, both POSIX-only signal tests, 0 failed; 1589 collected
+on each). It is the first CI evidence of Phase 3b: R2, R3 and R4 across cassettes, the bound
+table and the per-location threshold. No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
 all green, in run
 `43582905272`.
 This README states CI results only for a run id checked with `gh run list`. Local commands:
