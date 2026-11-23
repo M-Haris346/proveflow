@@ -195,12 +195,46 @@ class Attempt(FrozenModel):
             raise ValueError("a rate-limited attempt's reason is rate_limited")
 
 
+ModelSide = Literal["scripted", "replay", "provider"]
+
+
+class CellSpec(FrozenModel):
+    """One campaign cell (Phase 7.1, runner/engine.py): which payload, carrier, goal and model
+    a trial key runs. ``source_dataset`` is the ONLY grouping axis aggregation uses;
+    ``attack_family`` is deliberately absent (a per-source taxonomy, never a cross-source axis:
+    docs/METHODOLOGY.md threat 13)."""
+
+    source_dataset: str
+    record_id: str
+    carrier: str
+    goal_kind: str
+    model: str
+
+
+class SourceDraw(FrozenModel):
+    population: int = Field(ge=0)  # records of this source available to the sampler
+    drawn: int = Field(ge=0)  # records drawn (the sampling fraction is drawn / population)
+
+
+class SamplingRecord(FrozenModel):
+    """The stratified draw (Phase 7.1): EQUAL per source, deterministic from ``seed``."""
+
+    seed: int
+    per_source_n: int = Field(ge=1)
+    per_source: dict[str, SourceDraw]
+
+
 class CampaignState(FrozenModel):
     schema_version: Literal[1] = 1  # STATE_SCHEMA
     campaign_id: str = Field(pattern=TRIAL_KEY_PATTERN)
     budget_total: int = Field(ge=1)
     plan: tuple[str, ...] = Field(min_length=1)
     attempts: tuple[Attempt, ...] = ()
+    # Phase 7.1 (runner/engine.py); absent for a bare run_campaign. A campaign whose model side
+    # is not recorded cannot be REPORTED (runner/report.py fails closed on None).
+    model_side: ModelSide | None = None
+    cells: dict[str, CellSpec] = Field(default_factory=dict)
+    sampling: SamplingRecord | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> CampaignState:
@@ -220,6 +254,8 @@ class CampaignState(FrozenModel):
                 done.add(a.trial_key)  # RESULTS: one completed attempt per key
             if a.status == "started" and i != len(self.attempts) - 1:
                 raise ValueError("only the last attempt can still be 'started'")
+        if self.cells and set(self.cells) != set(self.plan):
+            raise ValueError("the cells are not exactly the plan's trial keys")
         return self
 
 
@@ -388,14 +424,18 @@ SleepFn = Callable[[float], Awaitable[None]]
 
 
 def _open(state_path: Path, campaign_id: str, plan: Sequence[str], budget_total: int,
-          out_dir: Path, limits: TrialLimits) -> CampaignState:  # fmt: skip
-    fresh = CampaignState(campaign_id=campaign_id, budget_total=budget_total, plan=tuple(plan))
+          out_dir: Path, limits: TrialLimits, spec: dict[str, Any]) -> CampaignState:  # fmt: skip
+    fresh = CampaignState(campaign_id=campaign_id, budget_total=budget_total, plan=tuple(plan),
+                          **spec)  # fmt: skip
     if not state_path.exists():
         save_state(state_path, fresh)
         return fresh
     state = load_state(state_path)
-    if (state.campaign_id, state.plan, state.budget_total) != (fresh.campaign_id, fresh.plan,
-                                                               fresh.budget_total):  # fmt: skip
+    mine = (state.campaign_id, state.plan, state.budget_total, state.model_side, state.cells,
+            state.sampling)  # fmt: skip
+    theirs = (fresh.campaign_id, fresh.plan, fresh.budget_total, fresh.model_side, fresh.cells,
+              fresh.sampling)  # fmt: skip
+    if mine != theirs:
         raise CorruptCampaignState(f"{state_path.name} belongs to another campaign or plan")
     if state.attempts and state.attempts[-1].status == "started":
         last = state.attempts[-1]
@@ -447,13 +487,17 @@ async def run_campaign(
     attempt: AttemptFn,
     limits: TrialLimits | None = None,
     sleep: SleepFn = anyio.sleep,
+    model_side: ModelSide | None = None,
+    cells: dict[str, CellSpec] | None = None,
+    sampling: SamplingRecord | None = None,
 ) -> CampaignState:
     """Run (or resume) the plan. ``attempt(key, attempt_id, budget)`` runs ONE attempt (in
     production a ``run_trial`` with that trial id and budget). Raises ``BudgetExhausted``
     (``BudgetOverspent``), ``RateLimitExhausted``, ``AttemptFailed`` (``UnclassifiedOutcome``)
     or ``CorruptCampaignState``; the state file is saved before any of them."""
     limits = limits or TrialLimits()
-    state = _open(state_path, campaign_id, plan, budget_total, out_dir, limits)
+    spec = {"model_side": model_side, "cells": cells or {}, "sampling": sampling}
+    state = _open(state_path, campaign_id, plan, budget_total, out_dir, limits, spec)
 
     def record(a: Attempt) -> None:
         nonlocal state
