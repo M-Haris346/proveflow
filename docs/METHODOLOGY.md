@@ -158,6 +158,21 @@ Utility cost and attack effect are computed on these pairs. Mitigation verificat
     harm class and an AgentDojo application domain, which are not the same kind of thing, so
     the stats file's `per_attack_family` block is read within a source only
     (src/proveflow/corpus/records.py).
+    **How Phase 7.1 meets it (2026-11-24) [impl][tested offline, scripted model side only]:**
+    BOTH halves of the constraint, not one. (a) The sampler STRATIFIES BY SOURCE with an EQUAL
+    allocation: each source contributes `min(per_source_n, population)` records, drawn by
+    `random.Random(f"{seed}:{source}")` from the source's records sorted by id
+    (`runner.engine.sample_records`); it reads only `source_dataset` and `id`, never
+    `attack_family`. The campaign state file records the seed and, per source, the POPULATION
+    and the DRAW. (b) The report gives PER-SOURCE rates with a Wilson 95% CI each and NO pooled
+    figure, in JSON or text (`runner.report`; `tests/unit/test_engine_report.py`, with
+    mutations). **The cost, stated:** an equal allocation UNDER-SAMPLES BIPIA relative to its
+    share (at `per_source_n = 35`, 35 of 250 BIPIA records against 35 of 35 AgentDojo), so each
+    source's rate has comparable precision but a BIPIA rate rests on a smaller FRACTION of its
+    population; the report prints `drawn of population` per source so that fraction is visible.
+    Because nothing is pooled, the unequal fractions never mix into one number. Each rate also
+    prints its counted trials by end reason (limit-ended trials count, docs/BACKLOG.md) and the
+    attempts NOT counted (rate-limited, failed, unclassified, interrupted).
 
 ## Appendix A — Provider table [research, changes often]
 

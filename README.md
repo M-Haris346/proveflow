@@ -153,6 +153,15 @@ released, and no attack-success rate has been measured.
 >   must stratify or report per source; docs/DATASETS.md). LLMail-Inject is not ingested
 >   pending a ruling. FakeLLM policies are forbidden by D7 (Phase 5,
 >   docs/ARCHITECTURE.md §5.6).
+> - **Phase 7.0–7.2 [impl][tested] (2026-11-24), OFFLINE only: scripted model side, nothing
+>   paid, no provider call, local Windows; CI has not run on it yet.** A per-stage handshake
+>   deadline (30 s; spawn, initialize, tools_list) that makes the twin-handshake hang VISIBLE,
+>   BOUNDED and NAMED in the cassette. Its cause is unknown and it is NOT fixed. The campaign
+>   engine: an equal-per-source seeded sampler and a six-cell scripted smoke campaign with a
+>   429, a kill and a resume. The report: results ledger only, per-source Wilson 95%, no pooled
+>   figure, the lower-bound note beside the numbers. 7.3, the first paid campaign, has NOT run:
+>   no real rate exists, and every real trial so far is compromised=false (ZERO REAL
+>   POSITIVES).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
@@ -161,10 +170,15 @@ passed, 15 skipped, all Windows-only tests, 0 failed; the two POSIX signal tests
 windows-2025: 1713 passed, 2 skipped, both POSIX-only signal tests, 0 failed; 1715 collected
 on each). It is the first CI evidence of Phase 6 step 3: the pinned corpus ingest (offline,
 on synthetic fixtures; no test fetches) and the caught-exception failure diagnostics.
-Tests run in fixed order; order-independence has never been tested (docs/BACKLOG.md). No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
+Tests run in fixed order (`-p no:randomly` in addopts). Order-independence has been audited
+ONCE, locally on Windows, with seed 20261124: green. One permutation is not a proof, and CI
+has never run an audit (docs/BACKLOG.md). No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
 all green, in run
 `43582905272`.
-This README states CI results only for a run id checked with `gh run list`. Local commands:
+This README states CI results only for a run id checked with `gh run list`. It names the run
+that verified the CODE: `45197992667` on `52bcb5c`. A run triggered by a README-only commit
+(for example `163547c`, whose run `45206531796` was green) does not get its own README line: that would need
+another README commit, whose run would need another line. Do not chase it. Local commands:
 
 ```bash
 uv sync

@@ -144,8 +144,8 @@ moves out of this file only with a fix and that test in the repo.
 - **SECOND SIGHTING (2026-11-23, uncommitted Phase 6 step 2 tree, Windows), same shape: a real
   trial's MCP path failing during a long run, passing alone.**
   - Run: a SUBSET, not the full suite, in pytest's default FIXED order (the command carried
-    `-p no:randomly`, a no-op: no random-order plugin was installed; see "Order-independence
-    has never been tested"): tests/integration/test_campaign.py,
+    `-p no:randomly`, a no-op: no random-order plugin was installed then; see "Order-independence:
+    ONE seeded audit"): tests/integration/test_campaign.py,
     tests/mutation/test_campaign_mutation.py, tests/mutation/test_campaign_loop_mutation.py,
     tests/integration/test_runner_replay.py, tests/unit/test_campaign_loop.py,
     tests/unit/test_campaign_state.py.
@@ -209,12 +209,63 @@ moves out of this file only with a fix and that test in the repo.
     scheduling. N is a design value to be chosen with evidence. Not built in Phase 6.
     **No paid campaign runs before it exists and is tested**: at HIGH and unfixed, a silent
     600 s hang mid-campaign burns wall clock and can strand a paid trial with nothing to show
-    for it, and the campaign's resume path would then charge that attempt its FULL
-    reservation (unknown spend at maximum, runner.campaign) for a trial that measured
-    nothing. "Run the campaign first and fix it later" does not satisfy this item.
+    for it. "Run the campaign first and fix it later" does not satisfy this item.
+  - **CORRECTION (2026-11-24) to the sentence this replaced**, which said the resume path
+    "would then charge that attempt its FULL reservation". That was WRONG for this failure: a
+    hung-handshake attempt leaves a READABLE transcript (`trial_start` only), so the campaign
+    charges it the usage that transcript records, 0 tokens (`usage_source` `transcript`). The
+    full-reservation charge (`unknown_spend_charge`) applies only to an attempt whose
+    transcript is UNREADABLE. Measured, not argued:
+    `handshakechecks.assert_the_campaign_files_a_handshake_timeout_as_a_failure` pins
+    `("failed", None, "ExceptionGroup...", "transcript", 0)` and a budget ledger of 0. The real
+    cost of the hang was wall clock (600 s per occurrence) and a stranded attempt, not tokens.
+  - **BUILT (Phase 7.0, 2026-11-24) [impl][tested], OFFLINE; the item STAYS OPEN.** A
+    per-stage handshake deadline, `HANDSHAKE_TIMEOUT_S = 30.0` (proxy/session.py), separate
+    from the 600 s session timeout, over three stages: `spawn`, `initialize`, `tools_list`
+    (`proxy.cassette.HANDSHAKE_STAGES`, one literal). There are two layers, and each is
+    mutation-tested with the other off (`tests/mutation/test_handshake_mutation.py`):
+    - **Proxy layer:** `serve()` moves its cancel-scope deadline to `now + 30 s` at each
+      stage start. When that stage deadline (not the session's) fires, the session ends
+      `handshake_timeout` with `session_end.handshake_outstanding` naming the stage. A
+      `handshake_stage` event records each stage `started` and `completed` (cassette schema
+      4; a v3 cassette is refused).
+    - **Harness layer:** `running_proxies` bounds the agent-side startup by
+      `startup_bound_s(30) = (3 + 1) × 30 × 1.5 = 180 s`, derived from the constant and not
+      a literal. It raises `ProxyStartupTimeout` if the proxy never answers. Its bound
+      exceeds the proxy's `3 × 30 = 90 s`, so the proxy names the stage first (the layering
+      is mutation-tested too).
+    Elapsed ms per stage are in the NON-EVIDENCE timings sidecar (`handshake_ms`), never the
+    cassette (ADR-008). A handshake timeout is filed FAILED via `Attempt.exception`, never a
+    result, and writes no `trial_end`. The AST scan of trial_end reasons stays at 12, exact.
+    **What this is:** the hang is now VISIBLE, BOUNDED (30 s per stage instead of 600 s per
+    session) and NAMED (which stage, in the cassette). **What it is NOT:** a fix. WHY a twin's
+    handshake stalls under load is still UNKNOWN (the candidates above are untested). The
+    deadline was triggered in tests by INJECTED hangs (a patched spawn, a `--hang-initialize`
+    fake twin, a patched `tools/list`), never by the real load hang, which has not recurred
+    since and has not been reproduced. 30 s is a design value: an unloaded twin starts in
+    about 2 s here (measured while writing the tests, not a stored run), and it is not tuned
+    on evidence from the real hang. Next occurrence: read `handshake_outstanding` and the
+    sidecar's `handshake_ms`, and record them here.
   - The push of `e848da4` rests on `8d06675`'s green run over a superset of the same code plus
     CI on both OSes, NOT on a re-run of `e848da4`: a re-run that happened to be green, recorded
     as its verification, would be "intermittent, on record", which is refused.
+
+### Full-suite wall time swings about 30% on the same tree (OBSERVATION, unexplained; medium)
+- **Observed 2026-11-24, Windows, the dev machine, fixed order, Phase 7.0-7.2 working tree,
+  three sequential full gates:** 834 s, 1075 s and 1107 s (the gate's wall seconds; pytest's
+  own figure was 1104.18 s for the third). Between them only two test files' TEXT differed:
+  `tests/fixtures/fake_twin.py`, one docstring line, and
+  `tests/safety/test_tools_never_imported.py`, the tool names it uses. All 1758 tests ran in
+  every gate.
+- **What the new tests account for:** the 7 new test files take 141 s run alone, so they
+  explain 141 s of the growth from 1715 tests (about 674-790 s before) to 1758. They do NOT
+  explain the extra ~250 s of the second and third gates over the first.
+- **No theory is offered.** Nothing here was measured beyond the three numbers.
+- **Related:** "Real-session tests failed under load" above, also unexplained timing
+  behaviour on this machine. A 30% swing matters because the 600 s foreground limit has
+  already been hit once. A slow run is not evidence of the handshake hang (that hang now
+  ends a session as `handshake_timeout` with the stage named), and a fast one is not
+  evidence against it.
 
 ### R4 is computed only for runner trials (low; by design)
 - R4 needs the runner's transcript as the trial's clock. A cassette recorded by the
@@ -253,7 +304,7 @@ moves out of this file only with a fix and that test in the repo.
 - **Proposed test:** a recorded 429 then 200 replays to the same transcript, and the budget
   counts exactly the provider-reported tokens of the attempt that answered.
 
-### Order-independence has never been tested (medium; a seeded audit is owed)
+### Order-independence: ONE seeded audit, green (medium; more seeds owed)
 - **Found 2026-11-23:** no random-order plugin is installed (no pytest-randomly, no
   pytest-random-order; `pyproject.toml` addopts is `-q`; CI adds none). Every test run in this
   project, local and CI, has run in pytest's default FIXED collection order. `-p no:randomly`,
@@ -270,7 +321,27 @@ moves out of this file only with a fix and that test in the repo.
   reproduce.
 - **Owed:** one deliberate audit run with an EXPLICIT seed, the SEED RECORDED in whatever
   reports it (the flag syntax to be taken from the plugin's own documentation when it is
-  installed, cited, not from memory). Not done yet; the plugin is not installed yet.
+  installed, cited, not from memory).
+- **Installed (Phase 7.0, 2026-11-24):** `pytest-randomly==5.1.0`, dev group only (uv.lock:
+  one package, depending on pytest). The flag syntax is from the plugin's own README
+  (https://github.com/pytest-dev/pytest-randomly/blob/main/README.rst, and
+  https://pypi.org/project/pytest-randomly/): `--randomly-seed=N` fixes the seed, `-p
+  no:randomly` disables the plugin, and the header prints `Using --randomly-seed=N`. The
+  DEFAULT gate stays FIXED order: `pyproject.toml` addopts is `-q -p no:randomly`. MEASURED,
+  not documented: a later `-p randomly` re-enables it, and the header then prints `Using
+  --randomly-seed=20261124` and `plugins: randomly-5.1.0`.
+- **AUDIT RUN (2026-11-24), SEED 20261124: GREEN.** The command was `uv run pytest -rs -p
+  randomly --randomly-seed=20261124`. The working tree was Phase 7.0–7.2, uncommitted, on top
+  of 163547c, on Windows. Result: 1756 passed, 2 skipped (the two POSIX-signal tests,
+  tests/safety/test_proxy_safety.py:390 and :395), 0 failed, 1758 collected; pytest 1154.68 s.
+  The order really changed: collected with that seed, 0 of 1758 test ids are at their
+  fixed-order position (the same set). The fixed-order gate on the same tree just before it:
+  1756 passed, 2 skipped, 0 failed, 1104.18 s.
+- **What it does NOT establish:** order independence in general. It is ONE permutation, and
+  the plugin shuffles modules and the tests inside each module; it does not interleave tests
+  across modules. It is Windows only; CI has not run an audit. It also says nothing about the
+  twin-handshake hang, which did not recur in it. The item stays open (medium): further seeds,
+  and an audit on CI, are owed before anyone claims the suite is order-independent.
 
 ### Phase 7 aggregation must read the RESULTS LEDGER only (high; binding on Phase 7)
 - THE RESULTS LEDGER IS THE ONLY SOURCE OF COUNTED TRIALS (`runner.campaign.results`). A
@@ -283,6 +354,12 @@ moves out of this file only with a fix and that test in the repo.
 - **Required pin in Phase 7:** the aggregation run against a state file containing
   rate-limited and failed attempts (and their transcripts on disk), proving they are excluded
   from the DENOMINATOR as well as the numerator.
+- **PINNED (Phase 7.2, 2026-11-24):** `enginechecks.assert_aggregation_reads_only_the_results_
+  ledger`: a state with one rate-limited and one failed attempt (the failed one's scripted
+  verdict is compromised=true, so counting it would raise the numerator too), 8 transcripts
+  on disk for 6 counted trials. `runner.report.aggregate` takes a state and no path. The
+  mutant that counts one per attempt (one per transcript, the same thing) fails it
+  (`tests/mutation/test_engine_report_mutation.py`). Kept open as the binding rule it is.
 
 ### Limit-ended trials are counted results; report them per reason (medium; Phase 7)
 - `runner.campaign.COMPLETED_REASONS` includes every `limit:*` (argued in its docstring: the
@@ -290,6 +367,10 @@ moves out of this file only with a fix and that test in the repo.
   that would have been compromised after the cap counts as not compromised, and
   `limit:wall_clock` depends on provider latency, so which trials it cuts does not reproduce.
   Phase 7 must report the number of limit-ended trials per reason beside every rate.
+- **Built (Phase 7.2, 2026-11-24) [impl][tested]:** each source row carries `ended_by`, its
+  counted trials per end reason, printed beside the rate; a mutant folding `limit:*` into
+  `final_answer` fails the aggregation check. The cost above is unchanged: reporting the
+  count does not recover what a cap cut off.
 
 ### One non-429 failure stops the whole campaign (medium; DEFERRED to Phase 7, not settled)
 - Any attempt that fails for a reason other than a 429 (a FAILED reason, an exception, an
@@ -297,6 +378,10 @@ moves out of this file only with a fix and that test in the repo.
   closed is right for a measurement tool. The consequence Phase 7 will meet: one bad response
   from one model halts a run of hundreds of trials. Whether a bounded skip-and-record is
   wanted is a Phase 7 decision; nothing here decides it.
+- **Phase 7.1 (2026-11-24) kept fail closed:** the engine runs cells through `run_campaign`
+  unchanged, so one non-429 failure still stops it with the state saved
+  (`enginechecks.assert_the_engine_fails_closed`). The skip-and-record decision is still
+  open, and must be made before 7.3.
 
 ### A forwarded dual-role sink's reply is REASONED not to echo arguments, not MEASURED (low)
 - MEASURED: the sandbox's reply to every sink tool the fake twin offers carries none of the
