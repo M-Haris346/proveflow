@@ -19,6 +19,9 @@ a cap, never raise it.
   never silently truncated.
 
 Token counts are the PROVIDER's own usage figures (F10); proveflow counts nothing itself.
+Across runs (Phase 6, D4) a campaign rebuilds each attempt's ``RunBudget`` from the
+per-attempt usage in its state file, failed and rate-limited attempts included
+(``runner.campaign.budget_of``), never from completed trials.
 """
 
 from __future__ import annotations

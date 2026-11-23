@@ -40,6 +40,30 @@ class ProviderError(RuntimeError):
     """The provider call failed. The message never carries the key or response headers."""
 
 
+RETRY_AFTER_HEADER_MAX = 64  # characters of Retry-After kept for the record
+
+
+class RateLimited(ProviderError):
+    """HTTP 429 (Phase 6, D3). It ENDS the trial attempt (``rate_limited``); it is never
+    retried inside a trial. Backoff and the retry are the CAMPAIGN's (``runner.campaign``).
+
+    ``retry_after_header``: the response's ``Retry-After`` value, the ONE response header that
+    is ever read (RFC 6585 s4: a 429 "MAY include a Retry-After header"), kept as text for the
+    campaign's record: at most ``RETRY_AFTER_HEADER_MAX`` characters, anything outside
+    printable ASCII replaced by ``?``. It is not parsed here, and never put in the message."""
+
+    def __init__(self, message: str, retry_after_header: str | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_header = retry_after_header
+
+
+def _safe_header(value: str | None) -> str | None:
+    if value is None:
+        return None
+    clipped = value[:RETRY_AFTER_HEADER_MAX]
+    return "".join(ch if 32 <= ord(ch) < 127 else "?" for ch in clipped)
+
+
 class ReplayMismatch(RuntimeError):
     """A replayed run sent a request that differs from the recorded one (or ran past it)."""
 
@@ -130,6 +154,8 @@ class HttpChatClient:
             raise ProviderError(f"request failed ({type(exc).__name__})") from None
         finally:
             del key
+        if response.status_code == 429:  # before the body: a 429 body need not be JSON
+            raise RateLimited("HTTP 429", _safe_header(response.headers.get("retry-after")))
         try:
             payload: Any = response.json()
         except ValueError:

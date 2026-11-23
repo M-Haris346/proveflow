@@ -77,6 +77,30 @@ counts ends the trial (`usage_missing`). For Ollama and Gemini the docs do not s
 chat completions return `usage`; if they do not, every trial with them ends `usage_missing`.
 That is unverified until someone runs it.
 
+## 429 and Retry-After (Phase 6 step 2; fetched 2026-11-23)
+
+These are HTTP standard facts, not provider-specific ones; no provider's own rate-limit
+documentation is relied on, and provider limits are not modelled.
+
+- RFC 6585 s4 "429 Too Many Requests" (https://www.rfc-editor.org/rfc/rfc6585.html): the
+  response "MAY include a Retry-After header indicating how long to wait before making a new
+  request."
+- RFC 9110 s10.2.3 "Retry-After" (https://www.rfc-editor.org/rfc/rfc9110.html):
+  `Retry-After = HTTP-date / delay-seconds`, `delay-seconds  = 1*DIGIT`, and "A
+  delay-seconds value is a non-negative decimal integer, representing time in seconds."
+
+What proveflow does with it (`runner.campaign.wait_for`, `retry_after_s`):
+- A 429 ends the attempt (`rate_limited`); it is never retried inside a trial.
+- Only the numeric delay-seconds form is read; the HTTP-date form is ignored (it needs a
+  clock comparison proveflow does not make), as are garbage, an absent header, and a value
+  above `RETRY_AFTER_MAX_S` (600, a design value).
+- The wait is `max(proveflow's own backoff, Retry-After)`: honouring the header can only
+  lengthen the wait, never shorten it, which is why no provider-specific documentation is
+  needed to act on it.
+- The header text (at most 64 printable ASCII characters) and which of the two decided the
+  wait are recorded on the attempt in the campaign state file. Retry-After is the ONLY
+  response header proveflow ever reads; it is never put in a transcript or an error message.
+
 ## Committing a manual run
 
 A real run's transcript is EVIDENCE, committed under `evidence/provider-runs/<provider>-<model>-<date>/`

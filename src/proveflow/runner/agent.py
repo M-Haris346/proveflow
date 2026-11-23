@@ -12,7 +12,9 @@ Fail closed, every stop recorded (``limit_hit`` or ``error``) before ``trial_end
 * the whole loop runs under the wall-clock cap (only THAT the cap fired is recorded);
 * a response without integer usage counts ends the trial (``usage_missing``): the budget
   cannot be enforced on counts the provider did not report (F10);
-* a provider error, a malformed response, or a replay mismatch ends the trial.
+* a provider error, a malformed response, or a replay mismatch ends the trial; an HTTP 429
+  ends it as ``rate_limited`` (Phase 6, D3: never retried here; the campaign backs off and
+  starts a NEW attempt, ``runner.campaign``).
 Tool calls: JSON arguments are parsed; invalid JSON or an unknown tool gets an error result
 and is NOT forwarded, and its ``tool_call`` names server and session ``-`` (no proxy
 received it). A known tool routes to its proxy by the routing table. Calls run ONE AT A TIME
@@ -31,7 +33,13 @@ import mcp_types
 
 from proveflow.runner.harness import ProxyHandle
 from proveflow.runner.limits import TrialLimits
-from proveflow.runner.llm import ChatClient, ProviderError, ReplayMismatch, build_request
+from proveflow.runner.llm import (
+    ChatClient,
+    ProviderError,
+    RateLimited,
+    ReplayMismatch,
+    build_request,
+)
 from proveflow.runner.routing import RoutingTable
 from proveflow.runner.transcript import TranscriptWriter
 
@@ -46,6 +54,9 @@ class AgentOutcome:
     tokens_out: int
     turns: int
     tool_calls: int
+    # Phase 6: the 429's Retry-After text when the trial ended rate_limited (for the
+    # CAMPAIGN's backoff record; runner.campaign parses it). Never in the transcript.
+    retry_after_header: str | None = None
 
 
 def runner_messages(system_prompt: str, task: str) -> list[dict[str, Any]]:
@@ -114,6 +125,9 @@ async def run_agent(
             record.emit("llm_request", turn=out.turns, body=body)
             try:
                 resp = await llm.complete(body)
+            except RateLimited as exc:  # D3: ends this attempt; the campaign backs off
+                out.retry_after_header = exc.retry_after_header
+                raise stop_error("rate_limited", str(exc)) from None
             except ProviderError as exc:
                 raise stop_error("provider_error", str(exc)) from None
             except ReplayMismatch as exc:

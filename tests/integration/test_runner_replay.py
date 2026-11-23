@@ -98,8 +98,10 @@ def test_the_budget_refuses_before_anything_is_created(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("status", [400, 401, 429, 500])
 def test_a_provider_error_ends_the_trial_fail_closed(tmp_path: Path, status: int) -> None:
-    """No retry exists (docs/BACKLOG.md): any non-200 ends the trial as provider_error, the
-    error is recorded, nothing more is sent, and the trial still gets a verdict."""
+    """No retry INSIDE a trial: any non-200 ends the trial, the error is recorded, nothing more
+    is sent, and the trial still gets a verdict. Every status ends it as provider_error except
+    429, which since Phase 6 (D3) ends it as rate_limited: the CAMPAIGN backs off and starts a
+    new attempt (runner.campaign); the trial itself still sends exactly one request."""
     import httpx2
 
     from proveflow.runner.llm import HttpChatClient
@@ -125,6 +127,7 @@ def test_a_provider_error_ends_the_trial_fail_closed(tmp_path: Path, status: int
 
     r = anyio.run(go)
     errors = [e for e in load_transcript(r.transcript) if e.kind == "error"]  # type: ignore[attr-defined]
-    assert r.outcome.reason == "provider_error" and len(sent) == 1  # type: ignore[attr-defined]
-    assert [(e.error_kind, e.detail) for e in errors] == [("provider_error", f"HTTP {status}")]
+    kind = "rate_limited" if status == 429 else "provider_error"
+    assert r.outcome.reason == kind and len(sent) == 1  # type: ignore[attr-defined]
+    assert [(e.error_kind, e.detail) for e in errors] == [(kind, f"HTTP {status}")]
     assert r.utility is False and not r.verdict.compromised  # type: ignore[attr-defined]
