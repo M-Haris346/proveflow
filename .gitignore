@@ -25,6 +25,8 @@ htmlcov/
 runs/
 # (tool cache lives in the per-user cache dir, never here; see docs/PROCESS_KILL.md §3)
 .proveflow-cache/
+# raw corpus bytes fetched by tools/ingest_corpus.py (Phase 6 step 3); raw data is never committed
+/.proveflow-corpus/
 proveflow-fixes/
 out/
 
