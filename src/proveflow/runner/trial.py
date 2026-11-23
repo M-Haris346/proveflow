@@ -171,6 +171,7 @@ async def run_trial(
     timed = _TimedClient(llm)
     try:
         async with running_proxies(sessions, parent_env=parent_env) as handles:
+            proxy_outcomes = [(h.session.session_id, h.outcome) for h in handles]
             routing = RoutingTable.build(
                 [(h.server, h.session.session_id, h.tools) for h in handles]
             )
@@ -201,7 +202,11 @@ async def run_trial(
     with timings.open("x", encoding="utf-8") as fh:
         json.dump({"_note": TIMINGS_NOTE, "trial_id": trial_id,
                    "transcript_sha256": events[-1].sha256, "latency_ms": measured,
-                   "per_call_ms": timed.ms}, fh, indent=2)  # fmt: skip
+                   "per_call_ms": timed.ms,
+                   # Phase 7.0, NON-EVIDENCE: per-proxy handshake stage times (never in a
+                   # cassette: ADR-008)
+                   "handshake_ms": {sid: (box[0].handshake_ms if box else {})
+                                    for sid, box in proxy_outcomes}}, fh, indent=2)  # fmt: skip
     latency = measured if recorded_latency_ms is None else recorded_latency_ms
     trial = Trial(id=trial_id, flow_id=scenario.flow_id, attack=scenario.attack,
                   model=provider.model, seed=seed)  # fmt: skip

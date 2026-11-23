@@ -192,7 +192,11 @@ if __name__ == "__main__":
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--lookalike", action="store_true")
     parser.add_argument("--dual", action="store_true")
+    # Phase 7.0: the twin starts and NEVER answers initialize (sighting 3's shape, on demand).
+    parser.add_argument("--hang-initialize", action="store_true")
     ns = parser.parse_args()
+    if ns.hang_initialize:
+        anyio.run(anyio.sleep_forever)
     if ns.lookalike:
         ADVERTISED.append(LOOKALIKE_TOOL)
     if ns.dual:

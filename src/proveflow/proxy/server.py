@@ -68,7 +68,7 @@ from proveflow.flows.roles import classify_tool
 from proveflow.introspect.limits import MAX_LINE
 from proveflow.introspect.scrub import scrub_stderr
 from proveflow.proxy.carriers import apply_carrier
-from proveflow.proxy.cassette import CassetteWriter
+from proveflow.proxy.cassette import HANDSHAKE_TIMEOUT_REASON, CassetteWriter
 from proveflow.proxy.gate import GateBlocked, UpstreamGate
 from proveflow.proxy.lines import LineSplitter, LineTooLong
 from proveflow.proxy.policy import (
@@ -81,7 +81,7 @@ from proveflow.proxy.policy import (
 )
 from proveflow.proxy.sandbox import error_result_dict, sandbox_id, sandbox_result_dict
 from proveflow.proxy.session import ProxySession
-from proveflow.proxy.upstream import Record, UpstreamState, twin_stdio
+from proveflow.proxy.upstream import HandshakeProgress, Record, UpstreamState, twin_stdio
 
 SERVER_NAME = "proveflow-proxy"
 PAGE_CAP = 100
@@ -122,6 +122,18 @@ class ProxyOutcome:
     forwarded_calls: int = 0
     sandboxed_calls: int = 0
     blocked_by_gate: list[str] = field(default_factory=list)
+    # Phase 7.0, NON-EVIDENCE: per-stage handshake time (monotonic ms) for the trial's timings
+    # sidecar; never written to the cassette (cassette.py docstring, ADR-008).
+    handshake_ms: dict[str, float] = field(default_factory=dict)
+
+
+def handshake_deadline(stage: str | None, now: float, session_deadline: float,
+                       handshake_timeout_s: float) -> float:  # fmt: skip
+    """The session scope's deadline while ``stage`` is outstanding (None: no stage is): the
+    stage's own bound, never later than the session's. Module global: mutation tests."""
+    if stage is None:
+        return session_deadline
+    return min(session_deadline, now + handshake_timeout_s)
 
 
 def _dump(model: Any) -> Any:
@@ -422,10 +434,20 @@ async def serve(
         limits=limits.model_dump(mode="json"),
         honey=[h.model_dump(mode="json") for h in session.honey],
     )
+    progress: HandshakeProgress | None = None
+    session_deadline = float("inf")
     try:
         with anyio.CancelScope() as scope:
             control.scope = scope
-            scope.deadline = anyio.current_time() + limits.session_timeout_s
+            session_deadline = anyio.current_time() + limits.session_timeout_s
+            scope.deadline = session_deadline
+
+            def on_stage(stage: str | None) -> None:
+                # Phase 7.0: each handshake stage gets its OWN bound inside the session's
+                scope.deadline = handshake_deadline(stage, anyio.current_time(), session_deadline,
+                                                    limits.handshake_timeout_s)  # fmt: skip
+
+            progress = HandshakeProgress(record, on_stage)
             transport = twin_stdio(
                 session.upstream,
                 session.twin_sha256,
@@ -435,9 +457,12 @@ async def serve(
                 parent_env,
                 max_messages=limits.max_upstream_messages,
                 on_limit=end_session,
+                progress=progress,
             )
             async with Client(transport, mode="legacy") as client:
+                progress.start("tools_list")
                 tools = await _list_upstream_tools(client)
+                progress.complete("tools_list")
                 stripped = [_strip_output_schema(t) for t in tools]
                 record(
                     "tools_advertised",
@@ -486,7 +511,13 @@ async def serve(
                     server.create_initialization_options(),
                 )
         if scope.cancelled_caught:
-            outcome.reason = control.reason or "session_timeout"
+            # handshake_timeout ONLY when the STAGE's bound was the one that fired (it was the
+            # scope's deadline and it was earlier than the session's); a session timeout that
+            # happens to land during the handshake stays session_timeout.
+            stage_fired = (progress is not None and progress.outstanding is not None
+                           and scope.deadline < session_deadline)  # fmt: skip
+            timed_out = HANDSHAKE_TIMEOUT_REASON if stage_fired else None
+            outcome.reason = control.reason or timed_out or "session_timeout"
         elif control.reason is not None:
             outcome.reason = control.reason
     except Exception as exc:
@@ -503,9 +534,14 @@ async def serve(
         raw = bytes(upstream_state.stderr)
         text = scrub_stderr(raw, (), limit=STDERR_REPORT)
         outcome.blocked_by_gate.extend(upstream_state.blocked)
+        if progress is not None:
+            outcome.handshake_ms = dict(progress.elapsed_ms)
+        outstanding = (progress.outstanding if progress is not None
+                       and outcome.reason == HANDSHAKE_TIMEOUT_REASON else None)  # fmt: skip
         record(
             "session_end",
             reason=outcome.reason,
+            handshake_outstanding=outstanding,
             tool_calls=outcome.tool_calls,
             forwarded_calls=outcome.forwarded_calls,
             sandboxed_calls=outcome.sandboxed_calls,

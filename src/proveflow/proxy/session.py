@@ -37,6 +37,10 @@ MAX_SESSION_FILE = 1024 * 1024
 
 CALL_TIMEOUT_S = 30.0
 SESSION_TIMEOUT_S = 600.0
+# Phase 7.0: a SEPARATE, SHORTER bound on EACH twin handshake stage (cassette.HANDSHAKE_STAGES),
+# inside the session timeout; the same order as CALL_TIMEOUT_S on purpose. A stage that does not
+# complete in time ends the session as ``handshake_timeout`` naming the stage (proxy/server.py).
+HANDSHAKE_TIMEOUT_S = 30.0
 MAX_CALLS = 200
 MAX_AGENT_MESSAGES = 1000
 MAX_UPSTREAM_MESSAGES = 2000
@@ -47,6 +51,7 @@ MAX_HONEY = 32  # equal to twin.generator.MAX_HONEY (pinned by a test)
 class ProxyLimits(FrozenModel):
     call_timeout_s: float = Field(default=CALL_TIMEOUT_S, gt=0, le=CALL_TIMEOUT_S)
     session_timeout_s: float = Field(default=SESSION_TIMEOUT_S, gt=0, le=SESSION_TIMEOUT_S)
+    handshake_timeout_s: float = Field(default=HANDSHAKE_TIMEOUT_S, gt=0, le=HANDSHAKE_TIMEOUT_S)
     max_calls: int = Field(default=MAX_CALLS, ge=1, le=MAX_CALLS)
     max_agent_messages: int = Field(default=MAX_AGENT_MESSAGES, ge=1, le=MAX_AGENT_MESSAGES)
     max_upstream_messages: int = Field(

@@ -34,6 +34,14 @@ guaranteed" (docs/PROVIDERS.md). proveflow therefore never claims a trial repeat
   header and bound to the transcript by its final hash. A replayed trial without that
   sidecar raises `MissingTimings`; `latency_ms` is never defaulted (a fabricated zero would
   be a published number nobody measured).
+- **Handshake stages carry no elapsed time (Phase 7.0, cassette schema 4).** The proxy
+  records each handshake stage (`spawn`, `initialize`, `tools_list`) as a `handshake_stage`
+  event with its status only, and names the stage still running in
+  `session_end.handshake_outstanding` when the per-stage deadline fires. Both are deterministic
+  facts. The elapsed milliseconds per stage go to the timings sidecar (`handshake_ms`, per
+  server), never into the cassette: the cassette is hashed, and
+  `test_cassette_is_byte_identical_across_runs` holds only while no wall-clock value is in it.
+  Do not add `elapsed_ms` to the cassette for diagnosability; read the sidecar.
 
 ## Token counts are the provider's (F10)
 

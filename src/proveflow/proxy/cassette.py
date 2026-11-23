@@ -28,22 +28,34 @@ REQUIRED ``sink: bool`` from the same ``policy.is_sink_call``. ``sink=true`` on 
 nor a proxy-classifier sink, nor in a look-alike group with one (a look-alike of a session
 name is denied by ``build_policy``, of an advertised name by ``decide``). There is no
 separate sandbox reason or event for it. Schema-2 cassettes are refused.
+4 (Phase 7.0): ``handshake_stage`` events record the twin handshake per stage
+(``HANDSHAKE_STAGES``: spawn, initialize, tools_list), each ``started`` then ``completed``, and a
+stage that does not complete within ``limits.handshake_timeout_s`` ends the session with
+``session_end.reason == "handshake_timeout"`` and ``session_end.handshake_outstanding`` naming
+it. So "the twin never answered initialize" is read from the cassette ALONE. These events
+carry NO elapsed time, ON PURPOSE: a wall-clock value in the hashed chain would break
+byte-identical replays (ADR-008; tests/integration/test_proxy_integration.py
+``test_cassette_is_byte_identical_across_runs``). The elapsed milliseconds per stage go to the
+trial's NON-EVIDENCE timings sidecar instead (runner/trial.py). Do not "add elapsed_ms for
+diagnosability" here: the stage facts already diagnose, and the time would silently break
+determinism. Schema-3 cassettes are refused (fail closed, no shim).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import typing
 from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Annotated, Any, Literal
 
-from pydantic import Field, TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from proveflow.core._base import FrozenModel
 from proveflow.introspect.limits import MAX_LINE
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 GENESIS = "0" * 64
 TEXT_CAP = 1024 * 1024
 MAX_CASSETTE = 64 * 1024 * 1024
@@ -61,7 +73,7 @@ def digest(body: dict[str, Any]) -> str:
 
 
 class _Event(FrozenModel):
-    schema_version: Literal[3] = 3
+    schema_version: Literal[4] = 4
     seq: int = Field(ge=0)
     prev_sha256: str = Field(pattern=_HEX64)
     sha256: str = Field(pattern=_HEX64)
@@ -148,6 +160,23 @@ class ErrorEvent(_Event):
     detail: str
 
 
+# THE handshake stages, in order: the ONE source of truth (Phase 7.0). Everything that records,
+# times out on or tests a stage derives from this literal; adding a stage here without
+# recording it fails tests/unit/test_handshake.py.
+HandshakeStageName = Literal["spawn", "initialize", "tools_list"]
+HANDSHAKE_STAGES: tuple[str, ...] = typing.get_args(HandshakeStageName)
+HANDSHAKE_TIMEOUT_REASON = "handshake_timeout"
+
+
+class HandshakeStage(_Event):
+    """One deterministic handshake fact: a stage started, or completed. No elapsed time
+    (module docstring: ADR-008)."""
+
+    kind: Literal["handshake_stage"]
+    stage: HandshakeStageName
+    status: Literal["started", "completed"]
+
+
 class SessionEnd(_Event):
     kind: Literal["session_end"]
     reason: str
@@ -157,6 +186,15 @@ class SessionEnd(_Event):
     upstream_stderr: str
     upstream_stderr_truncated: bool
     dropped_events: int = 0  # events not written because the cassette byte cap was hit
+    # Phase 7.0: the stage that was outstanding when the handshake deadline fired; present iff
+    # ``reason == "handshake_timeout"``.
+    handshake_outstanding: HandshakeStageName | None = None
+
+    @model_validator(mode="after")
+    def _outstanding_iff_handshake_timeout(self) -> SessionEnd:
+        if (self.reason == HANDSHAKE_TIMEOUT_REASON) != (self.handshake_outstanding is not None):
+            raise ValueError("handshake_outstanding is present iff reason is handshake_timeout")
+        return self
 
 
 Event = Annotated[
@@ -170,6 +208,7 @@ Event = Annotated[
     | InjectionSkipped
     | AgentResponse
     | ErrorEvent
+    | HandshakeStage
     | SessionEnd,
     Field(discriminator="kind"),
 ]

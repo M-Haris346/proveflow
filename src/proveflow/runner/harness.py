@@ -19,10 +19,37 @@ import mcp_types
 from mcp import ClientSession
 from mcp.shared.message import SessionMessage
 
+from proveflow.proxy.cassette import HANDSHAKE_STAGES
 from proveflow.proxy.server import ProxyOutcome, serve
 from proveflow.proxy.session import ProxySession
 
 PAGE_CAP = 100
+
+# Phase 7.0, the HARNESS layer of the handshake bound (the proxy's per-stage bound is the
+# other layer; neither subsumes the other: tests/unit/test_handshake.py, one mutation per layer
+# plus the layering). A proxy cannot answer the agent's initialize until ITS upstream handshake
+# is done, so the proxy's worst case is one per-stage bound per upstream stage,
+# len(HANDSHAKE_STAGES) * handshake_timeout_s; the agent's own initialize + tools/list to the
+# proxy needs one more bound. HARNESS_MARGIN on top makes the PROXY fire first whenever it can,
+# because only the proxy can NAME the stage (the harness can only say "this proxy did not start").
+# Derived, never a literal: raising HANDSHAKE_TIMEOUT_S must not invert the layers.
+HARNESS_MARGIN = 1.5
+
+
+def proxy_handshake_bound_s(handshake_timeout_s: float) -> float:
+    """The proxy's worst case before it can serve the agent: one bound per upstream stage."""
+    return len(HANDSHAKE_STAGES) * handshake_timeout_s
+
+
+def startup_bound_s(handshake_timeout_s: float) -> float:
+    """The harness's bound on one proxy's startup (initialize + tools/list), always above
+    ``proxy_handshake_bound_s`` (pinned for a RANGE of timeouts). Module global: mutations."""
+    return (len(HANDSHAKE_STAGES) + 1) * handshake_timeout_s * HARNESS_MARGIN
+
+
+class ProxyStartupTimeout(RuntimeError):
+    """A proxy did not complete the agent's initialize + tools/list within the harness bound:
+    the backstop when the proxy itself did not end the session (it names no stage)."""
 
 
 @dataclass
@@ -68,6 +95,15 @@ async def running_proxies(
             tg.start_soon(run)
             stack.push_async_callback(a2p_w.aclose)  # runs AFTER the client session exits
             client = await stack.enter_async_context(ClientSession(p2a_r, a2p_w))
-            await client.initialize()
-            handles.append(ProxyHandle(server, session, client, await _list_tools(client), box))
+            bound = startup_bound_s(session.limits.handshake_timeout_s)
+            try:
+                with anyio.fail_after(bound):
+                    await client.initialize()
+                    tools = await _list_tools(client)
+            except TimeoutError:
+                raise ProxyStartupTimeout(
+                    f"proxy {server!r} (session {session.session_id}) did not complete startup "
+                    f"within {bound} s"
+                ) from None
+            handles.append(ProxyHandle(server, session, client, tools, box))
         yield handles

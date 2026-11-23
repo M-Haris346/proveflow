@@ -36,6 +36,7 @@ import hashlib
 import shutil
 import sys
 import tempfile
+import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
@@ -51,6 +52,7 @@ from mcp.shared.message import SessionMessage
 from proveflow.introspect.env import child_env
 from proveflow.introspect.limits import MAX_LINE
 from proveflow.introspect.procs import Spawned, spawn
+from proveflow.proxy.cassette import HANDSHAKE_STAGES
 from proveflow.proxy.gate import GateBlocked, UpstreamGate
 from proveflow.proxy.lines import LineSplitter, LineTooLong
 from proveflow.proxy.policy import TwinUpstream, TwinUpstreamError, check_twin_argv
@@ -60,6 +62,45 @@ STDERR_CAP = 64 * 1024
 GRACE_SECONDS = 2.0
 
 Record = Callable[..., Any]
+
+
+class HandshakeProgress:
+    """THE shared record of the twin handshake (Phase 7.0), one per session, written by BOTH
+    the transport (``twin_stdio``: spawn; initialize, from the request it WRITES and the
+    response it READS) and ``serve()`` (tools_list). Each stage records ``handshake_stage``
+    started, then completed; ``outstanding`` is the stage that started and has not completed,
+    which is what a handshake timeout names. ``on_stage`` lets ``serve()`` move its deadline:
+    called with the stage at each start, and with None at each completion.
+
+    ``elapsed_ms`` (monotonic clock) is NON-EVIDENCE: it goes to the trial's timings sidecar,
+    never into the cassette (cassette.py docstring, ADR-008)."""
+
+    def __init__(self, record: Record, on_stage: Callable[[str | None], None]) -> None:
+        self._record = record
+        self._on_stage = on_stage
+        self.outstanding: str | None = None
+        self.completed: list[str] = []
+        self.elapsed_ms: dict[str, float] = {}
+        self._t0 = 0.0
+
+    def start(self, stage: str) -> None:
+        if stage not in HANDSHAKE_STAGES:  # pragma: no cover - a programming error
+            raise ValueError(f"unknown handshake stage {stage!r}")
+        self.outstanding = stage
+        self._t0 = time.monotonic()
+        self._record("handshake_stage", stage=stage, status="started")
+        self._on_stage(stage)
+
+    def complete(self, stage: str) -> None:
+        if self.outstanding != stage:  # pragma: no cover - a programming error
+            raise RuntimeError(
+                f"handshake stage {stage!r} completed while {self.outstanding!r} was outstanding"
+            )
+        self.elapsed_ms[stage] = (time.monotonic() - self._t0) * 1000.0
+        self.outstanding = None
+        self.completed.append(stage)
+        self._record("handshake_stage", stage=stage, status="completed")
+        self._on_stage(None)
 
 
 @dataclass
@@ -146,6 +187,7 @@ async def twin_stdio(
     *,
     max_messages: int,
     on_limit: Callable[[str], None],
+    progress: HandshakeProgress | None = None,
 ) -> AsyncIterator[tuple[MemoryObjectReceiveStream[SessionMessage | Exception], GatedWriteStream]]:
     check_twin_argv(upstream.argv)  # layer A again, right before spawn
     env = child_env(parent_env, {}, windows=sys.platform == "win32")
@@ -157,7 +199,11 @@ async def twin_stdio(
         copy, passed = prepare_twin_copy(Path(upstream.argv[1]), Path(workdir.name), twin_sha256)
         state.guard_passed = passed
         argv = [upstream.argv[0], str(copy), *upstream.argv[2:]]
+        if progress is not None:
+            progress.start("spawn")
         spawned = await spawn(argv, env, cwd=Path(workdir.name))
+        if progress is not None:
+            progress.complete("spawn")
     except BaseException:
         workdir.cleanup()
         raise
@@ -166,6 +212,7 @@ async def twin_stdio(
     read_w, read_r = anyio.create_memory_object_stream[SessionMessage | Exception](0)
     write_w, write_r = anyio.create_memory_object_stream[SessionMessage](0)
     reply_w = write_w.clone()  # the reader answers upstream requests through the same gate
+    initialize_id: list[Any] = []  # the id of the initialize request WRITTEN (handshake stage)
 
     def fail(kind: str, detail: str) -> None:
         if state.closed_reason is None:
@@ -227,6 +274,10 @@ async def twin_stdio(
                                 detail=msg.method,
                             )
                         else:
+                            if (progress is not None and initialize_id
+                                    and progress.outstanding == "initialize"
+                                    and getattr(msg, "id", None) == initialize_id[0]):  # fmt: skip
+                                progress.complete("initialize")
                             await read_w.send(SessionMessage(msg))
             if state.closed_reason is None:
                 state.closed_reason = "upstream_eof"
@@ -257,6 +308,11 @@ async def twin_stdio(
                     state.blocked.append(exc.method)
                     record("error", error_kind="gate_blocked_at_writer", detail=exc.method)
                     continue
+                if (progress is not None and not initialize_id
+                        and isinstance(message, mcp_types.JSONRPCRequest)
+                        and message.method == "initialize"):  # fmt: skip
+                    initialize_id.append(message.id)
+                    progress.start("initialize")  # recorded BEFORE the bytes are written
                 data = message.model_dump_json(by_alias=True, exclude_unset=True) + "\n"
                 with suppress(anyio.ClosedResourceError, anyio.BrokenResourceError, OSError):
                     await process.stdin.send(data.encode("utf-8"))
