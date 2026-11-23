@@ -1000,7 +1000,15 @@ def assert_trial_evidence_follows_the_transcript(tmp_path: Path) -> None:
 # --- facts the R4 pairing depends on, pinned DIRECTLY on real sessions (Phase 3b) ----------
 
 
-def _run_real(tmp_path: Path, label: str, limits: Any, tools: list[str]) -> list[Any]:
+class _RealEvents(list[Any]):
+    """A real session's cassette events, with ``story``: what the run raised (it is swallowed:
+    a cut or timed-out session may end the run) and the cassette story, appended to every
+    failure that reads these events (the expected-exception diagnostics gap, sighting 3)."""
+
+    story: str = ""
+
+
+def _run_real(tmp_path: Path, label: str, limits: Any, tools: list[str]) -> _RealEvents:
     from proveflow.proxy.cassette import load_cassette
 
     work = tmp_path / label
@@ -1014,11 +1022,15 @@ def _run_real(tmp_path: Path, label: str, limits: Any, tools: list[str]) -> list
                 continue
 
     session = make_session(work, attack=make_attack(), limits=limits)
+    error: Exception | None = None
     try:
         run_in_process(session, script)
-    except Exception:  # noqa: S110 - a cut or timed-out session may end the run
-        pass
-    return load_cassette(session.cassette_path)
+    except Exception as exc:  # a cut or timed-out session may end the run: EXPECTED, kept
+        error = exc
+    events = _RealEvents(load_cassette(session.cassette_path))
+    raised = f"the run raised {error!r}; " if error is not None else ""
+    events.story = f" [{raised}{cassette_story(session.cassette_path)}]"
+    return events
 
 
 def assert_cap_refusal_names_the_refused_tool(tmp_path: Path) -> None:
@@ -1037,6 +1049,7 @@ def assert_cap_refusal_names_the_refused_tool(tmp_path: Path) -> None:
         raise AssertionError(
             "R4's pairing depends on the max_calls_exceeded error's detail being the refused "
             f"tool's name; got {[e.detail for e in refusals]} for the refused 'send_email'"
+            f"{events.story}"
         )
 
 
@@ -1069,16 +1082,20 @@ def assert_early_stop_is_terminal(tmp_path: Path) -> None:
         after = [e for e in events[stop + 1 :] if rules._is_decision(e) or rules._is_tools_call(e)]
         if after:
             raise AssertionError(f"{label}: the early stop is not terminal: {after[0].kind} "
-                                 f"seq {after[0].seq} after the stop")  # fmt: skip
+                                 f"seq {after[0].seq} after the stop{events.story}")  # fmt: skip
         end = events[-1]
         if not isinstance(end, SessionEnd) or end.reason == rules.NORMAL_END:
-            raise AssertionError(f"premise broken: {label} did not stop early ({end})")
+            raise AssertionError(
+                f"premise broken: {label} did not stop early ({end}){events.story}"
+            )
         open_request = False
         for e in events[:stop]:
             if rules._is_tools_call(e):
                 if open_request:
-                    raise AssertionError(f"{label}: a tools/call before seq {e.seq} got no "
-                                         "decision (a gap in the middle)")  # fmt: skip
+                    raise AssertionError(
+                        f"{label}: a tools/call before seq {e.seq} got no decision (a gap in "
+                        f"the middle){events.story}"
+                    )
                 open_request = True
             elif rules._is_decision(e):
                 open_request = False

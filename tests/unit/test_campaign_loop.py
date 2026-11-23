@@ -89,6 +89,38 @@ def test_a_failed_campaign_check_says_what_happened(tmp_path: Path) -> None:
     assert sum(line.startswith("cassette ") for line in story) == 2  # no attempt id: all shown
 
 
+def test_a_caught_expected_exception_still_tells_its_story(tmp_path: Path) -> None:
+    """The expected-exception gap (sighting 3): a check that EXPECTS an exception, catches it,
+    and then finds its premise wrong must fail WITH the caught exception's story (its leaves,
+    their frames, the failing attempt's cassette story), not with the bare premise message."""
+    from campaignchecks import premise_failed
+    from oraclechecks import write_cassette
+    from proveflow.runner.campaign import AttemptFailed
+    from proxyhelpers import cassette_story
+
+    out = tmp_path / "out"
+    out.mkdir()
+    mine = write_cassette(out / "t1-a2.filesystem.cassette.jsonl", [])
+
+    def boom() -> None:
+        def handshake() -> None:
+            raise RuntimeError("twin never answered initialize")
+
+        try:
+            raise ExceptionGroup("g", [_raised(handshake)])
+        except ExceptionGroup as group:
+            raise AttemptFailed("t1-a2: ExceptionGroup[RuntimeError]") from group
+
+    caught = _raised(boom)
+    err = premise_failed("premise broken: the failed attempts did not spend: [...]", out, caught)
+    text = str(err)
+    assert text.startswith("premise broken: the failed attempts did not spend")
+    assert "leaf builtins.RuntimeError: twin never answered initialize" in text
+    assert "in handshake" in text
+    assert f"cassette t1-a2.filesystem.cassette.jsonl: {cassette_story(mine)}" in text
+    assert str(premise_failed("plain", out, None)) == "plain"  # nothing caught: nothing added
+
+
 def _raised(fn: object) -> BaseException:
     try:
         fn()  # type: ignore[operator]

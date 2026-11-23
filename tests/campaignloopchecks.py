@@ -274,11 +274,14 @@ def assert_running_never_reaches_trial_end(tmp_path: Path) -> None:
         return await run_campaign(["t1"], campaign_id="c1", state_path=tmp_path / "s.json",
                                   out_dir=out, budget_total=TOTAL, attempt=attempt)  # fmt: skip
 
-    from campaignchecks import with_story
+    from campaignchecks import premise_failed, with_story
 
+    caught: BaseException | None = None
     try:
         with_story(out, lambda: anyio.run(go))
     except AttemptFailed as exc:
+        caught = exc
+
         # MEASURED: the escape arrives wrapped by the proxy harness's nested task groups
         def leaves(e: BaseException | None) -> list[BaseException]:
             if isinstance(e, BaseExceptionGroup):
@@ -287,36 +290,44 @@ def assert_running_never_reaches_trial_end(tmp_path: Path) -> None:
 
         found = leaves(exc.__cause__)
         if not any(isinstance(e, RuntimeError) and str(e) == "boom" for e in found):
-            raise AssertionError(f"the escape was not the client's exception: {exc!r}") from None
+            raise premise_failed(
+                f"the escape was not the client's exception: {exc!r}", out, exc
+            ) from None  # the story is in the message
     else:
         raise AssertionError("an exception escaping the agent loop did not stop the attempt")
     kinds = [e.kind for e in load_transcript(out / "t1-a1.transcript.jsonl")]
     if "trial_end" in kinds or kinds[:1] != ["trial_start"]:
-        raise AssertionError(f"a trial_end was written after an escape: {kinds}")
+        raise premise_failed(f"a trial_end was written after an escape: {kinds}", out, caught)
     state = load_state(tmp_path / "s.json")
     got = [(a.status, a.reason, a.exception) for a in state.attempts]
     if got != [("failed", None, "ExceptionGroup[RuntimeError]")] or results(state):
-        raise AssertionError(f"the escaped attempt was not recorded as a failure: {got}")
+        raise premise_failed(f"the escaped attempt was not recorded as a failure: {got}", out,
+                             caught)  # fmt: skip
 
 
 def assert_an_unclassified_reason_stops_the_campaign(tmp_path: Path) -> None:
     """Named check (the allowlist at run time): an attempt ending with a reason in none of the
     three sets STOPS the campaign (UnclassifiedOutcome, the reason named), is recorded FAILED
     with its usage, and is never a result."""
+    from campaignchecks import premise_failed
     from proveflow.runner.campaign import UnclassifiedOutcome, budget_spent, load_state, results
 
+    caught: BaseException | None = None
     try:
         scripted_campaign(tmp_path, [("gave_up", 100, 10)], ["t1"], [])
     except CampaignRaised as exc:
+        caught = exc
         if not isinstance(exc.raised, UnclassifiedOutcome) or "gave_up" not in str(exc.raised):
             raise AssertionError(f"the stop is not an unclassified-outcome stop: {exc}") from None
     else:
         raise AssertionError("an unclassified reason did not stop the campaign")
     state = load_state(tmp_path / "c1.campaign.json")
     if [(a.status, a.reason) for a in state.attempts] != [("failed", "gave_up")]:
-        raise AssertionError(f"an unclassified reason was recorded as {state.attempts}")
+        raise premise_failed(f"an unclassified reason was recorded as {state.attempts}",
+                             tmp_path / "out", caught)  # fmt: skip
     if results(state) or budget_spent(state) != PER_OK:
-        raise AssertionError("an unclassified attempt was counted as a result, or not charged")
+        raise premise_failed("an unclassified attempt was counted as a result, or not charged",
+                             tmp_path / "out", caught)  # fmt: skip
 
 
 def assert_the_state_refuses_an_unclassified_result() -> None:
@@ -373,6 +384,7 @@ def assert_rate_limit_exhaustion_stops_and_resumes(tmp_path: Path) -> None:
     """Named check (D3, scripted since the cut): MAX_RATE_LIMITED_ATTEMPTS consecutive
     429-ended attempts stop the campaign with the state saved; a resume starts attempt
     MAX + 1 and completes."""
+    from campaignchecks import premise_failed
     from proveflow.runner.campaign import (
         MAX_RATE_LIMITED_ATTEMPTS,
         RateLimitExhausted,
@@ -381,15 +393,17 @@ def assert_rate_limit_exhaustion_stops_and_resumes(tmp_path: Path) -> None:
     )
 
     sleeps: list[float] = []
+    caught: BaseException | None = None
     try:
         scripted_campaign(tmp_path, [RL0] * MAX_RATE_LIMITED_ATTEMPTS, ["t1"], sleeps)
     except CampaignRaised as exc:
+        caught = exc
         if not isinstance(exc.raised, RateLimitExhausted):
             raise AssertionError(f"consecutive 429s stopped for another reason: {exc}") from None
     else:
         raise AssertionError("consecutive 429s did not stop the campaign")
     if len(sleeps) != MAX_RATE_LIMITED_ATTEMPTS - 1:
-        raise AssertionError(f"backoffs before the stop: {sleeps}")
+        raise premise_failed(f"backoffs before the stop: {sleeps}", tmp_path / "out", caught)
     scripted_campaign(tmp_path, [OK], ["t1"], sleeps)
     done = results(load_state(tmp_path / "c1.campaign.json"))
     if [a.number for a in done.values()] != [MAX_RATE_LIMITED_ATTEMPTS + 1]:
@@ -438,16 +452,18 @@ def assert_an_interrupted_attempt_is_charged(tmp_path: Path) -> None:
     (the process died) is finalized on resume as 'interrupted' and charged what its transcript
     records, or, with no readable transcript, its FULL reservation (unknown_spend_charge,
     limits.max_trial_tokens), never zero."""
+    from campaignchecks import premise_failed
     from proveflow.runner.campaign import Attempt, CampaignState, load_state, save_state
     from proveflow.runner.limits import TrialLimits
 
     for label, keep_transcript in (("with", True), ("without", False)):
         work = tmp_path / label
         work.mkdir()
+        caught: BaseException | None = None
         try:  # leaves t1-a1's transcript (110 tokens)
             scripted_campaign(work, [("provider_error", 100, 10)], ["t1"], [])
-        except CampaignRaised:
-            pass
+        except CampaignRaised as exc:
+            caught = exc  # EXPECTED; kept for the story if the state below is wrong
         if not keep_transcript:
             (work / "out" / "t1-a1.transcript.jsonl").unlink()
         died = Attempt(trial_key="t1", number=1, status="started")  # the process died here
@@ -459,10 +475,11 @@ def assert_an_interrupted_attempt_is_charged(tmp_path: Path) -> None:
         source = "transcript" if keep_transcript else "reservation"
         got = (first.status, first.tokens_in + first.tokens_out, first.usage_source)
         if got != ("interrupted", want, source):
-            raise AssertionError(
+            raise premise_failed(
                 f"an interrupted attempt ({label} transcript) was charged "
-                f"{first.tokens_in + first.tokens_out} from {first.usage_source}, want {want}"
-            )
+                f"{first.tokens_in + first.tokens_out} from {first.usage_source}, want {want}",
+                work / "out", caught,
+            )  # fmt: skip
 
 
 def assert_retry_after_extends_never_shortens(tmp_path: Path) -> None:
@@ -490,6 +507,7 @@ def assert_the_lifetime_count_is_visible(tmp_path: Path) -> None:
     """Named check: the per-run consecutive count resets on resume, but the key's LIFETIME
     rate-limited count is surfaced (summary(), and the RateLimitExhausted message): after two
     exhausted runs a human sees 10 rate-limited of 10 attempts and none completed."""
+    from campaignchecks import premise_failed
     from proveflow.runner.campaign import (
         MAX_RATE_LIMITED_ATTEMPTS,
         RateLimitExhausted,
@@ -499,15 +517,18 @@ def assert_the_lifetime_count_is_visible(tmp_path: Path) -> None:
 
     n = MAX_RATE_LIMITED_ATTEMPTS
     messages: list[str] = []
+    caught: BaseException | None = None
     for _ in range(2):
         try:
             scripted_campaign(tmp_path, [RL] * n, ["t1"], [])
         except CampaignRaised as exc:
+            caught = exc
             if isinstance(exc.raised, RateLimitExhausted):
                 messages.append(str(exc.raised))
     want = f"{2 * n} rate-limited of {2 * n} attempts over the campaign's life, none completed"
     if len(messages) != 2 or want not in messages[1]:
-        raise AssertionError(f"the lifetime count is not visible on the second stop: {messages}")
+        raise premise_failed(f"the lifetime count is not visible on the second stop: {messages}",
+                             tmp_path / "out", caught)  # fmt: skip
     life = summary(load_state(tmp_path / "c1.campaign.json"))["t1"]
     if (life.attempts, life.rate_limited, life.completed) != (2 * n, 2 * n, False):
         raise AssertionError(f"summary() does not carry the lifetime count: {life}")

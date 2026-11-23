@@ -95,7 +95,7 @@ moves out of this file only with a fix and that test in the repo.
 - **Do not read those committed hashes as meaning anything:** replay compares requests.
 - **Reason it stays open:** making them meaningful needs path-free cassettes, a format change.
 
-### Real-session tests failed under load, two sightings, cause not yet known (medium)
+### Real-session tests failed under load, three sightings; a twin's MCP handshake never completes (HIGH)
 - **Observed once:** real-session tests that spawn a twin failed under full-suite load on
   Windows (commit 6f08b42, 2026-11-22, its per-commit worktree run): three at once, all in a
   test's baseline pass, before any mutant:
@@ -170,6 +170,51 @@ moves out of this file only with a fix and that test in the repo.
   interrupted checks followed. The suite therefore runs FEWER real trials, which will probably
   make this failure appear less often. That is NOT a fix and must never be reported as one:
   hiding a flake by running less of the thing that flakes is the worst outcome available.
+- **THIRD SIGHTING (2026-11-23), the first with its evidence on disk.** Commit `e848da4`'s
+  per-commit verification (a fresh detached worktree at a 140-character path) was RED on one
+  test: `tests/mutation/test_campaign_mutation.py::test_rebuilding_the_budget_from_completed_
+  trials_fails_the_resume_check`, in its BASELINE pass (before any mutant). In the D4 pin's
+  first campaign run the REAL attempt `t1-a2` raised `ExceptionGroup[MCPError]` with 0 tokens,
+  the campaign stopped there, and the check's premise assertion fired. The same code passed
+  that test in the next commit's worktree (`8d06675`, green). The run took 1852 s against
+  ~730 s for a normal full suite.
+  - NEW EVIDENCE (the attempt's transcript and both cassettes, read from pytest's surviving
+    temp directory): the transcript holds ONLY `trial_start` (the agent never sent its first
+    LLM request: the trial never left proxy startup). The `filesystem` proxy recorded
+    `session_start` then `session_end[session_timeout]`, with NO `tools_advertised` and no
+    agent request: its twin never completed the MCP `initialize` handshake. The `fetch` proxy
+    initialized fully (`tools_advertised`, initialize, `tools/list`) and then waited to the
+    same `session_timeout`. NEITHER proxy recorded an error event. `SESSION_TIMEOUT_S = 600.0`
+    (proxy/session.py), which fits 1852 s and the second sighting's ~20 minutes.
+  - **HYPOTHESIS, NARROWED (still unverified):** under load, a twin's initialize handshake
+    never completes, so the session runs to its 600 s timeout. The proxy records no error
+    because nothing FAILED: it waited. When the session ends, the harness's MCP connection
+    closes and the trial raises `MCPError` out of the harness's nested task groups. This
+    replaces the earlier "unrecorded proxy-side early stop" with a findable thing.
+  - **STILL UNKNOWN:** WHY the twin hangs (Windows subprocess scheduling, a pipe or buffering
+    race in the twin's stdio start, the SDK's initialize path under load: none tested).
+  - **Severity raised medium -> HIGH:** it has now cost a per-commit verification, and in
+    Phase 7 every occurrence would cost a PAID campaign trial plus 600 s of wall clock.
+  - **Diagnostics gap closed in the same change:** the D4 pin EXPECTS an `AttemptFailed`, so
+    it caught the exception and the failure story attached to it was never printed; the cause
+    was found only because pytest's temp directory survived. Every check that catches an
+    expected exception and then asserts on state now fails with the caught exception's story
+    (`campaignchecks.premise_failed`, `oraclechecks._RealEvents.story`; pinned by
+    `tests/unit/test_campaign_loop.py::test_a_caught_expected_exception_still_tells_its_story`).
+  - **PREREQUISITE for Phase 7's FIRST PAID CAMPAIGN (a sequencing constraint, not a note):
+    a HANDSHAKE timeout, separate from the session timeout.** If a twin has not completed
+    `initialize` within N seconds, the proxy records an error event naming the twin and the
+    stage and fails fast. That turns a 600 s silent hang into a named, recorded error
+    diagnosable in seconds, and it is a smaller change than chasing Windows subprocess
+    scheduling. N is a design value to be chosen with evidence. Not built in Phase 6.
+    **No paid campaign runs before it exists and is tested**: at HIGH and unfixed, a silent
+    600 s hang mid-campaign burns wall clock and can strand a paid trial with nothing to show
+    for it, and the campaign's resume path would then charge that attempt its FULL
+    reservation (unknown spend at maximum, runner.campaign) for a trial that measured
+    nothing. "Run the campaign first and fix it later" does not satisfy this item.
+  - The push of `e848da4` rests on `8d06675`'s green run over a superset of the same code plus
+    CI on both OSes, NOT on a re-run of `e848da4`: a re-run that happened to be green, recorded
+    as its verification, would be "intermittent, on record", which is refused.
 
 ### R4 is computed only for runner trials (low; by design)
 - R4 needs the runner's transcript as the trial's clock. A cassette recorded by the

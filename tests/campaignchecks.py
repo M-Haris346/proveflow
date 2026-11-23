@@ -117,6 +117,17 @@ def with_story(out: Path, run: Any) -> Any:
         raise
 
 
+def premise_failed(message: str, out: Path, caught: BaseException | None) -> AssertionError:
+    """The AssertionError for a check that EXPECTED an exception, CAUGHT it, and then found its
+    premise or the state wrong. The caught exception is otherwise swallowed with its story:
+    sighting 3 (docs/BACKLOG.md) was diagnosed only because pytest's temp directory survived.
+    So the message carries ``campaign_story`` of what was caught (leaf exceptions, frames, the
+    attempt's cassette stories and transcript tail)."""
+    if caught is None:
+        return AssertionError(message)
+    return AssertionError(f"{message}{chr(10)}{campaign_story(out, caught)}")
+
+
 def attempt_fn(out: Path, fake: FakeProvider) -> Any:
     """One attempt = one real run_trial of clean_utility with the campaign's budget."""
     from proveflow.config import ProviderConfig
@@ -219,17 +230,19 @@ def assert_resume_rebuilds_the_budget_from_attempt_usage(tmp_path: Path) -> None
     )
 
     sleeps: list[float] = []
+    caught: BaseException | None = None
     try:
         campaign(tmp_path, ["ok", 429, "ok", "ok", "ok", 500], ["t1", "t2"], sleeps)
-    except AttemptFailed:
-        pass
+    except AttemptFailed as exc:
+        caught = exc  # EXPECTED; kept so a broken premise below still prints what happened
     else:
         raise AssertionError("premise broken: run 1 did not stop on the failed attempt")
     state = load_state(tmp_path / "c1.campaign.json")
     unfinished = [(a.attempt_id, a.status, a.tokens_in + a.tokens_out) for a in state.attempts
                   if a.status != "completed"]  # fmt: skip
     if unfinished != [("t1-a1", "rate_limited", PER_OK), ("t2-a1", "failed", PER_OK)]:
-        raise AssertionError(f"premise broken: the failed attempts did not spend: {unfinished}")
+        raise premise_failed(f"premise broken: the failed attempts did not spend: {unfinished}",
+                             tmp_path / "out", caught)  # fmt: skip
     campaign(tmp_path, ["ok", "ok"], ["t1", "t2"], sleeps)
     resumed = _start(tmp_path, "t2-a2").budget_remaining
     every, completed_only = TOTAL - 4 * PER_OK, TOTAL - 2 * PER_OK
