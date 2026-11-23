@@ -144,6 +144,20 @@ Utility cost and attack effect are computed on these pairs. Mitigation verificat
    without it fails (`MissingTimings`). Token counts are provider-reported (F10).
 12. **Free-tier nondeterminism** — temperature 0 does not guarantee determinism across providers;
    paired seeds + CIs mitigate, never eliminate.
+13. **The corpus is 72% BIPIA (Phase 6, measured)** — the ingested corpus is 347 records:
+    BIPIA 250 (72.0%; 49 categories of about five short texts each, from its four attack
+    files), InjecAgent 62 (17.9%), AgentDojo 35 (10.1%; its injection tasks at upstream
+    benchmark v1.2.2) (`uv run python tools/ingest_corpus.py`, docs/results/corpus-stats.json).
+    A campaign that samples uniformly from it is three quarters BIPIA-style text, so a single
+    pooled ASR would mostly measure how models react to ONE project's authoring style.
+    **CONSTRAINT on Phase 7, not advice:** sampling STRATIFIES BY SOURCE, or the report gives
+    PER-SOURCE ASR and NEVER a single pooled figure over this corpus. A Phase 7 report that
+    pools across sources without stratification is wrong by this rule, whatever its CI says.
+    Per-source stratification is required, and `attack_family` is PER-SOURCE taxonomy, never
+    a cross-source grouping: it holds a BIPIA obfuscation or content technique, an InjecAgent
+    harm class and an AgentDojo application domain, which are not the same kind of thing, so
+    the stats file's `per_attack_family` block is read within a source only
+    (src/proveflow/corpus/records.py).
 
 ## Appendix A — Provider table [research, changes often]
 

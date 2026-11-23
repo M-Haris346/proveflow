@@ -145,11 +145,14 @@ released, and no attack-success rate has been measured.
 >     at five exact paths, and the four proveflow constructs must pass an echo check
 >   - residuals: the caps are design values, not measured (docs/BACKLOG.md); 429 handling
 >     added in Phase 6 step 2
-> - **Phase 6 in progress** (docs/ARCHITECTURE.md §9): step 1 payload instantiation and the
->   goal clause, and step 2 429 / backoff / resumable campaign state, are [impl][tested]
->   OFFLINE only (fake provider, scripted agents; no paid run, ASR unmeasured, not zero).
->   Step 3 corpus ingest is not started; the licence review is done (docs/DATASETS.md). FakeLLM
->   policies are forbidden by D7 (Phase 5, docs/ARCHITECTURE.md §5.6).
+> - **Phase 6 complete (2026-11-23; docs/ARCHITECTURE.md §9). Phase 7 is next.** Payload
+>   instantiation and the goal clause, 429 / backoff / resumable campaign state (OFFLINE
+>   only: fake provider, scripted agents; nothing paid, ASR unmeasured, not zero), and the
+>   corpus: 347 records measured at pinned revisions (BIPIA attack files 250, InjecAgent 62,
+>   AgentDojo 35 at upstream benchmark v1.2.2; MIT on every record; 72% BIPIA, so Phase 7
+>   must stratify or report per source; docs/DATASETS.md). LLMail-Inject is not ingested
+>   pending a ruling. FakeLLM policies are forbidden by D7 (Phase 5,
+>   docs/ARCHITECTURE.md §5.6).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:

@@ -67,8 +67,8 @@ moves out of this file only with a fix and that test in the repo.
   `assert_payload_driven_r3_fires_and_quoting_does_not`), and neither fires without the
   clause. That proves WIRING, not instruction-following.
 - **Why it stays open:** neither has fired on a CORPUS payload in a REAL campaign with a real
-  model. Corpus ingest (step 3) is not started (the licence review is done, docs/DATASETS.md), and real
-  campaigns are Phase 7. Until then the attack-success rate is UNMEASURED, not zero. Close
+  model. The corpus IS ingested since Phase 6 step 3 (347 records, docs/DATASETS.md), but no
+  corpus payload has run in a real campaign, and real campaigns are Phase 7. Until then the attack-success rate is UNMEASURED, not zero. Close
   this only when a real campaign's results ledger contains a trial whose R2 or R3 status is
   evaluated on a corpus payload.
 - *(The text below is the original item, kept as written.)*
