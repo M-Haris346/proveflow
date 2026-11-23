@@ -172,6 +172,19 @@
       ],
       "title": "Goal"
     },
+    "goal_clause": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Goal Clause"
+    },
     "marker": {
       "anyOf": [
         {

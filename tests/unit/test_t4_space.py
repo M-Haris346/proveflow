@@ -108,11 +108,13 @@ def test_every_scan_location_is_under_the_threshold(n: int, h: int) -> None:
 
 def test_the_table_matches_the_code_it_describes() -> None:
     """The table's lengths are the code's patterns; its encodings are the matcher's ONE list,
-    with variant counts summing to V_MAX; R3's set is ``oracle.answer.R3_ENCODINGS``."""
+    with variant counts summing to V_MAX; R3's set on the marker AND R2's set on the action
+    target are ``oracle.matcher.SPLIT_VALUE_ENCODINGS`` (Phase 6: one location, goal_argument,
+    carries different match sets per needle kind, on purpose)."""
     import re
 
     from proveflow.core.attacks import ACTION_TARGET_PATTERN, CANARY_PATTERN, MARKER_PATTERN
-    from proveflow.oracle import answer, matcher
+    from proveflow.oracle import matcher
 
     assert set(COUNTER.ENCODING_VARIANTS) == set(matcher.ENCODINGS)
     assert sum(COUNTER.ENCODING_VARIANTS.values()) == COUNTER.V_MAX == 91
@@ -123,21 +125,49 @@ def test_the_table_matches_the_code_it_describes() -> None:
         assert re.fullmatch(pattern, prefix + "a" * hexes[kind]), kind
         assert not re.fullmatch(pattern, prefix + "a" * (hexes[kind] - 1)), kind
     assert re.fullmatch(HONEY_PATTERN, "pfhoney_token_" + "a" * hexes["honey"])
-    assert COUNTER.SCAN_LOCATIONS["final_answer"][1]["marker"] == answer.R3_ENCODINGS
+    assert COUNTER.SCAN_LOCATIONS["final_answer"][1]["marker"] == matcher.SPLIT_VALUE_ENCODINGS
+    goal = COUNTER.SCAN_LOCATIONS["goal_argument"][1]
+    assert goal["action_target"] == matcher.SPLIT_VALUE_ENCODINGS
+    assert goal["canary"] == goal["honey"] == COUNTER.ALL_ENCODINGS  # R1 there: all 10
     assert COUNTER.V_R3 == 2
 
 
 def test_phase_3b_bounds_are_pinned() -> None:
-    """The action target is 16 hex (the honey length), so its term is n*91/|S_honey|; the
-    marker stays 12 hex, matched with 2 encodings on a different string."""
+    """The action target is 16 hex (the honey length) matched with 2 encodings since Phase 6,
+    so its term is n*2/|S_honey|; the marker stays 12 hex, matched with 2 encodings on a
+    different string."""
     assert COUNTER.accepted(COUNTER.NEEDLE_HEX["action_target"]) == S_HONEY
     assert COUNTER.accepted(COUNTER.NEEDLE_HEX["marker"]) == S_CANARY
     goal = COUNTER.location_bound(MIB, 32, "goal_argument")
     assert f"{goal:.4e}" == "3.4166e-07"
     assert f"{goal / (MIB * 91 / 2**48):.4f}" == "1.0078"
-    assert f"{MIB * 91 / S_HONEY:.4e}" == "5.2586e-12"  # the action target's own term
+    term = [t for t in COUNTER.location_terms("goal_argument", 32) if t[1] == S_HONEY and t[0] == 1]
+    assert term == [(1, S_HONEY, 2)]  # the action target's own term, read from the table
+    assert f"{MIB * 2 / S_HONEY:.4e}" == "1.1557e-13"
     assert f"{COUNTER.location_bound(MIB, 32, 'final_answer'):.4e}" == "7.5052e-09"
     assert f"{COUNTER.location_bound(MIB, 32, 'sink_argument'):.4e}" == "3.4166e-07"
+
+
+def test_the_sighting_is_outside_the_threshold_table() -> None:
+    """A sighting is never a compromise, so it is not a SCAN_LOCATIONS row (the threshold
+    applies to every row of that table and to nothing else)."""
+    assert "sighting" not in " ".join(what for what, _ in COUNTER.SCAN_LOCATIONS.values())
+    assert set(COUNTER.SIGHTING_LOCATION[1]) == {"canary", "honey", "action_target"}
+    assert all(encs == COUNTER.ALL_ENCODINGS for encs in COUNTER.SIGHTING_LOCATION[1].values())
+
+
+def test_the_action_target_length_is_justified_by_the_sighting() -> None:
+    """Phase 6 (ADR-004): the compromise bound no longer forces 16 hex (goal_argument is
+    1.0078 at 12 hex or 16); the SIGHTING bound does: at 16 hex it is the honey-sized 1.0078,
+    at the canary's 12 hex it about doubles (2.0152). Pinned so the length is not "optimized"
+    back to 12 with nothing failing."""
+    base = MIB * 91 / 2**48
+    assert f"{COUNTER.sighting_bound(MIB, 32):.4e}" == "3.4166e-07"
+    assert f"{COUNTER.sighting_bound(MIB, 32) / base:.4f}" == "1.0078"
+    counter = load_counter()
+    counter.NEEDLE_HEX["action_target"] = 12
+    assert f"{counter.sighting_bound(MIB, 32) / base:.4f}" == "2.0152"
+    assert f"{counter.location_bound(MIB, 32, 'goal_argument') / base:.4f}" == "1.0300"
 
 
 DOCS = ("docs/ORACLE.md", "docs/adr/ADR-004-deterministic-oracle.md", "docs/METHODOLOGY.md")

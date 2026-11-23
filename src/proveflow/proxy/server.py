@@ -309,7 +309,7 @@ class _CallHandler:
         policy = self._policy.get(name)
         attack = self._session.attack
         if policy is not None and policy.inject and attack is not None:
-            self._inject(name, result, attack.carrier, attack.payload.text, attack.canary)
+            self._inject(name, result, attack.carrier, attack.injected_text(), attack.canary)
         return mcp_types.CallToolResult.model_validate(result)
 
     def _inject(

@@ -24,7 +24,7 @@ from oraclechecks import (
 from proveflow.core import attacks
 from proveflow.core.attacks import Attack
 from proveflow.core.honey import t4_violations
-from proveflow.oracle import answer
+from proveflow.oracle import matcher
 from proveflow.oracle.answer import AnswerError, AnswerFinding, evaluate_answer
 from proveflow.oracle.canary import CanaryGenerationError, is_marker, new_marker, spaced_marker
 from proxyhelpers import MARKER, make_attack
@@ -64,7 +64,7 @@ def test_the_final_answer_never_enters_the_cassette() -> None:
 
 def test_r3_match_set_is_raw_and_casefold_only() -> None:
     """Ruling R3: ws_zw is deliberately excluded (it would undo the separator split)."""
-    assert answer.R3_ENCODINGS == ("raw", "casefold")
+    assert matcher.SPLIT_VALUE_ENCODINGS == ("raw", "casefold")
 
 
 def test_the_fixture_marker_is_legal() -> None:

@@ -80,6 +80,54 @@ def measured_scan_map(tmp_path: Path) -> dict[str, dict[str, set[str]]]:
     return out
 
 
+def measured_sighting_map(tmp_path: Path) -> dict[str, set[str]]:
+    """What the oracle ACTUALLY sights: for each needle kind and each encoding of the one
+    matcher list, plant that encoding of the trial's value in a FORWARDED sink=false call and
+    record whether it is SIGHTED (by that needle). kind -> encodings that raise a sighting."""
+    from oraclechecks import (
+        ACTION_TARGET,
+        ENCODINGS_AT_IMPORT,
+        HONEY,
+        HONEY_BODY,
+        action_attack_body,
+        evaluate_file,
+        write_cassette,
+    )
+    from proxyhelpers import CANARY, MARKER
+
+    values = {"canary": CANARY, "honey": HONEY.value, "action_target": ACTION_TARGET,
+              "marker": MARKER}  # fmt: skip
+    ids = {"canary": "canary", "honey": HONEY.id, "action_target": "action_target",
+           "marker": "marker"}  # fmt: skip
+    out: dict[str, set[str]] = {}
+    for kind, value in values.items():
+        attack: Any = "default" if kind == "marker" else action_attack_body()
+        sighted: set[str] = set()
+        for name, enc in ENCODINGS_AT_IMPORT.items():
+            call = {"kind": "upstream_request", "tool": "summarize",
+                    "arguments": {"text": f"x {enc.encode(value)} y"}}  # fmt: skip
+            path = tmp_path / f"s_{kind}_{name}.jsonl"
+            write_cassette(path, [call], attack=attack, honey=[HONEY_BODY], session_id="s")
+            f = evaluate_file(path)
+            if any(s.needle == ids[kind] for s in f.forwarded_needle_sightings):
+                sighted.add(name)
+        if sighted:
+            out[kind] = sighted
+    return out
+
+
+def assert_sighting_location_matches_the_table(tmp_path: Path, counter: ModuleType) -> None:
+    """Named check: the table's SIGHTING_LOCATION (the only quantity that justifies the action
+    target's 16-hex length since Phase 6) says exactly what the oracle sights, so its figure
+    cannot describe a scan the oracle no longer does."""
+    expected = {kind: set(encs) for kind, encs in counter.SIGHTING_LOCATION[1].items()}
+    measured = measured_sighting_map(tmp_path)
+    if measured != expected:
+        diff = {k: (measured.get(k), expected.get(k)) for k in set(measured) | set(expected)
+                if measured.get(k) != expected.get(k)}  # fmt: skip
+        raise AssertionError(f"the sighting table does not match what the oracle sights: {diff}")
+
+
 def assert_scan_locations_match_the_bound_table(tmp_path: Path, counter: ModuleType) -> None:
     """Named check: THE bound table says exactly what the oracle scans. A rule that starts
     scanning a needle kind at a location (or with more encodings) without the table being

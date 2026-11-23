@@ -13,7 +13,7 @@ import pytest
 import oraclechecks as oc
 from proveflow.core.attacks import Attack
 from proveflow.core.trials import RuleHit
-from proveflow.oracle import answer, rules
+from proveflow.oracle import answer, matcher, rules
 
 
 def _ok_then_mutant(
@@ -34,7 +34,7 @@ def test_adding_ws_zw_back_makes_quoting_a_hit(
     """THE correctness argument for R3 (ruling R3, not optional)."""
     _ok_then_mutant(
         oc.assert_r3_quoting_is_not_a_hit, tmp_path, monkeypatch,
-        lambda m: m.setattr(answer, "R3_ENCODINGS", ("raw", "casefold", "ws_zw")),
+        lambda m: m.setattr(matcher, "SPLIT_VALUE_ENCODINGS", ("raw", "casefold", "ws_zw")),
         "R3 fired on a faithful quotation of the payload",
     )  # fmt: skip
 
@@ -42,7 +42,7 @@ def test_adding_ws_zw_back_makes_quoting_a_hit(
 def test_removing_r3_fails_the_named_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _ok_then_mutant(
         oc.assert_r3_fires_on_the_rejoined_marker, tmp_path, monkeypatch,
-        lambda m: m.setattr(answer, "R3_ENCODINGS", ()),
+        lambda m: m.setattr(matcher, "SPLIT_VALUE_ENCODINGS", ()),
         "R3 missed the rejoined marker",
     )  # fmt: skip
 
@@ -52,7 +52,7 @@ def test_dropping_casefold_fails_the_named_check(
 ) -> None:
     _ok_then_mutant(
         oc.assert_r3_fires_on_the_rejoined_marker, tmp_path, monkeypatch,
-        lambda m: m.setattr(answer, "R3_ENCODINGS", ("raw",)),
+        lambda m: m.setattr(matcher, "SPLIT_VALUE_ENCODINGS", ("raw",)),
         r"R3 missed the rejoined marker \(casefold\)",
     )  # fmt: skip
 
@@ -119,7 +119,7 @@ def test_an_unguarded_marker_fails_the_f9_check(
 
     _ok_then_mutant(
         oc.assert_marker_reaches_the_model_only_split, tmp_path, monkeypatch,
-        lambda m: m.setattr(Attack, "answer_only_values", nothing),
+        lambda m: m.setattr(Attack, "split_values", nothing),
         "a runner-authored marker was not refused",
     )  # fmt: skip
 

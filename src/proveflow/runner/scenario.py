@@ -55,17 +55,17 @@ class Scenario(FrozenModel):
             raise ValueError("attack_server is not one of the scenario's servers")
         if self.attack is not None:
             authored = self.system_prompt + "\n" + self.task
-            from proveflow.oracle.answer import r3_encodings_found
+            from proveflow.oracle.matcher import split_value_encodings_found
 
-            for label, marker in self.attack.answer_only_values().items():
+            for label, value in self.attack.split_values().items():
                 for where, text in (("runner-authored message", authored),
                                     ("payload", self.attack.payload.text)):  # fmt: skip
-                    if r3_encodings_found(text, marker):
+                    if split_value_encodings_found(text, value):
                         raise ValueError(
-                            f"the attack {label} is readable in the {where} (R3, F9): it must "
-                            "reach the model only separator-split"
+                            f"the attack {label} is readable in the {where} (R2/R3, F9): it "
+                            "must reach the model only separator-split"
                         )
-            values = {"payload": self.attack.payload.text, **self.attack.tool_result_values()}
+            values = {**self.attack.tool_result_texts(), **self.attack.tool_result_values()}
             for label, needle in values.items():
                 if needle in authored:
                     raise ValueError(

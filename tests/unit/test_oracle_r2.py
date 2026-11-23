@@ -12,8 +12,9 @@ from pydantic import ValidationError
 from oraclechecks import (
     ACTION_TARGET,
     action_attack_body,
+    assert_a_quoted_action_target_is_still_sighted,
     assert_action_target_is_not_an_r1_needle,
-    assert_action_target_only_through_tool_results,
+    assert_action_target_reaches_the_model_only_split,
     assert_r2_fires_without_any_needle,
     assert_r2_matches_the_tool_by_look_alike_group,
     assert_r2_needs_a_sink_call,
@@ -23,7 +24,7 @@ from oraclechecks import (
     assert_r2_on_forwarded_sink,
     assert_r2_reaches_the_verdict,
     assert_r2_scans_the_goal_argument_value_recursively,
-    assert_r2_uses_every_matcher_encoding,
+    assert_r2_uses_exactly_the_split_value_encodings,
 )
 from proveflow.core import attacks
 from proveflow.core.attacks import Attack
@@ -64,8 +65,12 @@ def test_r2_matches_the_tool_by_look_alike_group(tmp_path: Path) -> None:
     assert_r2_matches_the_tool_by_look_alike_group(tmp_path)
 
 
-def test_r2_uses_every_matcher_encoding(tmp_path: Path) -> None:
-    assert_r2_uses_every_matcher_encoding(tmp_path)
+def test_r2_uses_exactly_the_split_value_encodings(tmp_path: Path) -> None:
+    assert_r2_uses_exactly_the_split_value_encodings(tmp_path)
+
+
+def test_a_quoted_action_target_is_still_sighted(tmp_path: Path) -> None:
+    assert_a_quoted_action_target_is_still_sighted(tmp_path)
 
 
 def test_r2_on_forwarded_sink(tmp_path: Path) -> None:
@@ -88,8 +93,8 @@ def test_r2_needs_an_action_goal(tmp_path: Path) -> None:
     assert_r2_needs_an_action_goal(tmp_path)
 
 
-def test_action_target_only_through_tool_results(tmp_path: Path) -> None:
-    assert_action_target_only_through_tool_results(tmp_path)
+def test_action_target_reaches_the_model_only_split(tmp_path: Path) -> None:
+    assert_action_target_reaches_the_model_only_split(tmp_path)
 
 
 def test_action_target_is_present_iff_the_goal_is_an_action_goal() -> None:
@@ -117,8 +122,10 @@ def test_action_goal_has_one_top_level_argument_and_no_predicate() -> None:
 
 
 def test_new_action_target_is_minted_like_the_canary() -> None:
-    """16 hex, the HONEY length (ruling, Phase 3b): it is scanned on the same strings as the
-    canary with the same 10 encodings, so it must not be the canary's size."""
+    """16 hex, the HONEY length (ruling, Phase 3b, when R2 matched it with all 10 encodings on
+    the canary's strings). Since Phase 6 R2 matches it with raw + casefold only, and the
+    length is justified by the forwarded-call sighting instead (ADR-004,
+    test_t4_space.test_the_action_target_length_is_justified_by_the_sighting)."""
     assert attacks.ACTION_TARGET_PATTERN == r"^act_[0-9a-f]{16}$"
     assert ACTION_TARGET_HEX_DIGITS == HONEY_HEX_LEN == 16
     draws = iter(["1234567890123456", "abcdef0123456789"])

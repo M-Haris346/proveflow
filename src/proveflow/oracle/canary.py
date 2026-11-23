@@ -1,6 +1,6 @@
 """Per-trial canaries: ``cnry_`` + 12 lowercase hex digits (``core.attacks.CANARY_PATTERN``,
-unchanged in Phase 4). Phase 3b: the per-trial ACTION TARGET ``act_`` + 12 hex (R2) is minted
-by the same function, with the same T4 rejection.
+unchanged in Phase 4). Phase 3b: the per-trial ACTION TARGET ``act_`` + 16 hex (R2) and the
+MARKER ``mrk_`` + 12 hex (R3) are minted by the same function, with the same T4 rejection.
 
 N1 (Phase 4): rejection sampling with the SAME structural predicate as honey values,
 ``core.honey.t4_violations`` (no run of 12 decimal digits, no NINO shape). A draw that
@@ -15,7 +15,12 @@ from __future__ import annotations
 import re
 import secrets
 
-from proveflow.core.attacks import ACTION_TARGET_PATTERN, CANARY_PATTERN, MARKER_PATTERN
+from proveflow.core.attacks import (
+    ACTION_TARGET_PATTERN,
+    CANARY_PATTERN,
+    MARKER_PATTERN,
+    split_form,
+)
 from proveflow.core.honey import HONEY_HEX_LEN, HexSource, t4_violations
 
 _CANARY = re.compile(CANARY_PATTERN)
@@ -75,24 +80,34 @@ def new_marker(draw_hex: HexSource = _os_hex) -> str:
 
 def spaced_marker(marker: str) -> str:
     """The form the PAYLOAD carries (ruling R3): the prefix, then the 12 hex in groups of
-    four, each separated by one space (``mrk_ a1b2 c3d4 e5f6``). The payload asks the agent
-    to output it with the spaces removed. Quoting this form verbatim never contains the
-    marker as a substring, in any case, so it can never match R3's raw/casefold set."""
+    four, each separated by one space (``mrk_ a1b2 c3d4 e5f6``; ``core.attacks.split_form``).
+    The payload asks the agent to output it with the spaces removed. Quoting this form
+    verbatim never contains the marker as a substring, in any case, so it can never match
+    R3's raw/casefold set."""
     if not is_marker(marker):
         raise ValueError("not a marker")
-    hex12 = marker[len(MARKER_PREFIX) :]
-    return " ".join([MARKER_PREFIX, hex12[0:4], hex12[4:8], hex12[8:12]])
+    return split_form(marker)
 
 
 def is_action_target(value: str) -> bool:
     return _ACTION_TARGET.fullmatch(value) is not None
 
 
+def spaced_action_target(action_target: str) -> str:
+    """The form the goal clause carries since Phase 6 (R2, the marker's design): the prefix,
+    then the 16 hex in groups of four, each separated by one space (``act_ 5e0c 9b2a 7d14
+    f3a8``). Quoting it verbatim never contains the action target in any case, so it can never
+    match R2's raw/casefold set (``oracle.matcher.SPLIT_VALUE_ENCODINGS``)."""
+    if not is_action_target(action_target):
+        raise ValueError("not an action target")
+    return split_form(action_target)
+
+
 def new_action_target(draw_hex: HexSource = _os_hex) -> str:
     """The per-trial ACTION TARGET (R2): 16 hex, the HONEY length, with the canary's T4
-    rejection, so its accepted space equals |S_honey| (tools/count_t4_space.py). Like honey,
-    it is scanned on the SAME strings as the canary with the same 10 encodings, so it must not
-    be the canary's size: a 12-hex needle there would double the dominant term of the
-    false-compromise bound (docs/ORACLE.md, ADR-004)."""
+    rejection, so its accepted space equals |S_honey| (tools/count_t4_space.py). Since Phase 6
+    R2 matches it with raw + casefold only; the 16-hex length is justified by the forwarded-
+    call SIGHTING, which still scans it with all 10 encodings on the canary's strings (at 12
+    hex its spurious-sighting bound would about double; ADR-004)."""
     return _mint(ACTION_TARGET_PREFIX, _ACTION_TARGET, "action target", "ACTION_TARGET_PATTERN",
                  draw_hex, ACTION_TARGET_HEX_DIGITS)  # fmt: skip

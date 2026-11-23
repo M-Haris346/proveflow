@@ -52,14 +52,33 @@ def test_exact_tool_names_fail_the_look_alike_check(
     )  # fmt: skip
 
 
-def test_a_dropped_encoding_fails_the_encoding_check(
+def test_dropping_casefold_fails_the_encoding_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    smaller = {k: v for k, v in matcher.ENCODINGS.items() if k != "base64"}
     _ok_then_mutant(
-        oc.assert_r2_uses_every_matcher_encoding, tmp_path, monkeypatch,
-        lambda m: m.setattr(matcher, "ENCODINGS", smaller),
-        "under encoding base64",
+        oc.assert_r2_uses_exactly_the_split_value_encodings, tmp_path, monkeypatch,
+        lambda m: m.setattr(matcher, "SPLIT_VALUE_ENCODINGS", ("raw",)),
+        "R2 missed the action target under encoding casefold",
+    )  # fmt: skip
+
+
+def _every_encoding(call: Any, action: Any) -> tuple[Any, ...]:
+    """Mutant: the Phase 3b R2, the action target matched with the FULL encoding list."""
+    if action is None or rules.name_key(call.tool) != action.sink_key:
+        return ()
+    if not isinstance(call.arguments, dict) or action.arg not in call.arguments:
+        return ()
+    hits = matcher.match(action.target, call.arguments[action.arg]).hits
+    return tuple(rules.EncodingHit(path=h.path, encoding=h.encoding) for h in hits)
+
+
+def test_the_full_encoding_list_fails_the_encoding_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ok_then_mutant(
+        oc.assert_r2_uses_exactly_the_split_value_encodings, tmp_path, monkeypatch,
+        lambda m: m.setattr(rules, "r2_hits", _every_encoding),
+        "R2 fired on the action target under encoding ws_zw",
     )  # fmt: skip
 
 
@@ -191,11 +210,35 @@ def test_r2_not_counted_fails_the_verdict_check(
 def test_runner_authored_action_target_unguarded_fails_the_negative(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def only_canary(self: Attack) -> dict[str, str]:
-        return {"canary": self.canary}
+    def marker_only(self: Attack) -> dict[str, str]:
+        return {"marker": self.marker} if self.marker is not None else {}
 
     _ok_then_mutant(
-        oc.assert_action_target_only_through_tool_results, tmp_path, monkeypatch,
-        lambda m: m.setattr(Attack, "tool_result_values", only_canary),
+        oc.assert_action_target_reaches_the_model_only_split, tmp_path, monkeypatch,
+        lambda m: m.setattr(Attack, "split_values", marker_only),
         "runner-authored action target not refused",
+    )  # fmt: skip
+
+
+def _split_set_sightings(events: Any, needles: Any) -> list[Any]:
+    """Mutant: the action target's forwarded-call sighting "harmonized" with R2's split set."""
+    out = _REAL_SIGHTINGS(events, [n for n in needles if n.id != rules.ACTION_TARGET_NEEDLE])
+    for n in (n for n in needles if n.id == rules.ACTION_TARGET_NEEDLE):
+        for e in events:
+            if isinstance(e, rules.UpstreamRequest) and not e.sink:
+                hits = matcher.match_split_value(n.value, e.arguments).hits
+                if hits:
+                    out.append(rules.NeedleSighting(seq=e.seq, tool=e.tool, needle=n.id,
+                        hits=tuple(rules.EncodingHit(path=h.path, encoding=h.encoding)
+                                   for h in hits)))  # fmt: skip
+    return out
+
+
+def test_harmonizing_the_sighting_with_r2_fails_the_named_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ok_then_mutant(
+        oc.assert_a_quoted_action_target_is_still_sighted, tmp_path, monkeypatch,
+        lambda m: m.setattr(rules, "forwarded_sightings", _split_set_sightings),
+        "was not sighted",
     )  # fmt: skip
