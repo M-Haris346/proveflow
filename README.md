@@ -143,10 +143,13 @@ released, and no attack-success rate has been measured.
 >     Groq's docs name returned 404 on that account (availability is per account). Second,
 >     real tool-call ids are `fc_<uuid>`, which the D7 scan flagged; they are now excluded
 >     at five exact paths, and the four proveflow constructs must pass an echo check
->   - residuals: the caps are design values, not measured; no 429/retry handling (fails
->     closed) (docs/BACKLOG.md)
-> - **Next:** Phase 6 is not started; Haris scopes it. FakeLLM policies are forbidden by D7
->   (Phase 5, docs/ARCHITECTURE.md §5.6).
+>   - residuals: the caps are design values, not measured (docs/BACKLOG.md); 429 handling
+>     added in Phase 6 step 2
+> - **Phase 6 in progress** (docs/ARCHITECTURE.md §9): step 1 payload instantiation and the
+>   goal clause, and step 2 429 / backoff / resumable campaign state, are [impl][tested]
+>   OFFLINE only (fake provider, scripted agents; no paid run, ASR unmeasured, not zero).
+>   Step 3 corpus ingest is not started; the licence review is done (docs/DATASETS.md). FakeLLM
+>   policies are forbidden by D7 (Phase 5, docs/ARCHITECTURE.md §5.6).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:

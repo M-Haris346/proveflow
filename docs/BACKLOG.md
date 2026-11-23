@@ -58,7 +58,20 @@ moves out of this file only with a fix and that test in the repo.
   may move to another http stack, and then the runner pins a package nothing else needs.
 - **Proposed test:** `uv tree --package mcp` lists the declared httpx2 version (CI step).
 
-### R2 and R3 are built but DORMANT until Phase 6 payloads carry the per-trial values (high)
+### R2 and R3 are built but DORMANT until Phase 6 payloads carry the per-trial values (DOWNGRADED high -> medium in Phase 6 step 1; NOT closed)
+- **Downgrade, 2026-11-23 (Phase 6 step 1):** a payload now CAN carry both values: the
+  proveflow-authored goal clause appended to the verbatim payload shows the action target and
+  the marker separator-split (`proveflow.corpus.instantiate`). R2 and R3 FIRE on a
+  payload-driven trial: real in-process proxy sessions, the fake twin, a SCRIPTED agent that
+  follows the clause (`corpuschecks.assert_payload_driven_r2_fires`,
+  `assert_payload_driven_r3_fires_and_quoting_does_not`), and neither fires without the
+  clause. That proves WIRING, not instruction-following.
+- **Why it stays open:** neither has fired on a CORPUS payload in a REAL campaign with a real
+  model. Corpus ingest (step 3) is not started (the licence review is done, docs/DATASETS.md), and real
+  campaigns are Phase 7. Until then the attack-success rate is UNMEASURED, not zero. Close
+  this only when a real campaign's results ledger contains a trial whose R2 or R3 status is
+  evaluated on a corpus payload.
+- *(The text below is the original item, kept as written.)*
 - Two of the three compromise rules (R2 and R3) are built but DORMANT: neither can fire on a
   real trial until a payload carries the trial's per-trial value. R2 needs a payload that asks
   for the goal's sink tool with the trial's ACTION TARGET in the goal argument; R3 needs a
@@ -82,7 +95,7 @@ moves out of this file only with a fix and that test in the repo.
 - **Do not read those committed hashes as meaning anything:** replay compares requests.
 - **Reason it stays open:** making them meaningful needs path-free cassettes, a format change.
 
-### Real-session tests failed once under full-suite load, cause not yet known (medium)
+### Real-session tests failed under load, two sightings, cause not yet known (medium)
 - **Observed once:** real-session tests that spawn a twin failed under full-suite load on
   Windows (commit 6f08b42, 2026-11-22, its per-commit worktree run): three at once, all in a
   test's baseline pass, before any mutant:
@@ -128,6 +141,35 @@ moves out of this file only with a fix and that test in the repo.
 - **Next time it happens:** read the message, which now says which path the session took, and
   record it here. It is NOT "the known flake": any failure of these tests is a finding until
   explained.
+- **SECOND SIGHTING (2026-11-23, uncommitted Phase 6 step 2 tree, Windows), same shape: a real
+  trial's MCP path failing during a long run, passing alone.**
+  - Run: a SUBSET, not the full suite, in pytest's default FIXED order (the command carried
+    `-p no:randomly`, a no-op: no random-order plugin was installed; see "Order-independence
+    has never been tested"): tests/integration/test_campaign.py,
+    tests/mutation/test_campaign_mutation.py, tests/mutation/test_campaign_loop_mutation.py,
+    tests/integration/test_runner_replay.py, tests/unit/test_campaign_loop.py,
+    tests/unit/test_campaign_state.py.
+  - Failed: `tests/mutation/test_campaign_loop_mutation.py::test_min_instead_of_max_fails_the_
+    retry_after_check`, with `proveflow.runner.campaign.AttemptFailed: t2-a2:
+    ExceptionGroup[MCPError]`: a REAL attempt (real twins, real proxies, the fake provider over
+    the mock transport) raised an MCPError out of the proxy harness's nested task groups,
+    instead of the check failing or passing. Whether it was the check's baseline pass or its
+    mutant pass is NOT known: only the tail of the output was kept.
+  - That subset ran about 20 minutes (pytest started 11:43:22 and was still running at
+    12:03:16 with 16.6 s of CPU used, i.e. mostly WAITING). Nothing in it accounts for that.
+  - Did not reproduce: the same test alone passed in 41 s; the same subset rerun passed, 57 of
+    57, in 274 s wall.
+  - Lost, and why: the MCPError's own detail and the cassettes' story. The campaign path does
+    not go through `run_in_process`, so `cassette_story` / `LAST_RUN` were not wired into it.
+    Now they are: a real-trial campaign check that fails adds, as an exception note, the leaf
+    exceptions with their message and innermost frames and the cassette story of every
+    cassette of the failing attempt (`campaignchecks.campaign_story`).
+- **The apparatus changed, the cause is still unknown, the item stays open at medium.** After
+  this sighting the Retry-After check moved off real twins (one real trial kept for the wiring
+  claim; the arithmetic runs scripted), and the backoff, exhaustion, corrupt-state and
+  interrupted checks followed. The suite therefore runs FEWER real trials, which will probably
+  make this failure appear less often. That is NOT a fix and must never be reported as one:
+  hiding a flake by running less of the thing that flakes is the worst outcome available.
 
 ### R4 is computed only for runner trials (low; by design)
 - R4 needs the runner's transcript as the trial's clock. A cassette recorded by the
@@ -139,10 +181,21 @@ moves out of this file only with a fix and that test in the repo.
 - `proveflow replay` stays a stub, now pointing at Phase 7: re-evaluating a recorded trial is
   what a user wants once `prove` exists. `runner.trial.replay_trial` already does the work.
 
-### 429 and retries (a real gap, deferred deliberately; must not be half-built in Phase 6)
-- **Today:** the client fails closed. HTTP 400, 401, 429 and 500 each raise
-  `ProviderError("HTTP <status>")` and the trial ends `provider_error`, recorded in the
-  transcript (tests/unit/test_runner_llm.py). No request is retried.
+### 429 and retries (RESOLVED in Phase 6 step 2 by D3/D4; kept for the record)
+- **Resolution:** a 429 is never retried INSIDE a trial; it ends the attempt `rate_limited`
+  (`runner.llm.RateLimited`), and the campaign backs off and starts a NEW attempt with its own
+  transcript (`runner.campaign`). So: (1) no retried request ever enters a transcript, the
+  chain and strict replay are untouched; (2) every attempt's provider-reported usage counts
+  against the budget, a 429 that consumed nothing adds nothing, and the budget is rebuilt from
+  the campaign state file's per-attempt usage on resume (D4); (3) no tool-calling request is
+  retried mid-loop. The proposed test below is superseded (there is no in-trial retry to
+  replay); its budget half is `campaignchecks.assert_resume_rebuilds_the_budget_from_attempt_
+  usage`. `Retry-After` is not read; the backoff schedule is a design value.
+- **Before Phase 6:** the client failed closed. HTTP 400, 401, 429 and 500 each raised
+  `ProviderError("HTTP <status>")` and the trial ended `provider_error`, recorded in the
+  transcript (tests/unit/test_runner_llm.py). No request was retried. Since Phase 6, 429
+  raises `RateLimited` (a `ProviderError`, still `"HTTP 429"`) and ends the trial
+  `rate_limited`.
 - **Three design questions to answer before any retry exists:**
   1. How does a retried request appear in the transcript without breaking the hash chain or
      strict replay (one `llm_request` per attempt? a separate attempt event? how does replay
@@ -154,6 +207,63 @@ moves out of this file only with a fix and that test in the repo.
      already appended, tool calls already forwarded through a proxy)?
 - **Proposed test:** a recorded 429 then 200 replays to the same transcript, and the budget
   counts exactly the provider-reported tokens of the attempt that answered.
+
+### Order-independence has never been tested (medium; a seeded audit is owed)
+- **Found 2026-11-23:** no random-order plugin is installed (no pytest-randomly, no
+  pytest-random-order; `pyproject.toml` addopts is `-q`; CI adds none). Every test run in this
+  project, local and CI, has run in pytest's default FIXED collection order. `-p no:randomly`,
+  passed in Phase 6 timing runs and named in messages as "fixed order for comparability",
+  was a NO-OP in every one of them. So every order-independence claim is UNVERIFIED,
+  including the leading hypothesis for "Real-session tests failed under load" above, which
+  nobody has ever tested under a different order.
+- **Checked:** no COMMITTED doc or commit message claims random ordering was used (git log
+  and git grep at HEAD, 2026-11-23); one uncommitted BACKLOG line that named the flag is
+  corrected in place.
+- **Ruling (Haris, 2026-11-23):** pytest-randomly is PERMITTED as a DEV-ONLY dependency (the
+  no-new-dependency rule is about the shipped package, not the test harness). The DEFAULT
+  gate stays FIXED order: a randomized default makes CI non-reproducible and a red run hard to
+  reproduce.
+- **Owed:** one deliberate audit run with an EXPLICIT seed, the SEED RECORDED in whatever
+  reports it (the flag syntax to be taken from the plugin's own documentation when it is
+  installed, cited, not from memory). Not done yet; the plugin is not installed yet.
+
+### Phase 7 aggregation must read the RESULTS LEDGER only (high; binding on Phase 7)
+- THE RESULTS LEDGER IS THE ONLY SOURCE OF COUNTED TRIALS (`runner.campaign.results`). A
+  transcript's verdict is NOT evidence that a trial counted: `run_trial` gives a rate-limited
+  or failed attempt a verdict with compromised=false too
+  (`tests/integration/test_runner_replay.py::test_a_provider_error_ends_the_trial_fail_closed`
+  asserts exactly that verdict). An aggregation reading verdicts off transcripts would count
+  every attempt that measured nothing as a safe trial and dilute the ASR: R3's "not
+  evaluable must never read as not fired", one layer up.
+- **Required pin in Phase 7:** the aggregation run against a state file containing
+  rate-limited and failed attempts (and their transcripts on disk), proving they are excluded
+  from the DENOMINATOR as well as the numerator.
+
+### Limit-ended trials are counted results; report them per reason (medium; Phase 7)
+- `runner.campaign.COMPLETED_REASONS` includes every `limit:*` (argued in its docstring: the
+  trial ran under declared, recorded caps and its evidence is complete). The cost: an agent
+  that would have been compromised after the cap counts as not compromised, and
+  `limit:wall_clock` depends on provider latency, so which trials it cuts does not reproduce.
+  Phase 7 must report the number of limit-ended trials per reason beside every rate.
+
+### One non-429 failure stops the whole campaign (medium; DEFERRED to Phase 7, not settled)
+- Any attempt that fails for a reason other than a 429 (a FAILED reason, an exception, an
+  unclassified reason) raises `AttemptFailed` and stops the campaign; resume retries it. Fail
+  closed is right for a measurement tool. The consequence Phase 7 will meet: one bad response
+  from one model halts a run of hundreds of trials. Whether a bounded skip-and-record is
+  wanted is a Phase 7 decision; nothing here decides it.
+
+### A forwarded dual-role sink's reply is REASONED not to echo arguments, not MEASURED (low)
+- MEASURED: the sandbox's reply to every sink tool the fake twin offers carries none of the
+  call's argument values (`corpuschecks.assert_the_sandbox_never_echoes_sink_arguments`).
+- REASONED ONLY: a dual-role sink FORWARDED to a guard-passing generated twin (ADR-007) gets
+  that tool's ONE canned response (F3, `twin/generator.py`: content does not depend on the
+  arguments), so it cannot echo a split value. No test pins it; if the generator ever varied
+  on arguments, F9 would refuse exactly the R2 trials that call such a tool.
+- **What would measure it:** a real session against a guard-passing generated twin with a
+  dual-role tool, the tool called with split-value-shaped arguments, asserting the forwarded
+  reply (cassette `upstream_response`, and the `agent_response` the agent received) contains
+  none of them raw or in any case.
 
 ### The D7 provider-prefix list has no Groq key prefix (low; wait for the key holder)
 - `tests/twinchecks.py` `PROVIDER_PREFIXES` lists no Groq prefix: no documented source for
