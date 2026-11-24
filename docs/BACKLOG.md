@@ -253,9 +253,37 @@ moves out of this file only with a fix and that test in the repo.
     CI on both OSes, NOT on a re-run of `e848da4`: a re-run that happened to be green, recorded
     as its verification, would be "intermittent, on record", which is refused.
 
-### Full-suite wall time swings about 30% on the same tree (OBSERVATION; NOT standby; coincides with battery power; medium)
-- **Observed 2026-11-24, Windows, the dev machine, fixed order, Phase 7.0-7.2 working tree,
-  three sequential full gates:** 834 s, 1075 s and 1107 s (the gate's wall seconds; pytest's
+### Full-suite wall time is COMPLETELY SEPARATED by power source (OBSERVATION; cause NOT measured; medium)
+- **Upgraded 2026-11-24, after the per-commit verification.** Nine valid full-suite runs on
+  the dev machine, all in fixed order, split into two groups with NO OVERLAP. Each figure is
+  given with its run, its test count, and which clock it is:
+
+  | power | run | tests | seconds |
+  |---|---|---|---|
+  | AC | per-commit verification, b395736 (on AC until 20 s before the end) | 1715 | 534 (script; pytest's own 528.86) |
+  | AC | per-commit verification, 1cfc7cc | 1758 | 592 (script; pytest's own 588.22) |
+  | AC | per-commit verification, dde9c48 | 1758 | 607 (script; pytest's own 602.43) |
+  | AC | gate 1, working tree | 1758 | 834 (gate wall) |
+  | battery | per-commit verification, 70c025e | 1718 | 974 (script; pytest's own 968.64) |
+  | battery | gate 2, working tree | 1758 | 1075 (gate wall) |
+  | battery | gate 3, working tree | 1758 | 1107 (gate wall; pytest's own 1104.18) |
+  | battery | order audit, seed 20261124 | 1758 | 1157 (wall; pytest's own 1154.68) |
+  | battery | per-commit verification, 745388d | 1739 | 1322 (script; pytest's own 1315.08) |
+
+  The slowest AC run (834 s) is faster than the fastest battery run (974 s). Restricted to the
+  1758-test runs, it is still separated: AC 592-834, battery 1075-1157. Calling this a
+  coincidence understates it. Excluded, as NOT valid: the standby run (36,271.99 s) and the
+  low-memory 1cfc7cc run (1028 s on battery, ruled INVALID; it falls inside the battery range
+  but is not counted).
+- **The cause is still NOT measured.** CPU frequency and the active power plan were not
+  recorded in any of these runs. The AC group also spreads by 834 vs 592-607 s on the same 1758
+  tests, which is unexplained too. **What would measure it:** sample the CPU clock frequency and
+  record the active power plan throughout each run, then run ONE commit back to back,
+  alternating AC and battery several times with nothing else changed. The GitHub runners have
+  no battery, so their times are the only external comparison.
+- **Earlier record (kept as written at the time; the figures are in the table above).**
+  Observed 2026-11-24, Windows, the dev machine, fixed order, Phase 7.0-7.2 working tree,
+  three sequential full gates: 834 s, 1075 s and 1107 s (the gate's wall seconds; pytest's
   own figure was 1104.18 s for the third). Between them only two test files' TEXT differed:
   `tests/fixtures/fake_twin.py`, one docstring line, and
   `tests/safety/test_tools_never_imported.py`, the tool names it uses. All 1758 tests ran in
@@ -280,17 +308,39 @@ moves out of this file only with a fix and that test in the repo.
     AcOnline): AC from 2026-11-23 23:30:22, BATTERY from 2026-11-24 01:53:18, AC again from
     13:33:14. Gate 1 (834 s) ran on AC. Gate 2 (1075 s), gate 3 (1107 s), the audit (1157 s)
     and the 141 s timing run ran on BATTERY.
-  - **What that is and is not:** a coincidence in timing between battery power and the slow
-    runs, with ONE run on AC. It is NOT a measured cause: CPU frequency and the power plan were
+  - **What that is and is not (SUPERSEDED by the upgrade at the top of this item):** a
+    coincidence in timing between battery power and the slow runs, with ONE run on AC. It is NOT a measured cause: CPU frequency and the power plan were
     not recorded, and no run on AC was repeated. It also means the 141 s for the new files was
     measured on battery, so their cost on AC is unknown, probably lower. The observation stands
     as "three runs on battery were 29-39% slower than the one on AC" until runs on the same
     power source are compared.
 - **Related:** "Real-session tests failed under load" above, also unexplained timing
-  behaviour on this machine. A 30% swing matters because the 600 s foreground limit has
-  already been hit once. A slow run is not evidence of the handshake hang (that hang now
-  ends a session as `handshake_timeout` with the stage named), and a fast one is not
-  evidence against it.
+  behaviour on this machine. The spread matters because the 600 s foreground limit has
+  already been hit once, and every run on AC with 1758 tests is near or over it. A slow run is
+  not evidence of the handshake hang (that hang now ends a session as `handshake_timeout`
+  with the stage named), and a fast one is not evidence against it. See also "The matcher's
+  15 s bound has a thin margin on battery" below.
+
+### The matcher's 15 s bound has a thin margin on battery (OBSERVATION; medium; Haris rules)
+- **The bound:** `tests/unit/test_oracle_matcher.py:203`, `PERF_BOUND_S = 15.0`, asserted at
+  `:223` by `test_pathological_one_mib_input_completes_within_bound`. It is a DOCUMENTED safety
+  claim: `docs/ORACLE.md:337-339` says a 1 MiB string with 300 distinct separators "must
+  complete within 15 s", measured at 2.19 s locally.
+- **Measured 2026-11-24, per-commit verification, valid runs only (each figure is the test's
+  junit time):**
+  - AC: 2.00 s (1cfc7cc), 2.00 s (dde9c48), 2.71 s (b395736, on AC until 20 s before the end),
+    a margin of 7.5x at best and 5.5x at worst;
+  - battery: 10.84 s (70c025e) and 10.92 s (745388d), a margin of only **1.37x** at worst
+    (15.0 / 10.92; 1.38x for 10.84).
+- **Not evidence, and excluded:** the 32.65 s breach in the first b395736 run happened under
+  Modern Standby (ruled INVALID). The 9.93 s in the low-memory 1cfc7cc run was also ruled
+  INVALID.
+- **Why it matters:** a documented safety bound with a 1.37x margin is one slow machine away
+  from a FALSE breach. A GitHub runner is not this laptop, and its time for this test has not
+  been read.
+- **OPEN QUESTION, Haris's ruling, NOT in this pass:** should the bound be raised, the input
+  shrunk, or the measurement made load-independent? Nothing is changed here, and the test and
+  `docs/ORACLE.md` stay as they are.
 
 ### The session timeout does not hold across Modern Standby (HIGH; a 7.3 PRECONDITION)
 - **OBSERVATION (2026-11-24, Windows laptop, the first per-commit verification of b395736,
