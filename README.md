@@ -154,14 +154,32 @@ released, and no attack-success rate has been measured.
 >   pending a ruling. FakeLLM policies are forbidden by D7 (Phase 5,
 >   docs/ARCHITECTURE.md §5.6).
 > - **Phase 7.0–7.2 [impl][tested] (2026-11-24), OFFLINE only: scripted model side, nothing
->   paid, no provider call, local Windows; CI has not run on it yet.** A per-stage handshake
+>   paid, no provider call; CI green on both OSes (run below).** A per-stage handshake
 >   deadline (30 s; spawn, initialize, tools_list) that makes the twin-handshake hang VISIBLE,
 >   BOUNDED and NAMED in the cassette. Its cause is unknown and it is NOT fixed. The campaign
 >   engine: an equal-per-source seeded sampler and a six-cell scripted smoke campaign with a
 >   429, a kill and a resume. The report: results ledger only, per-source Wilson 95%, no pooled
->   figure, the lower-bound note beside the numbers. 7.3, the first paid campaign, has NOT run:
->   no real rate exists, and every real trial so far is compromised=false (ZERO REAL
->   POSITIVES).
+>   figure, the lower-bound note beside the numbers.
+> - **Phase 7.3a [impl][tested] (2026-11-24), OFFLINE only: the paid-campaign PATH, built and
+>   dry-run; nothing paid, no provider call, local Windows; CI has not run on it yet.**
+>   - **Plans:** one plan file per campaign (`campaigns/`) feeds both the scripted dry run and
+>     the paid run. Every refusal is tested with a mutation: missing cap, cap over the ceiling or
+>     under one trial, missing limits, another template, another provider, a missing key, another
+>     plan's state file, a root under docs/results/, no `--yes`.
+>   - **Preflight:** it prints the measured request bytes, the estimate with its arithmetic, and
+>     the published price with its URLs and read date.
+>   - **Report:** EXPOSURE is read from the attacked server's cassette. Every report gives TWO
+>     rates per source, END-TO-END and DELIVERED, and never one "ASR"; low exposure is a
+>     reachability finding.
+>   - **Runbook:** docs/RUNBOOK_7_3.md.
+>   - **Not built, by ruling:** a suspend detector. The clock-based design is a no-op on
+>     Windows. For the first, short, watched campaign, the run's event-log output must be
+>     pasted with its report, or the report is not accepted. The trigger for building a
+>     detector is in docs/BACKLOG.md.
+> - **7.3b, the first paid campaign, has NOT run.** No real rate, delivered rate or exposure
+>   figure exists, and every real trial so far is compromised=false (ZERO REAL POSITIVES).
+>   When it runs, n = 10 per source: the intervals are so wide that ITS VALUE IS THE
+>   MECHANISM AND THE EXPOSURE DATA, NOT THE RATE.
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:

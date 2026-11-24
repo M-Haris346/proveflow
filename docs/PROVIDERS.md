@@ -101,6 +101,27 @@ What proveflow does with it (`runner.campaign.wait_for`, `retry_after_s`):
   wait are recorded on the attempt in the campaign state file. Retry-After is the ONLY
   response header proveflow ever reads; it is never put in a transcript or an error message.
 
+## Price: Groq, `openai/gpt-oss-120b` (read 2026-11-24, for the Phase 7.3 campaign)
+
+The published price as the provider's own pages showed it on 2026-11-24. **Neither page
+carries a date of its own**, so this is a reading on that date and nothing more. A price is
+re-read before any later campaign.
+
+- https://console.groq.com/docs/model/openai/gpt-oss-120b, section "PRICING": Input "$0.15"
+  ("6.7M / $1"), Cached Input "$0.075" ("13M / $1"), Output "$0.60" ("1.7M / $1").
+- https://console.groq.com/docs/models, "Production Models" table, under "PRICE PER 1M
+  TOKENS": "$0.15 input$0.60 output". No cached-input figure.
+- https://groq.com/pricing returned no price table in a fetch (marketing text only). It is not
+  a source here.
+- No batch price is shown on either page.
+
+The campaign plans (`campaigns/*.plan.json`, `price`) carry these figures with both URLs and the
+read date. The preflight prints them from the plan, never a remembered number. The estimate
+uses the non-cached input price, which is the conservative choice. **Money is not the binding
+constraint:** a 400,000-token cap costs at most $0.24 even if every token were billed at the
+output price. The binding constraints are the per-trial reservation and the account's rate
+limits, which are unknown without the key.
+
 ## Committing a manual run
 
 A real run's transcript is EVIDENCE, committed under `evidence/provider-runs/<provider>-<model>-<date>/`
