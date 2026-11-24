@@ -299,6 +299,7 @@ def smoke(tmp_path: Path, script: list[Any], sleeps: list[float]) -> Any:
     from proveflow.config import ProviderConfig
     from proveflow.proxy import policy as policy_module
     from proveflow.runner.engine import run_engine, trial_attempt_for
+    from proveflow.runner.limits import TrialLimits
     from runnerchecks import AUTHORED, fixture_scenario
 
     out = tmp_path / "out"
@@ -307,7 +308,7 @@ def smoke(tmp_path: Path, script: list[Any], sleeps: list[float]) -> Any:
     attempt_for = trial_attempt_for(
         fixture_scenario("cross_server_exfil"), llm_for=lambda model: chat,
         provider_for=lambda model: ProviderConfig(**AUTHORED), out_dir=out,
-        twin_dir=policy_module.TWIN_ROOT, parent_env=dict(os.environ),
+        twin_dir=policy_module.TWIN_ROOT, parent_env=dict(os.environ), limits=TrialLimits(),
     )  # fmt: skip
 
     async def sleep(s: float) -> None:
@@ -359,3 +360,43 @@ def assert_the_smoke_campaign_resumes_with_each_trial_once(tmp_path: Path) -> An
     if sleeps != [2.0]:
         raise AssertionError(f"the 429 was not backed off once: {sleeps}")
     return state
+
+
+def assert_the_trial_runs_with_the_campaigns_limits(tmp_path: Path) -> None:
+    """Named check (7.3a, F3): every attempt's transcript records the CAMPAIGN's tightened limits
+    in its trial_start, i.e. the limits reached run_trial. Before 7.3a the engine dropped them:
+    each trial ran with the defaults while the campaign reserved with its own."""
+    from proveflow.config import ProviderConfig
+    from proveflow.proxy import policy as policy_module
+    from proveflow.runner.engine import run_engine, trial_attempt_for
+    from proveflow.runner.limits import TrialLimits
+    from proveflow.runner.transcript import TrialStart, load_transcript
+    from runnerchecks import AUTHORED, fixture_scenario
+
+    limits = TrialLimits(max_tokens_in=30_000, max_tokens_out=2_000)
+    out = tmp_path / "out"
+    out.mkdir(parents=True)
+    chat = ScriptedChat(["ok"] * (3 * TURNS))  # three cells, one per source
+    attempt_for = trial_attempt_for(
+        fixture_scenario("cross_server_exfil"), llm_for=lambda model: chat,
+        provider_for=lambda model: ProviderConfig(**AUTHORED), out_dir=out,
+        twin_dir=policy_module.TWIN_ROOT, parent_env=dict(os.environ), limits=limits,
+    )  # fmt: skip
+
+    async def go() -> Any:
+        return await run_engine(corpus(tmp_path), campaign_id="limits",
+                                state_path=tmp_path / "limits.campaign.json", out_dir=out,
+                                budget_total=400_000, per_source_n=1, seed=7,
+                                carriers=[Carrier.PLAIN], goals=GOALS, models=["scripted-model"],
+                                model_side="scripted", attempt_for=attempt_for,
+                                limits=limits)  # fmt: skip
+
+    state = anyio.run(go)
+    want = limits.model_dump(mode="json")
+    if len(state.attempts) != 3:
+        raise AssertionError(f"premise broken: {len(state.attempts)} attempts")
+    for a in state.attempts:
+        first = load_transcript(out / f"{a.attempt_id}.transcript.jsonl")[0]
+        if not isinstance(first, TrialStart) or first.limits != want:
+            got = getattr(first, "limits", None)
+            raise AssertionError(f"{a.attempt_id} ran with other limits than the campaign's: {got}")

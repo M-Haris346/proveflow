@@ -133,12 +133,19 @@ def trial_attempt_for(
     out_dir: Path,
     twin_dir: Path,
     parent_env: Any,
+    limits: TrialLimits,
     temperature: float = 0.0,
     seed: int = 0,
 ) -> AttemptFor:
     """Production ``attempt_for``: instantiate the cell's attack (the corpus payload VERBATIM
     plus its goal clause, corpus.instantiate) into ``template`` (a Scenario with an attack
-    server) and ``run_trial`` it with the cell's model."""
+    server) and ``run_trial`` it with the cell's model.
+
+    ``limits`` is REQUIRED and passed to every ``run_trial`` (Phase 7.3a, F3): before this, the
+    trial ran with the DEFAULT caps whatever the campaign reserved with, a dropped parameter in
+    the one path that spends money. Pass the SAME ``TrialLimits`` to ``run_engine``, which
+    reserves with it; ``runner.paid`` builds both from one plan file. Pinned by
+    ``enginechecks.assert_the_trial_runs_with_the_campaigns_limits`` and its mutation."""
     from proveflow.core.attacks import Carrier as CarrierEnum
     from proveflow.corpus.instantiate import instantiate
     from proveflow.runner.scenario import Scenario
@@ -152,7 +159,7 @@ def trial_attempt_for(
             return await run_trial(scenario, trial_id=trial_id, llm=llm_for(cell.model),
                                    provider=provider_for(cell.model), temperature=temperature,
                                    seed=seed, out_dir=out_dir, twin_dir=twin_dir, budget=budget,
-                                   parent_env=parent_env)  # fmt: skip
+                                   parent_env=parent_env, limits=limits)  # fmt: skip
 
         return attempt
 

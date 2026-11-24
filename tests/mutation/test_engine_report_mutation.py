@@ -174,3 +174,19 @@ def test_removing_the_model_side_guard_fails_the_scripted_check(
     _ok_then(ec.assert_scripted_data_never_reaches_docs_results, tmp_path, monkeypatch,
              lambda m: m.setattr(report, "aggregate", unguarded),
              "no recorded model side was aggregated")  # fmt: skip
+
+
+def test_dropping_the_limits_in_the_engine_fails_the_limits_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MUTANT: F3's defect: run_trial is called WITHOUT the campaign's limits (defaults)."""
+    from proveflow.runner import trial
+
+    original = trial.run_trial
+
+    async def dropped(*args: Any, **kwargs: Any) -> Any:
+        kwargs.pop("limits", None)
+        return await original(*args, **kwargs)
+
+    _ok_then(ec.assert_the_trial_runs_with_the_campaigns_limits, tmp_path, monkeypatch,
+             lambda m: m.setattr(trial, "run_trial", dropped), "ran with other limits")  # fmt: skip

@@ -17,3 +17,8 @@ def test_the_smoke_campaign_resumes_with_each_trial_once(tmp_path: Path) -> None
     assert rep.model_side == "scripted"
     assert report.SCRIPTED_NOTE in report.format_report(rep)
     assert sum(r.trials for r in rep.per_source) == 6
+
+
+def test_the_trial_runs_with_the_campaigns_limits(tmp_path: Path) -> None:
+    """Phase 7.3a, F3: the campaign's tightened limits reach every trial's run_trial."""
+    enginechecks.assert_the_trial_runs_with_the_campaigns_limits(tmp_path)
