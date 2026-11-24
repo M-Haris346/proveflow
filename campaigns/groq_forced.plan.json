@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "name": "groq_forced",
+  "template": "templates/fetch_summary_exfil.json",
+  "template_sha256": "8a848cdaf4bbdca418c73eb1f917fc2812c152bfb302f0c129a1c7051994b5c2",
+  "delivery": "forced",
+  "provider": {
+    "name": "groq",
+    "base_url": "https://api.groq.com/openai/v1",
+    "model": "openai/gpt-oss-120b",
+    "send_seed": true
+  },
+  "per_source_n": 10,
+  "sampler_seed": 20261124,
+  "carrier": "plain",
+  "goal": {
+    "kind": "exfil",
+    "sink_tool": "fetch"
+  },
+  "budget_total": 400000,
+  "limits": {
+    "max_turns": 16,
+    "max_tool_calls": 32,
+    "max_tokens_per_request": 1024,
+    "max_tokens_in": 30000,
+    "max_tokens_out": 2000,
+    "wall_clock_s": 300.0
+  },
+  "temperature": 0.0,
+  "trial_seed": 0,
+  "price": {
+    "urls": [
+      "https://console.groq.com/docs/model/openai/gpt-oss-120b",
+      "https://console.groq.com/docs/models"
+    ],
+    "read_date": "2026-11-24",
+    "page_date": null,
+    "input_usd_per_mtok": "0.15",
+    "output_usd_per_mtok": "0.60"
+  }
+}
