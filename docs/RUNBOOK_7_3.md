@@ -42,9 +42,56 @@ FINDING (the flow is not reachable for that task), not a failure.
 ## 0. Before starting (check each; paste the outputs)
 
 1. **AC power**, plugged in for the whole run.
-2. **Standby, sleep and the lid action disabled**, as on 2026-11-24. The campaign does NOT
-   detect a suspend by itself, by ruling (docs/BACKLOG.md). Step 6's event-log check is the
-   check, and its output is required for acceptance.
+2. **Standby, sleep and the lid action disabled, on AC AND on DC (battery), checked by command,
+   not by feel.**
+
+   **Why this step exists (measured):** on 2026-11-24 this machine was in Modern Standby
+   (S0 low-power idle) for 9 h 51 m, 03:41:45-13:33:14, WHILE a full pytest run was in progress
+   (the first per-commit verification of b395736; docs/BACKLOG.md, "The session timeout does not
+   hold across Modern Standby"). **A running process is not protection.** `powercfg /a` on
+   this machine lists "Standby (S0 Low Power Idle) Network Connected" and Hibernate as
+   available. The campaign does NOT detect a suspend by itself, by ruling (docs/BACKLOG.md).
+   This step prevents one, and step 6's event-log check proves there was none.
+
+   **Read the values** (PowerShell, the active scheme):
+   ```powershell
+   powercfg /getactivescheme
+   powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE
+   powercfg /query SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE
+   powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION
+   ```
+   **LIDACTION is hidden from `/query` on this machine:** `/query ... LIDACTION` prints only the
+   scheme line. `/qh`, which includes hidden settings, prints it. `/qh` is not listed in
+   `powercfg /?` here, but it works (2026-11-24).
+
+   **Values that must hold** (each is "Current AC/DC Power Setting Index"):
+
+   | setting | GUID | AC | DC, for the sitting |
+   |---|---|---|---|
+   | Sleep after (STANDBYIDLE) | 29f6c1db-86da-48c5-9fdb-f2b67b1f44da | `0x00000000` | `0x00000000` |
+   | Hibernate after (HIBERNATEIDLE) | 9d7815a6-7ee4-497e-8888-515a05f02364 | `0x00000000` | left as measured, `0x7fffffff` |
+   | Lid close action (LIDACTION) | 5ca83367-6e45-459f-a27b-476b1d01c936 | `0x00000000` ("Do nothing") | `0x00000000` ("Do nothing") |
+
+   - **Reading 0 as "never":** that comes from powercfg's own output (minimum possible setting
+     `0x00000000`, units "Seconds"). It is NOT from a cited Microsoft document.
+   - **"Do nothing"** is powercfg's own friendly name for LIDACTION index 000.
+   - **Any other value: NOT READY.** Do not start.
+
+   **The DC side is set for the sitting and RESTORED after it** (step 7). If DC stays armed, an
+   AC drop plus idle time, or a closed lid, suspends the machine and invalidates attempts in a
+   PAID run. Measured before the first sitting (2026-11-24): DC STANDBYIDLE `0x000000b4`
+   (180 s), DC LIDACTION `0x00000001` ("Sleep"). Print the before values first (the commands
+   above), then set:
+   ```powershell
+   powercfg /setdcvalueindex 381b4222-f694-41f0-9685-ff5bb260df2e 238c9fa8-0aad-41ed-83f4-97be242c8f20 29f6c1db-86da-48c5-9fdb-f2b67b1f44da 0
+   powercfg /setdcvalueindex 381b4222-f694-41f0-9685-ff5bb260df2e 4f971e89-eebd-4455-a8de-9e59040e7347 5ca83367-6e45-459f-a27b-476b1d01c936 0
+   powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e
+   ```
+   The GUIDs are from this machine's `/query` and `/qh` output: the Balanced scheme
+   `381b4222-...`, the Sleep subgroup `238c9fa8-...`, the "Power buttons and lid" subgroup
+   `4f971e89-...`. The syntax is from `powercfg /? /setdcvalueindex` and
+   `powercfg /? /setactive`, whose own examples use the same scheme GUID. Then re-run the four
+   read commands, paste the output, and check it against the table.
 3. **Free memory.** Close Chrome (including its background apps) and run `wsl --shutdown`. Then:
    ```powershell
    Get-CimInstance Win32_OperatingSystem | Select-Object FreePhysicalMemory, FreeVirtualMemory
@@ -60,10 +107,22 @@ FINDING (the flow is not reachable for that task), not a failure.
 5. **The corpus cache** `.proveflow-corpus/` is present. If the preflight refuses with
    "run tools/ingest_corpus.py first", run `uv run python tools/ingest_corpus.py`. It fetches
    public GitHub raw files only, with no key, and nothing is paid.
-6. **Your `proveflow.toml`** has a `[[provider]]` entry matching the plan exactly:
-   `name = "groq"`, `base_url = "https://api.groq.com/openai/v1"`,
-   `model = "openai/gpt-oss-120b"`, `send_seed = true`, and `api_key_env` naming your
-   variable. `run` refuses any difference.
+6. **`proveflow.toml` lives at the repo root and is gitignored** (`.gitignore`). That is the
+   path `src/proveflow/cli.py:42` already expects, so `--config proveflow.toml` is never a
+   path to remember. Because it is ignored, it does not dirty the tree that check 4 requires
+   clean. It holds only the NAME of the variable that holds the key, never the key. Its
+   content, with a `[[provider]]` entry matching the plan exactly (`run` refuses any
+   difference):
+   ```toml
+   [[provider]]
+   name = "groq"
+   base_url = "https://api.groq.com/openai/v1"
+   model = "openai/gpt-oss-120b"
+   api_key_env = "YOUR_KEY_VARIABLE_NAME"   # the NAME of an env var; never the key
+   send_seed = true
+   ```
+   The file on the dev machine names `GROQ_API_KEY`. Check: `git status --short` still
+   prints nothing with the file present.
 
 ## 1. Dry runs (scripted model side, real twins, nothing paid)
 
@@ -140,3 +199,17 @@ this sitting (see ORDER above).
 3. **The report text** the run printed, and `runs\<campaign id>.report.json`.
 4. **Do NOT copy anything to docs/results/, and do not commit anything under `runs/`,** until
    the report has been reviewed. ZERO REAL POSITIVES stands until then.
+
+## 7. After the sitting: restore the DC values
+
+Restore what step 0.2 measured before the sitting (DC STANDBYIDLE `0x000000b4` = 180 s, DC
+LIDACTION `0x00000001` = "Sleep"). If the before values printed at step 0.2 differ, restore
+those instead:
+```powershell
+powercfg /setdcvalueindex 381b4222-f694-41f0-9685-ff5bb260df2e 238c9fa8-0aad-41ed-83f4-97be242c8f20 29f6c1db-86da-48c5-9fdb-f2b67b1f44da 180
+powercfg /setdcvalueindex 381b4222-f694-41f0-9685-ff5bb260df2e 4f971e89-eebd-4455-a8de-9e59040e7347 5ca83367-6e45-459f-a27b-476b1d01c936 1
+powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e
+powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE
+powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION
+```
+The AC values stay as step 0.2 requires.

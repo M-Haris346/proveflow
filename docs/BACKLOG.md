@@ -294,14 +294,43 @@ moves out of this file only with a fix and that test in the repo.
   a6b8b27, with the identical 1804 tests, the 1803 tests other than the matcher took 884.4 s
   against 815.2 s in 59ce6e9 (1.08x). Where the slowdown starts is in "Shared tests slow 1.48x
   after the dry-run kill test" below.
-- **External comparison, CI run 45446488249 (head a6b8b27, 2026-11-24).** The same 1804 tests
-  took 484.35 s on windows-2025 and 477.26 s on ubuntu-24.04 (pytest's own figures), against
-  this laptop's 840.53 s (59ce6e9) and 922.00 s (a6b8b27) on AC. The laptop is 1.74x to 1.93x
-  slower (840.53 / 484.35 = 1.74; 922.00 / 477.26 = 1.93). That is despite CI running with
-  coverage on (`--cov`) and the laptop runs without it, so the comparison favours the laptop.
-  A GitHub runner has no battery. Since both ran the same test count, and the laptop's own two
-  runs of the identical 1804 tests differ by 81.47 s, **the laptop's spread is not explained by
-  the test count.**
+- **External comparison: CI on the identical 1804 tests (CORRECTED 2026-11-24).** These are
+  pytest's own figures. CI ran with coverage on (`--cov`) and the laptop runs did not, which
+  favours the laptop. ce9022b differs from a6b8b27 in README.md and docs/BACKLOG.md only
+  (`git diff --name-only a6b8b27 ce9022b`), so the test code is identical. The two windows
+  jobs ran the same image, `windows-2025-vs2026` 20261116.315.1 (Hosted Compute Agent
+  20261111.635), per their logs.
+
+  | runner | run | head | tests | seconds |
+  |---|---|---|---|---|
+  | windows-2025 | 45446488249 | a6b8b27 | 1802 passed + 2 skipped = 1804 | 484.35 |
+  | windows-2025 | 45453489182 | ce9022b | 1802 passed + 2 skipped = 1804 | 689.54 |
+  | ubuntu-24.04 | 45446488249 | a6b8b27 | 1789 passed + 15 skipped = 1804 | 477.26 |
+  | ubuntu-24.04 | 45453489182 | ce9022b | 1789 passed + 15 skipped = 1804 | 513.64 |
+
+  - **CI's own windows runner varied 1.42x (689.54 / 484.35) across identical tests, on the
+    same image;** ubuntu varied 1.08x (513.64 / 477.26). **A single CI number is not a
+    baseline.**
+  - **CORRECTION of the earlier line here.** It said "the laptop is 1.74x to 1.93x slower".
+    That does not hold as written, for two reasons. It was computed against ONE CI run, the
+    fastest. Its upper end (922.00 / 477.26) also divided a Windows laptop figure by an ubuntu
+    CI figure.
+  - **What the data supports (the identical 1804 tests only):** both laptop AC runs
+    (840.53 s, 59ce6e9; 922.00 s, a6b8b27) were slower than both windows CI runs, by 1.22x
+    (840.53 / 689.54) to 1.90x (922.00 / 484.35). That is "slower in all four pairings". With
+    two runs on each side and a 1.42x spread inside CI, **the SIZE is NOT established**; this
+    is not a measured ratio. What remains measured is the laptop's own AC/battery
+    separation, above.
+  - **DISCARDED comparison, recorded so nobody redoes it: range against range is NOT VALID.**
+    The laptop's whole AC range on pytest's clock (528.86 to 922.00 s) mixes test counts: its
+    528.86 s is b395736's run of 1715 tests, while every CI figure here is 1804 tests. Set
+    against CI's windows range (484.35 to 689.54 s), it appears to overlap. A comparison that
+    mixes 1715 tests with 1804 establishes nothing in either direction.
+  - **NOT measured: why the windows runner varied 1.42x.** Neither job log records a CPU
+    model, a core count or concurrent load. The image and agent versions are the same in
+    both.
+  - The laptop's own two runs of the identical 1804 tests differ by 81.47 s, so **the
+    laptop's spread is not explained by the test count.** A GitHub runner has no battery.
 - **The cause is still NOT measured.** CPU frequency and the active power plan were not
   recorded in any of these runs. The AC group's spread (534 to 964 s by the script) is
   unexplained too. **What would measure it:** sample the CPU clock frequency and
@@ -443,7 +472,10 @@ moves out of this file only with a fix and that test in the repo.
   Kernel-Power 105 was at 21:26:06, AcOnline=false). Free memory was not recorded for the first
   run and was 2,154 MB physical for the second. So these readings do not meet the AC condition
   and are not compared with the in-suite 8.45 s. They show that the test alone moved 1.95x
-  between two back-to-back runs.
+  between two back-to-back runs. **What they point at (not a conclusion; the AC condition was
+  not met):** ALONE on battery the matcher took 2.256 s and 4.390 s; IN-SUITE on AC it took
+  8.45 s. Alone it was faster on battery than in the suite on AC. That points at in-suite
+  contamination rather than the power source.
 - **The two measurements that would separate the causes (on a6b8b27, on AC, in ONE
   invocation):**
   1. A process listing before anything (python, pythonw, node, uv, uvx, npx, and any command

@@ -29,6 +29,10 @@ runs/
 /.proveflow-corpus/
 proveflow-fixes/
 out/
+# the dev machine's config (docs/RUNBOOK_7_3.md step 0.6). It holds api_key_env, the NAME of the
+# variable that holds the key, never a key. Ignored so that a sitting's config does not dirty
+# the tree that step 0.4 requires clean. Root only: tests write their own under tmp_path.
+/proveflow.toml
 
 # OS / editor
 .DS_Store
