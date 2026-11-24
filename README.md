@@ -183,19 +183,20 @@ released, and no attack-success rate has been measured.
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`45386319527` on commit `0ce2abe` (Phase 7.0-7.2, offline), green on both OSes (ubuntu-24.04:
-1743 passed, 15 skipped, all Windows-only tests, 0 failed; the two POSIX signal tests ran
-there; windows-2025: 1756 passed, 2 skipped, both POSIX-only signal tests, 0 failed; passed +
-skipped = 1758 on each). It is the first CI evidence of Phase 7.0-7.2: the per-stage handshake
-deadline (cassette schema 4), the campaign engine and the per-source report, all on scripted
-or fake-twin inputs. No test calls a provider, and 7.3 has not run.
+`45446488249` on commit `a6b8b27` (Phase 7.3a, offline), green on both OSes (ubuntu-24.04:
+1789 passed, 15 skipped, all Windows-only tests, 0 failed; the two POSIX signal tests ran
+there; windows-2025: 1802 passed, 2 skipped, both POSIX-only signal tests, 0 failed; passed +
+skipped = 1804 on each). It is the first CI evidence of Phase 7.3a: the campaign plan file,
+the preflight, the dry run with a kill and a resume, the paid-run refusals, and the report's
+two labelled rates with exposure read from the attacked cassette, all on scripted or real-twin
+inputs with a scripted provider. No test calls a provider, and 7.3b has not run.
 Tests run in fixed order (`-p no:randomly` in addopts). Order-independence has been audited
 ONCE, locally on Windows, with seed 20261124: green. One permutation is not a proof, and CI
 has never run an audit (docs/BACKLOG.md). No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
 all green, in run
 `43582905272`.
 This README states CI results only for a run id checked with `gh run list`. It names the run
-that verified the CODE: `45386319527` on `0ce2abe`. A run triggered by a README-only commit
+that verified the CODE: `45446488249` on `a6b8b27`. A run triggered by a README-only commit
 (for example `163547c`, whose run `45206531796` was green) does not get its own README line: that would need
 another README commit, whose run would need another line. Do not chase it. Local commands:
 

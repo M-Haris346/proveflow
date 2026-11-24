@@ -272,15 +272,39 @@ moves out of this file only with a fix and that test in the repo.
   | battery | gate 3, working tree | 1758 | 1107 (gate wall; pytest's own 1104.18) |
   | battery | order audit, seed 20261124 | 1758 | 1157 (wall; pytest's own 1154.68) |
   | battery | per-commit verification, 745388d | 1739 | 1322 (script; pytest's own 1315.08) |
+  | AC | per-commit verification, 418a50f | 1760 | 631 (script; pytest's own 592.66) |
+  | AC | per-commit verification, c37a690 | 1770 | 620 (script; pytest's own 591.39) |
+  | AC | per-commit verification, 59ce6e9 | 1804 | 870 (script; pytest's own 840.53) |
+  | AC | per-commit verification, a6b8b27 | 1804 | 964 (script; pytest's own 922.00) |
 
-  The slowest AC run (834 s) is faster than the fastest battery run (974 s). Restricted to the
-  1758-test runs, it is still separated: AC 592-834, battery 1075-1157. Calling this a
-  coincidence understates it. Excluded, as NOT valid: the standby run (36,271.99 s) and the
-  low-memory 1cfc7cc run (1028 s on battery, ruled INVALID; it falls inside the battery range
-  but is not counted).
+  The four 7.3a rows were added 2026-11-24. They ran 18:25-19:17 on AC throughout: the last
+  Kernel-Power 105 was 18:15:12, AcOnline=true, and there was none in any of the four windows.
+  **The AC group's own spread is now 534 to 964 s by the script's clock** (528.86 to 922.00 s
+  by pytest's own; the v3 script's pytest step took 928 s for a6b8b27), not 534 to 834 as
+  recorded before. The separation by power source still holds,
+  but narrowly: the slowest AC run (964 s by the script, 922.00 s by pytest) is faster than the
+  fastest battery run (974 s by the script, 968.64 s by pytest). Restricted to the 1758-test
+  runs, it is still separated: AC 592-834, battery 1075-1157. Excluded, as NOT valid: the
+  standby run (36,271.99 s) and the low-memory 1cfc7cc run (1028 s on battery, ruled INVALID;
+  it falls inside the battery range but is not counted). Not added: the 7.3a full suite at
+  18:01-18:15, which had two short battery spells (5 s and 30 s) and so is mixed power.
+- **Most of the AC spread at 1804 tests is NOT the 34 new tests' own cost (read from the junit
+  files, 2026-11-24).** In 59ce6e9 the 34 new tests take 19.5 s in total. The 1769 tests that
+  59ce6e9 shares with c37a690 took 579.2 s in c37a690 and 795.7 s in 59ce6e9 (1.37x). In
+  a6b8b27, with the identical 1804 tests, the 1803 tests other than the matcher took 884.4 s
+  against 815.2 s in 59ce6e9 (1.08x). Where the slowdown starts is in "Shared tests slow 1.48x
+  after the dry-run kill test" below.
+- **External comparison, CI run 45446488249 (head a6b8b27, 2026-11-24).** The same 1804 tests
+  took 484.35 s on windows-2025 and 477.26 s on ubuntu-24.04 (pytest's own figures), against
+  this laptop's 840.53 s (59ce6e9) and 922.00 s (a6b8b27) on AC. The laptop is 1.74x to 1.93x
+  slower (840.53 / 484.35 = 1.74; 922.00 / 477.26 = 1.93). That is despite CI running with
+  coverage on (`--cov`) and the laptop runs without it, so the comparison favours the laptop.
+  A GitHub runner has no battery. Since both ran the same test count, and the laptop's own two
+  runs of the identical 1804 tests differ by 81.47 s, **the laptop's spread is not explained by
+  the test count.**
 - **The cause is still NOT measured.** CPU frequency and the active power plan were not
-  recorded in any of these runs. The AC group also spreads by 834 vs 592-607 s on the same 1758
-  tests, which is unexplained too. **What would measure it:** sample the CPU clock frequency and
+  recorded in any of these runs. The AC group's spread (534 to 964 s by the script) is
+  unexplained too. **What would measure it:** sample the CPU clock frequency and
   record the active power plan throughout each run, then run ONE commit back to back,
   alternating AC and battery several times with nothing else changed. The GitHub runners have
   no battery, so their times are the only external comparison.
@@ -322,9 +346,9 @@ moves out of this file only with a fix and that test in the repo.
   already been hit once, and every run on AC with 1758 tests is near or over it. A slow run is
   not evidence of the handshake hang (that hang now ends a session as `handshake_timeout`
   with the stage named), and a fast one is not evidence against it. See also "The matcher's
-  15 s bound has a thin margin on battery" below.
+  15 s bound is measured inside the suite that contaminates it" below.
 
-### The matcher's 15 s bound has a thin margin on battery (OBSERVATION; medium; Haris rules)
+### The matcher's 15 s bound is measured inside the suite that contaminates it (OBSERVATION; HIGH, raised 2026-11-24; Haris rules)
 - **The bound:** `tests/unit/test_oracle_matcher.py:203`, `PERF_BOUND_S = 15.0`, asserted at
   `:223` by `test_pathological_one_mib_input_completes_within_bound`. It is a DOCUMENTED safety
   claim: `docs/ORACLE.md:337-339` says a 1 MiB string with 300 distinct separators "must
@@ -351,9 +375,94 @@ moves out of this file only with a fix and that test in the repo.
   ruling and is not made here. For scale only, not the matcher: pytest's own suite time was
   450.03 s on windows-2025 and 499.93 s on ubuntu-24.04, with coverage on, against 574-607 s
   locally on AC without coverage.
+- **Measured 2026-11-24, the 7.3a per-commit verification, all four on AC with no Kernel-Power
+  105 event between them** (the last was 18:15:12, AcOnline=true; the runs were 18:25-19:17):
+
+  | commit | tests | matcher (junit) | margin to 15 s | pytest's own suite time |
+  |---|---|---|---|---|
+  | 418a50f | 1760 | 2.02 s | 7.4x | 592.66 s |
+  | c37a690 | 1770 | 1.92 s | 7.8x | 591.39 s |
+  | 59ce6e9 | 1804 | 8.43 s | 1.78x | 840.53 s |
+  | a6b8b27 | 1804 | 8.45 s | 1.78x | 922.00 s |
+
+  So **AC does not protect the margin.** The matcher moved 4.4x (1.92 to 8.45 s) on the same
+  power source, with no power event and no standby, low-memory or MemoryError signal in any
+  window. Free memory before pytest was 5,569-5,736 MB physical for the first three and
+  4,242 MB for a6b8b27.
+- **HYPOTHESIS (Haris, 2026-11-24), not a conclusion.** The machine did not change; the SUITE
+  did. 59ce6e9 adds 34 tests, among them a real-twin integration test and the dry runs, and
+  a6b8b27 runs the same 1804. So the figure is not a measurement of the matcher alone: it is
+  the matcher plus whatever the suite was doing around it.
+  **Refined by the junit files:** the 34 new tests' own time is 19.5 s, so the extra load is
+  not their run time. Where the slowdown starts, its candidate causes and the measurements
+  that would separate them are in "Shared tests slow 1.48x after the dry-run kill test" below.
+- **Standing, raised 2026-11-24.** A documented 15 s safety bound whose measured value moves
+  4x with the suite's own composition is fragile for reasons unrelated to what it claims to
+  bound. Of the three options below, the evidence now points at MAKING THE MEASUREMENT
+  LOAD-INDEPENDENT, not at raising the bound. **Nothing is changed:** the test, the bound and
+  `docs/ORACLE.md` stay as they are. The isolated figure on AC has NOT been taken; it is parked
+  with the item below, until after the first paid campaign.
 - **OPEN QUESTION, Haris's ruling, NOT in this pass:** should the bound be raised, the input
   shrunk, or the measurement made load-independent? Nothing is changed here, and the test and
   `docs/ORACLE.md` stay as they are.
+
+### Shared tests slow 1.48x after the dry-run kill test (PARKED; measure AFTER the first paid campaign; medium)
+- **Parked by Haris's ruling (2026-11-24).** This answers a question about the matcher bound's
+  MEASUREMENT, which is a test-harness issue. It does not block a 30-trial paid campaign. It is
+  measured AFTER the first paid campaign, not before. **Why:** the first paid run is attended
+  and is not planned to be killed. So neither cause below can corrupt it without Haris seeing
+  it. Nothing has been measured beyond the data below.
+- **The readings (AC, junit, the 7.3a per-commit verification; table in the matcher item
+  above):** the matcher took 2.02 s (418a50f) and 1.92 s (c37a690), against 8.43 s (59ce6e9)
+  and 8.45 s (a6b8b27), with no power event between them.
+- **The junit analysis (read 2026-11-24 from the four junit files; the comparison script is in
+  the session scratchpad, not the repo).**
+  - The 34 tests 59ce6e9 adds take 19.5 s in total.
+  - The 1769 tests 59ce6e9 shares with c37a690 slowed from 579.2 to 795.7 s (1.37x).
+  - In the fixed order, the first new test is
+    `tests/integration/test_paid_path.py::test_the_dry_run_kills_and_resumes`, at index 29.
+    The 29 shared tests that run BEFORE it slowed 1.07x (139.9 to 149.8 s). The 1741 that run
+    AFTER it slowed **1.48x** (441.2 to 654.4 s).
+  - The slowdown GROWS along the order: 1.19x for indices 0-199, about 1.5x for 200-599, and
+    2.3-3.4x for every 200-test block of `tests/unit` from index 600 on. The matcher, at index
+    960, is in that region.
+- **Two candidate causes, neither measured.**
+  1. **An OS-level leak in the kill path.** The test kills a dry run and resumes it on real
+     twins. Twin or other child processes that outlive the kill would load the machine for
+     the rest of the suite. 7.3b uses the same kill-and-resume path, which is why it matters
+     beyond the test harness.
+  2. **In-process residue.** Something the test leaves inside the one pytest process (threads,
+     event loops, open handles, memory) slows every later test in that process, with no
+     process left behind.
+  A change in the machine's own state at about that point is not excluded either.
+- **What does NOT separate them:** the listing at 2026-11-24 22:17:57 (0 python, node or uv
+  processes) was taken about three hours after the last suite ended and after its worktree was
+  removed. It proves nothing about the suite's lifetime.
+- **Also gathered, not the measurement asked for:** the matcher ALONE on a fresh a6b8b27
+  worktree, twice, at 22:24-22:25. It took 2.256 s and then 4.390 s, both on BATTERY (the last
+  Kernel-Power 105 was at 21:26:06, AcOnline=false). Free memory was not recorded for the first
+  run and was 2,154 MB physical for the second. So these readings do not meet the AC condition
+  and are not compared with the in-suite 8.45 s. They show that the test alone moved 1.95x
+  between two back-to-back runs.
+- **The two measurements that would separate the causes (on a6b8b27, on AC, in ONE
+  invocation):**
+  1. A process listing before anything (python, pythonw, node, uv, uvx, npx, and any command
+     line naming a twin, proveflow or a proxy; with PIDs, start times and CPU seconds), then the
+     dry-run test ALONE, then the same listing IMMEDIATELY after it.
+  2. The matcher test right after the dry-run test, then the CONTROL: the matcher alone in a
+     fresh pytest invocation, with no dry-run test before it.
+  The script that does this (`leak_probe.sh` with `leak_list.ps1`, session scratchpad only;
+  NOT run) refuses to start unless the last Kernel-Power 105 says AcOnline=true. The listing's
+  name pattern needs word starts: a bare `twin` also matches "MicrosoftWindows".
+- **What each outcome means, decided BEFORE measuring (Haris, 2026-11-24):**
+  - processes survive the dry-run test: a LEAK in the kill path. Stop, report it with the
+    listing, and treat it as blocking for any further campaign until Haris rules. Do not fix
+    it in the same breath.
+  - nothing survives, and the matcher is slow after the dry-run test but fast in the control:
+    the suite leaves the machine in a slower state by some other means. Record it, still
+    unexplained.
+  - nothing survives and both matcher figures are fast: the in-suite 8.45 s is contaminated by
+    cumulative suite load, and the bound's measurement is the thing to fix.
 
 ### The session timeout does not hold across Modern Standby (HIGH; a 7.3 PRECONDITION)
 - **OBSERVATION (2026-11-24, Windows laptop, the first per-commit verification of b395736,
@@ -398,6 +507,13 @@ moves out of this file only with a fix and that test in the repo.
   the string `MemoryError` anywhere in the pytest output as an environmental signal. Either one
   makes the run INVALID, with the evidence printed. It also records the power source
   (Kernel-Power 105, plus the last one before the run) and free memory before each pytest run.
+- **A POWER-SOURCE CHANGE does NOT invalidate a run (Haris's ruling, 2026-11-24; not to be
+  re-argued).** A battery blip of a few seconds changes speed, not correctness: there is no
+  clock jump and no frozen process. It is RECORDED per run (Kernel-Power 105), and it is not a
+  validity signal. The validity signals remain standby or sleep (Kernel-Power 506/507/42/107),
+  low memory (Resource-Exhaustion-Detector 2004) and `MemoryError` in the output. First applied
+  to the 2026-11-24 18:01-18:15 full-suite run, which had two blips (5 s and 30 s on battery)
+  and stays valid.
 - **Q3 findings (Phase 7.3a, 2026-11-24): a clock-divergence detector CANNOT work on Windows,
   so it is NOT built.** The proposal was to compare wall time and `time.monotonic()` per
   attempt. Read from the docs and the source, with nothing recalled from memory:
