@@ -12,6 +12,7 @@ import pytest
 
 import enginechecks as ec
 from proveflow.runner import engine, report
+from proveflow.runner import exposure as exposure_module
 from proveflow.runner.campaign import SamplingRecord, SourceDraw
 
 
@@ -147,8 +148,60 @@ def test_dropping_the_note_from_the_json_fails_the_note_check(
     original = report.aggregate
     _ok_then(ec.assert_the_lower_bound_note_is_beside_the_numbers, tmp_path, monkeypatch,
              lambda m: m.setattr(report, "aggregate",
-                                 lambda s: original(s).model_copy(update={"notes": ()})),
+                                 lambda s, *a: original(s, *a).model_copy(update={"notes": ()})),
              "required note is missing")  # fmt: skip
+
+
+def test_a_delivered_rate_over_counted_trials_fails_the_two_rates_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MUTANT: the delivered rate's denominator is the counted trials (the conflation F1 names)."""
+    original = report.aggregate
+
+    def conflated(state: Any, exposure: Any, delivery: Any) -> Any:
+        rep = original(state, exposure, delivery)
+        rows = tuple(
+            r.model_copy(
+                update={"delivered": report._cell(report.DELIVERED_LABEL, r.compromised, r.trials)}
+            )
+            for r in rep.per_source
+        )
+        return rep.model_copy(update={"per_source": rows})  # fmt: skip
+
+    _ok_then(ec.assert_two_rates_are_emitted_and_never_conflated, tmp_path, monkeypatch,
+             lambda m: m.setattr(report, "aggregate", conflated),
+             "conflated or one is missing")  # fmt: skip
+
+
+def test_emitting_only_the_end_to_end_rate_fails_the_two_rates_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MUTANT: only one rate per source (the delivered rate is never emitted)."""
+    original = report.aggregate
+
+    def one_rate(state: Any, exposure: Any, delivery: Any) -> Any:
+        rep = original(state, exposure, delivery)
+        rows = tuple(r.model_copy(update={"delivered": None}) for r in rep.per_source)
+        return rep.model_copy(update={"per_source": rows})
+
+    _ok_then(ec.assert_two_rates_are_emitted_and_never_conflated, tmp_path, monkeypatch,
+             lambda m: m.setattr(report, "aggregate", one_rate),
+             "conflated or one is missing")  # fmt: skip
+
+
+def test_dropping_the_delivered_line_from_the_text_fails_the_two_rates_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MUTANT: the JSON keeps both rates but the printed report shows only one."""
+    original = report.format_report
+
+    def text_one_rate(r: Any) -> str:
+        return chr(10).join(ln for ln in original(r).splitlines()
+                            if report.DELIVERED_LABEL not in ln)  # fmt: skip
+
+    _ok_then(ec.assert_two_rates_are_emitted_and_never_conflated, tmp_path, monkeypatch,
+             lambda m: m.setattr(report, "format_report", text_one_rate),
+             "not printed exactly once")  # fmt: skip
 
 
 def test_removing_the_docs_results_guard_fails_the_scripted_check(
@@ -166,14 +219,25 @@ def test_removing_the_model_side_guard_fails_the_scripted_check(
     guard gone pydantic still refuses, and the check names that the guard did not."""
     original = report.aggregate
 
-    def unguarded(s: Any) -> Any:
+    def unguarded(s: Any, *args: Any) -> Any:
         if s.model_side is None:
             s = s.model_copy(update={"model_side": "provider"})  # the mutant guesses a side
-        return original(s)
+        return original(s, *args)
 
     _ok_then(ec.assert_scripted_data_never_reaches_docs_results, tmp_path, monkeypatch,
              lambda m: m.setattr(report, "aggregate", unguarded),
              "no recorded model side was aggregated")  # fmt: skip
+
+
+# --- F1 and F3 -----------------------------------------------------------------------------
+
+
+def test_counting_unexposed_trials_as_exposed_fails_the_exposure_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ok_then(ec.assert_exposure_is_read_from_the_attacked_cassette, tmp_path, monkeypatch,
+             lambda m: m.setattr(exposure_module, "is_exposed", lambda path: True),
+             "not the attacked cassette's injection record")  # fmt: skip
 
 
 def test_dropping_the_limits_in_the_engine_fails_the_limits_check(
@@ -190,3 +254,27 @@ def test_dropping_the_limits_in_the_engine_fails_the_limits_check(
 
     _ok_then(ec.assert_the_trial_runs_with_the_campaigns_limits, tmp_path, monkeypatch,
              lambda m: m.setattr(trial, "run_trial", dropped), "ran with other limits")  # fmt: skip
+
+
+def test_dropping_the_json_exposure_label_fails_the_label_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MUTANT: a SCRIPTED report's exposure figures are labelled as measured in the JSON."""
+    _ok_then(ec.assert_scripted_exposure_is_labelled, tmp_path, monkeypatch,
+             lambda m: m.setattr(report, "exposure_basis", lambda side: "measured"),
+             "not labelled scripted in JSON")  # fmt: skip
+
+
+def test_dropping_the_text_exposure_label_fails_the_label_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MUTANT: the printed exposure line loses its SCRIPTED label (the JSON keeps it)."""
+    original = report.format_report
+
+    def unlabelled(r: Any) -> str:
+        return chr(10).join(ln.split(" (SCRIPTED:")[0] if ": exposed " in ln else ln
+                            for ln in original(r).splitlines())  # fmt: skip
+
+    _ok_then(ec.assert_scripted_exposure_is_labelled, tmp_path, monkeypatch,
+             lambda m: m.setattr(report, "format_report", unlabelled),
+             r"lacks its \(SCRIPTED: label")  # fmt: skip

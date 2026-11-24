@@ -29,6 +29,33 @@ def test_scripted_data_never_reaches_docs_results(tmp_path: Path) -> None:
     enginechecks.assert_scripted_data_never_reaches_docs_results(tmp_path)
 
 
+def test_two_rates_are_emitted_and_never_conflated(tmp_path: Path) -> None:
+    enginechecks.assert_two_rates_are_emitted_and_never_conflated(tmp_path)
+
+
+def test_scripted_exposure_is_labelled(tmp_path: Path) -> None:
+    enginechecks.assert_scripted_exposure_is_labelled(tmp_path)
+
+
+def test_exposure_is_read_from_the_attacked_cassette(tmp_path: Path) -> None:
+    enginechecks.assert_exposure_is_read_from_the_attacked_cassette(tmp_path)
+
+
+def test_an_exposure_that_misses_a_counted_trial_is_refused(tmp_path: Path) -> None:
+    """The exposure map must cover EXACTLY the counted trials: one missing key fails closed."""
+    import pytest
+
+    from proveflow.runner import report
+
+    _, state = enginechecks.scripted_engine(
+        tmp_path, {k: list(v) for k, v in enginechecks.MIXED.items()}
+    )
+    partial = enginechecks.exposure_all(state, True)
+    partial.pop("c0000")
+    with pytest.raises(report.ReportError, match="exactly the counted trials"):
+        report.aggregate(state, partial, "forced")
+
+
 def test_the_engine_fails_closed(tmp_path: Path) -> None:
     enginechecks.assert_the_engine_fails_closed(tmp_path)
 

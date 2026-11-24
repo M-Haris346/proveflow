@@ -11,9 +11,10 @@ import enginechecks
 
 def test_the_smoke_campaign_resumes_with_each_trial_once(tmp_path: Path) -> None:
     from proveflow.runner import report
+    from proveflow.runner.exposure import exposure_of
 
     state = enginechecks.assert_the_smoke_campaign_resumes_with_each_trial_once(tmp_path)
-    rep = report.aggregate(state)
+    rep = report.aggregate(state, exposure_of(state, tmp_path / "out"), "incidental")
     assert rep.model_side == "scripted"
     assert report.SCRIPTED_NOTE in report.format_report(rep)
     assert sum(r.trials for r in rep.per_source) == 6
