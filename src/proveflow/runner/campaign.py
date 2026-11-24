@@ -55,8 +55,11 @@ A campaign runs an ordered plan of trial keys. Each run of one trial is an ATTEM
   the campaign it is opened for FAILS CLOSED (``CorruptCampaignState``): nothing runs.
 * Unknown spend is charged at its maximum, never at zero, by ONE function
   (``unknown_spend_charge``: the trial's full reservation, ``limits.max_trial_tokens``): for an
-  attempt still ``started`` on resume (the process died) whose transcript is unreadable, and
-  for an attempt that raised before its transcript existed.
+  attempt still ``started`` on resume (the process died) whose transcript is unreadable, for
+  an attempt that raised before its transcript existed, and for an attempt whose transcript
+  records ANY response without usage (the agent's ``usage_missing`` stop): the provider
+  processed that request and did not say what it cost. (Until Phase 7.3b step 2 that last
+  case was charged 0 for the response: this docstring's claim was false for it.)
 * Any other failed attempt (a FAILED reason, an exception such as an invalid trial) STOPS the
   campaign (``AttemptFailed``): fail closed, a human looks. Resume retries it. (Phase 7: one
   bad response then halts a long run; a bounded skip-and-record is a deferred decision,
@@ -387,13 +390,20 @@ def load_state(path: Path) -> CampaignState:
 
 def transcript_usage(path: Path) -> tuple[int, int] | None:
     """(tokens in, tokens out) the provider reported in one attempt's transcript (F10), or None
-    when it is missing or unreadable."""
+    (unknown spend: the caller charges the reservation) when the transcript is missing or
+    unreadable, or when ANY of its responses carries no usage."""
     try:
         events = load_transcript(path)
     except Exception:  # a torn or missing transcript: the caller charges the reservation
         return None
     responses = [e for e in events if isinstance(e, LlmResponse)]
-    return (sum(e.tokens_in or 0 for e in responses), sum(e.tokens_out or 0 for e in responses))
+    tokens_in, tokens_out = 0, 0
+    for e in responses:
+        if e.tokens_in is None or e.tokens_out is None:
+            return None  # a response the provider did not cost: unknown, never zero
+        tokens_in += e.tokens_in
+        tokens_out += e.tokens_out
+    return tokens_in, tokens_out
 
 
 def _usage(

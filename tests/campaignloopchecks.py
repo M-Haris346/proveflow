@@ -18,6 +18,9 @@ from runnerchecks import AUTHORED, fixture_scenario
 
 OK = ("final_answer", 100, 10)  # a completed attempt, 110 tokens
 RL = ("rate_limited", 100, 10)  # a 429-ended attempt after one turn, 110 tokens
+# the agent's usage_missing stop (agent.py:135-138): one turn with usage (110 tokens), then a
+# response WITHOUT usage, recorded before the trial ends
+UM = ("usage_missing", 100, 10)
 
 
 class ScriptedResult:
@@ -49,6 +52,8 @@ class ScriptedAttempts:
                parameters={}, limits={}, budget_remaining=budget.remaining, servers=[])  # fmt: skip
         if tin or tout:
             w.emit("llm_response", turn=1, status=200, body={}, tokens_in=tin, tokens_out=tout)
+        if reason == "usage_missing":  # what the agent records before it stops (agent.py:135)
+            w.emit("llm_response", turn=2, status=200, body={}, tokens_in=None, tokens_out=None)
         w.emit("trial_end", reason=reason, tokens_in=tin, tokens_out=tout, cassettes=[])
         w.close()
         outcome = AgentOutcome(reason, None, tin, tout, 1, 0,
@@ -480,6 +485,37 @@ def assert_an_interrupted_attempt_is_charged(tmp_path: Path) -> None:
                 f"{first.tokens_in + first.tokens_out} from {first.usage_source}, want {want}",
                 work / "out", caught,
             )  # fmt: skip
+
+
+def assert_a_response_without_usage_is_charged_the_reservation(tmp_path: Path) -> None:
+    """Named check (Phase 7.3b step 2, the contract in runner/campaign.py's docstring: unknown
+    spend is charged at its maximum, never at zero). A transcript that records ANY response
+    without usage (the agent's usage_missing stop) is UNKNOWN spend: the attempt is charged its
+    FULL reservation (unknown_spend_charge, limits.max_trial_tokens) from "reservation", not the
+    known turns' 110 tokens from "transcript". The 2026-11-25 forced campaign had no such
+    response (84 of 84 carried usage), so its figures are unaffected."""
+    from campaignchecks import premise_failed
+    from proveflow.runner.campaign import AttemptFailed, load_state
+    from proveflow.runner.limits import TrialLimits
+
+    caught: BaseException | None = None
+    try:
+        scripted_campaign(tmp_path, [UM], ["t1"], [])
+    except CampaignRaised as exc:
+        caught = exc  # EXPECTED: usage_missing is a FAILED reason, the campaign stops
+        if not isinstance(exc.raised, AttemptFailed):
+            raise AssertionError(f"usage_missing stopped for another reason: {exc}") from None
+    if caught is None:
+        raise AssertionError("a usage_missing attempt did not stop the campaign")
+    [a] = load_state(tmp_path / "c1.campaign.json").attempts
+    want = ("failed", "usage_missing", TrialLimits().max_trial_tokens, "reservation")
+    got = (a.status, a.reason, a.tokens_in + a.tokens_out, a.usage_source)
+    if got != want:
+        raise premise_failed(
+            f"a response without usage was charged {got[2]} from {got[3]}, want {want[2]} "
+            f"from {want[3]} (status {got[0]}, reason {got[1]})",
+            tmp_path / "out", caught,
+        )  # fmt: skip
 
 
 def assert_retry_after_extends_never_shortens(tmp_path: Path) -> None:

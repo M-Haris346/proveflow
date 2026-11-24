@@ -14,6 +14,7 @@ from campaignchecks import (
     with_story,
 )
 from campaignloopchecks import (
+    assert_a_response_without_usage_is_charged_the_reservation,
     assert_an_interrupted_attempt_is_charged,
     assert_an_overspent_state_fails_closed,
     assert_an_unclassified_reason_stops_the_campaign,
@@ -45,6 +46,10 @@ def test_corrupt_state_fails_closed(tmp_path: Path) -> None:
 
 def test_an_interrupted_attempt_is_charged(tmp_path: Path) -> None:
     assert_an_interrupted_attempt_is_charged(tmp_path)
+
+
+def test_a_response_without_usage_is_charged_the_reservation(tmp_path: Path) -> None:
+    assert_a_response_without_usage_is_charged_the_reservation(tmp_path)
 
 
 def test_429_carries_the_exact_retry_after_text() -> None:

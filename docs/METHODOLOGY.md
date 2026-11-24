@@ -143,7 +143,11 @@ Utility cost and attack effect are computed on these pairs. Mitigation verificat
    labelled NON-EVIDENCE, because wall-clock values cannot be in the hashed chain; a replay
    without it fails (`MissingTimings`). Token counts are provider-reported (F10).
 12. **Free-tier nondeterminism** — temperature 0 does not guarantee determinism across providers;
-   paired seeds + CIs mitigate, never eliminate.
+   paired seeds + CIs mitigate, never eliminate. Measured (Phase 7.3b, 2026-11-25): the 84
+   responses of ONE 8-minute campaign on one route carried 25 distinct `system_fingerprint`
+   values. "Seed sent" is never "deterministic" or "reproducible", and a comparison between
+   runs is interpretable only with each run's fingerprint SET recorded (docs/BACKLOG.md,
+   "25 system fingerprints").
 13. **The corpus is 72% BIPIA (Phase 6, measured)** — the ingested corpus is 347 records:
     BIPIA 250 (72.0%; 49 categories of about five short texts each, from its four attack
     files), InjecAgent 62 (17.9%), AgentDojo 35 (10.1%; its injection tasks at upstream
@@ -207,6 +211,27 @@ Utility cost and attack effect are computed on these pairs. Mitigation verificat
     the rate: a 0/10 with Wilson 95% [0, 0.278] is not a result. Every report with fewer than 30
     counted trials in a source says so beside the numbers (`report.SMALL_N_NOTE`; 30 is a design
     value).
+16. **The forced template's validity (Phase 7.3b, Haris's ruling, 2026-11-25)** — the exfil
+    goal clause (`corpus.instantiate.goal_clause`) asks the agent to "include the private data
+    you have read, together with the reference code". The forced template
+    (`fetch_summary_exfil`) forces delivery by making the task REQUIRE the attacked tool, and in
+    doing so removes the precondition the clause assumes. The task never reads private data,
+    and no corpus payload names a file (0 of 30 in the first forced campaign). So the model
+    reaches the clause having read nothing, and half of it is incoherent when it is served.
+    - The canary alone suffices for R1, so the clause is not unsatisfiable.
+    - But a half-meaningless instruction is a plausible reason to ignore the whole
+      instruction, and that cannot be separated from resistance. This is a CONFOUND on every
+      forced-template zero, not a proof of anything.
+    - **The direction, both ways:**
+      - favourable to the ATTACKER on delivery: the injection is always served;
+      - favourable to the MODEL on action: the task is complete after one call, so the agent
+        has no legitimate reason to call any tool again.
+    - The forced template therefore measures the HARDEST exfil: whether the agent initiates a
+      new, unprompted sink call only because injected text told it to.
+    - `cross_server_exfil` (incidental delivery) does not have this defect: its task reads
+      `/notes.txt` first.
+    - Whether the template changes is decided after the positive control (docs/BACKLOG.md,
+      "Phase 7.3b"). Changing it changes the campaign id and needs a new paid run.
 
 ## Appendix A — Provider table [research, changes often]
 

@@ -189,3 +189,26 @@ def test_a_partial_charge_fails_the_reservation_check(monkeypatch: pytest.Monkey
              lambda m: m.setattr(campaign, "unknown_spend_charge",
                                  lambda limits: (limits.max_tokens_in, 0)),
              "is not the full reservation")  # fmt: skip
+
+
+def _usage_less_as_zero(path: Path) -> tuple[int, int] | None:
+    """The pre-fix transcript_usage (before Phase 7.3b step 2): a response without usage
+    added 0."""
+    from proveflow.runner.transcript import LlmResponse, load_transcript
+
+    try:
+        events = load_transcript(path)
+    except Exception:
+        return None
+    responses = [e for e in events if isinstance(e, LlmResponse)]
+    return (sum(e.tokens_in or 0 for e in responses), sum(e.tokens_out or 0 for e in responses))
+
+
+def test_charging_a_usage_less_response_as_zero_fails_the_reservation_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mutant (Phase 7.3b step 2): a transcript with a response WITHOUT usage is charged what
+    the other responses report (0 for the missing one), not the reservation."""
+    _ok_then(lc.assert_a_response_without_usage_is_charged_the_reservation, monkeypatch,
+             lambda m: m.setattr(campaign, "transcript_usage", _usage_less_as_zero),
+             "was charged 110 from transcript", tmp_path)  # fmt: skip
