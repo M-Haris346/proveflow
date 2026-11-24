@@ -338,6 +338,16 @@ moves out of this file only with a fix and that test in the repo.
 - **Why it matters:** a documented safety bound with a 1.37x margin is one slow machine away
   from a FALSE breach. A GitHub runner is not this laptop, and its time for this test has not
   been read.
+- **CI, run 45386319527 (head 0ce2abe, 2026-11-24): the test PASSED on both runners, but its
+  time is NOT RECORDED.** CI runs `uv run pytest --cov -rs` (`.github/workflows/ci.yml`), which
+  prints neither per-test durations nor a junit file, and the run has 0 artifacts. Neither job
+  log contains the test's name. So the only CI fact is the assertion itself: under `--cov`, the
+  matcher took under 15.0 s on ubuntu-24.04 and on windows-2025. That gives a margin of more
+  than 1.0x and says nothing beyond it. The non-laptop margin is still UNMEASURED. Measuring it
+  needs a CI change (for example per-test durations or a junit artifact), which is Haris's
+  ruling and is not made here. For scale only, not the matcher: pytest's own suite time was
+  450.03 s on windows-2025 and 499.93 s on ubuntu-24.04, with coverage on, against 574-607 s
+  locally on AC without coverage.
 - **OPEN QUESTION, Haris's ruling, NOT in this pass:** should the bound be raised, the input
   shrunk, or the measurement made load-independent? Nothing is changed here, and the test and
   `docs/ORACLE.md` stay as they are.
@@ -384,6 +394,12 @@ moves out of this file only with a fix and that test in the repo.
   the string `MemoryError` anywhere in the pytest output as an environmental signal. Either one
   makes the run INVALID, with the evidence printed. It also records the power source
   (Kernel-Power 105, plus the last one before the run) and free memory before each pytest run.
+- **Which commits need their own per-commit verification (Haris's ruling, 2026-11-24; recorded
+  so it is not re-argued):** a DOCS-ONLY commit whose tree is fully contained in a verified
+  green commit needs no separate verification. A CODE commit ALWAYS gets its own, even when a
+  later green commit contains it, because a bisected code state has its own behaviour and a docs
+  state does not. First applied to 95be02a, a docs-only BACKLOG commit contained in 0ce2abe
+  (verified green alone): accepted as covered.
 
 ### Every config read allocates 32 MiB, whatever the file's size (medium; a REAL code finding; NOT fixed)
 - **Exposed by a machine condition, not by a test written for it:** the low-memory verification
