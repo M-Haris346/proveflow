@@ -246,11 +246,14 @@ moves out of this file only with a fix and that test in the repo.
     about 2 s here (measured while writing the tests, not a stored run), and it is not tuned
     on evidence from the real hang. Next occurrence: read `handshake_outstanding` and the
     sidecar's `handshake_ms`, and record them here.
+  - **Still THREE sightings (2026-11-24).** Two sessions of the same cassette shape in a run
+    made while the machine was in Modern Standby do NOT count: their cause is known. See "The
+    session timeout does not hold across Modern Standby".
   - The push of `e848da4` rests on `8d06675`'s green run over a superset of the same code plus
     CI on both OSes, NOT on a re-run of `e848da4`: a re-run that happened to be green, recorded
     as its verification, would be "intermittent, on record", which is refused.
 
-### Full-suite wall time swings about 30% on the same tree (OBSERVATION, unexplained; medium)
+### Full-suite wall time swings about 30% on the same tree (OBSERVATION; NOT standby; coincides with battery power; medium)
 - **Observed 2026-11-24, Windows, the dev machine, fixed order, Phase 7.0-7.2 working tree,
   three sequential full gates:** 834 s, 1075 s and 1107 s (the gate's wall seconds; pytest's
   own figure was 1104.18 s for the third). Between them only two test files' TEXT differed:
@@ -260,12 +263,103 @@ moves out of this file only with a fix and that test in the repo.
 - **What the new tests account for:** the 7 new test files take 141 s run alone, so they
   explain 141 s of the growth from 1715 tests (about 674-790 s before) to 1758. They do NOT
   explain the extra ~250 s of the second and third gates over the first.
-- **No theory is offered.** Nothing here was measured beyond the three numbers.
+- **POWER CHECK (retroactive, 2026-11-24, read from the event log only; nothing re-run).**
+  Each run's window was taken from the run's own log file (its NTFS creation and last-write
+  times), and each one matches, to the second, the session transcript's timestamp for the
+  launch and the completion notification. Gate 1 ran 01:38:04-01:52:00, gate 2
+  01:57:22-02:15:19, gate 3 02:23:40-02:42:09, the seed-20261124 audit 02:42:09-03:01:28 (it
+  started when gate 3 ended, in the same script; its log's creation time, 02:15:19, is kept
+  from the stopped attempt the file overwrote), and the 141 s timing run inside
+  03:08:27-03:12:31 (the transcript's launch and result).
+  - **No standby or sleep in any of them.** There is NO Kernel-Power 506, 507, 42 or 107 in any
+    window, or anywhere from 00:00 to 03:41:00. The log is complete over that stretch: its
+    oldest event is 2026-09-01, it holds 8 other System events between 01:38 and 03:12, and
+    the last such power event before it is 2026-11-23 23:29:14. So the variance is NOT
+    standby.
+  - **The POWER SOURCE changed in the gap where the timing jumped** (Kernel-Power 105,
+    AcOnline): AC from 2026-11-23 23:30:22, BATTERY from 2026-11-24 01:53:18, AC again from
+    13:33:14. Gate 1 (834 s) ran on AC. Gate 2 (1075 s), gate 3 (1107 s), the audit (1157 s)
+    and the 141 s timing run ran on BATTERY.
+  - **What that is and is not:** a coincidence in timing between battery power and the slow
+    runs, with ONE run on AC. It is NOT a measured cause: CPU frequency and the power plan were
+    not recorded, and no run on AC was repeated. It also means the 141 s for the new files was
+    measured on battery, so their cost on AC is unknown, probably lower. The observation stands
+    as "three runs on battery were 29-39% slower than the one on AC" until runs on the same
+    power source are compared.
 - **Related:** "Real-session tests failed under load" above, also unexplained timing
   behaviour on this machine. A 30% swing matters because the 600 s foreground limit has
   already been hit once. A slow run is not evidence of the handshake hang (that hang now
   ends a session as `handshake_timeout` with the stage named), and a fast one is not
   evidence against it.
+
+### The session timeout does not hold across Modern Standby (HIGH; a 7.3 PRECONDITION)
+- **OBSERVATION (2026-11-24, Windows laptop, the first per-commit verification of b395736,
+  ruled INVALID by Haris):** the machine was in Modern Standby (S0 low-power idle) from 03:41:45
+  to 13:33:14, apart from a few seconds at 09:30:49-09:30:54 (Kernel-Power events 506, 507, 42
+  and 107 in the System log). Two in-process proxy sessions were opened inside that window, and
+  both had the default `SESSION_TIMEOUT_S = 600.0`:
+  - `test_max_calls_counts_sandboxed_and_forwarded`: cassette created 03:47:09, five seconds
+    after standby began at 03:47:04. `session_end[session_timeout]` was written at 09:30:53,
+    when the machine left standby at 09:30:49: 5 h 43 m 44 s of wall clock for a 600 s
+    timeout.
+  - `test_per_call_timeout_returns_error_and_proxy_keeps_serving`: cassette created 09:30:54.
+    `session_end[session_timeout]` was written at 13:33:19, five seconds after the wake at
+    13:33:14.
+  - Both cassettes hold only `session_start` and `session_end`, with no `tools_advertised` and
+    no error event. The fake twin's log shows that the `initialize` request WAS received.
+  The 600 s did not hold on the wall clock: each session ended only once the machine woke.
+  Whether the process was frozen or the clock did not advance is NOT known; no theory is
+  offered. Also NOT measured: the 30 s handshake deadline (Phase 7.0) under standby. It is
+  set on the same clock and is assumed to behave the same until measured.
+- **This is NOT sighting 4.** "Real-session tests failed under load" stays at THREE sightings.
+  A cassette shaped like sighting 3 (session_start, session_end[session_timeout], nothing
+  between) under a KNOWN cause, the machine in standby, is a different thing from an
+  unexplained one, and must not be counted with them or cited to explain them.
+- **Why it matters for money:** a paid campaign on a laptop that enters standby would produce
+  spurious `session_timeout` trials. Those attempts are PAID and measure NOTHING.
+- **PRECONDITION for Phase 7.3 (a sequencing constraint, not a note):** before any paid
+  campaign, EITHER standby is disabled for the run, OR the campaign detects a power event and
+  marks the affected attempts INVALID instead of counting them. The mechanism is NOT designed
+  here; this records the requirement only.
+- **Verification has the same problem, and it is now guarded:** the per-commit verification
+  script (kept in the scratchpad, not committed) reported this standby run as a RED commit.
+  It now reads those four Kernel-Power events immediately before and after each pytest run. It
+  prints a run that spans any of them as INVALID, not red, and does not advance. It also flags
+  any run over three times the expected ~19 min as SUSPECT, even with no power event.
+- **The guard was still too narrow, and has grown (2026-11-24):** the next verification reported
+  1cfc7cc as RED on a run with no power event. The failure was a `MemoryError` in the same second
+  Windows logged low virtual memory (see "Every config read allocates 32 MiB" below), and Haris
+  ruled that run INVALID too. The script now also reads
+  Microsoft-Windows-Resource-Exhaustion-Detector event 2004 over each pytest window, and treats
+  the string `MemoryError` anywhere in the pytest output as an environmental signal. Either one
+  makes the run INVALID, with the evidence printed. It also records the power source
+  (Kernel-Power 105, plus the last one before the run) and free memory before each pytest run.
+
+### Every config read allocates 32 MiB, whatever the file's size (medium; a REAL code finding; NOT fixed)
+- **Exposed by a machine condition, not by a test written for it:** the low-memory verification
+  run of 1cfc7cc (2026-11-24, ruled INVALID) is what surfaced this. In that run,
+  `tests/mutation/test_group_mutation.py::test_dropping_a_member_is_refused` failed at its sanity
+  scan, before any mutation was applied, with `MemoryError` at `src/proveflow/discover/_io.py:32`,
+  `fh.read(MAX_CONFIG_BYTES + 1)`. The file being read was a small test fixture. The test's
+  `tmp_path` was created at 15:02:40.514. At 15:02:41 Windows logged
+  Resource-Exhaustion-Detector 2004: system commit charge 39,191,642,112 of 39,287,246,848
+  bytes (99.76%). 1cfc7cc touches neither that test nor `src/proveflow/discover/` (the diff
+  against 745388d on those paths is empty), so the commit is not the cause. The cost is in the
+  reader itself.
+- **Measured (2026-11-24, CPython 3.12.10, the project venv, `tracemalloc`):** on an 18-byte
+  file, `read(33554433)` returned 18 bytes with a traced peak of 33,563,338 bytes, while
+  `read(19)` peaked at 8,924 bytes. `MAX_CONFIG_BYTES` is `32 * 1024 * 1024` (`_io.py:19`). So
+  a 200-byte config costs a 32 MiB allocation, and discovery can fail under memory pressure for
+  no benefit.
+- **A second, related fact from the code:** `load_json_config` catches only `OSError`
+  (`_io.py:42`). A `MemoryError` therefore propagates out of discovery, although the module
+  docstring (`_io.py:1`) says loading "never crashes". The test above saw exactly that path.
+- **Intended shape (NOT designed further here):** stat the file first and refuse anything over
+  the cap. Then read only `st_size + 1`, and keep the read bounded. The cap is a SAFETY limit and
+  must stay enforced, including when the file grows between the stat and the read: a read that
+  returns more than `st_size` bytes must not be accepted silently.
+- **Needs its own commit with its own named test** (plus a mutation test, per the rules). It is
+  NOT fixed in the Phase 7.0-7.2 pass.
 
 ### R4 is computed only for runner trials (low; by design)
 - R4 needs the runner's transcript as the trial's clock. A cassette recorded by the
@@ -337,6 +431,11 @@ moves out of this file only with a fix and that test in the repo.
   The order really changed: collected with that seed, 0 of 1758 test ids are at their
   fixed-order position (the same set). The fixed-order gate on the same tree just before it:
   1756 passed, 2 skipped, 0 failed, 1104.18 s.
+- **Power-checked retroactively (2026-11-24, event log only):** the audit ran 02:42:09-03:01:28
+  and gate 3 ran 02:23:40-02:42:09. Neither window holds a Kernel-Power 506, 507, 42 or 107
+  event, so neither run spanned standby or sleep, and both greens stand. Both ran on BATTERY
+  (Kernel-Power 105, AcOnline=false from 01:53:18), which affects their wall times, not their
+  results ("Full-suite wall time swings").
 - **What it does NOT establish:** order independence in general. It is ONE permutation, and
   the plugin shuffles modules and the tests inside each module; it does not interleave tests
   across modules. It is Windows only; CI has not run an audit. It also says nothing about the
