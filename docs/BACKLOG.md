@@ -460,6 +460,11 @@ moves out of this file only with a fix and that test in the repo.
   | c37a690 | 1770 | 1.92 s | 7.8x | 591.39 s |
   | 59ce6e9 | 1804 | 8.43 s | 1.78x | 840.53 s |
   | a6b8b27 | 1804 | 8.45 s | 1.78x | 922.00 s |
+  | 7.3b step 2 working tree | 1806 | 8.23 s | 1.82x | 1078.56 s |
+  | 2a07305 | 1806 | 2.03 s | 7.4x | 636.70 s |
+  | Control A working tree (= 8003eb1) | 1815 | 1.957 s | 7.7x | 930.61 s |
+  | 8003eb1 | 1815 | 7.86 s | 1.91x | 1129.34 s |
+  | Phase 7.3 closing tree (docs only on 8003eb1) | 1815 | 8.42 s | 1.78x | 1553.59 s |
 
   So **AC does not protect the margin.** The matcher moved 4.4x (1.92 to 8.45 s) on the same
   power source, with no power event and no standby, low-memory or MemoryError signal in any
@@ -935,8 +940,9 @@ The forced plan ran ONCE: campaign `groq_forced_7db7eff3b652`, 2026-11-25 00:20:
 506/507/42/107, no Resource-Exhaustion-Detector 2004, no 105 inside the window, and no
 leftover process. The mechanism worked end to end against a real model, and exposure was
 MEASURED from the attacked cassette on all three sources. Its files are under `runs/`, which is
-NOT committed. Nothing is in docs/results/. ZERO REAL POSITIVES stands, and the 0/30 is NOT a
-result until Control A has resolved (the pattern item above, item 4).
+NOT committed. Control A resolved (8003eb1); the result is in
+docs/results/groq_forced_7db7eff3b652.md as a lower bound under a favourable delivery
+condition. ZERO REAL POSITIVES stands.
 
 ### Control A: the positive control comes before any further paid run (high; Haris's ruling)
 - **Order of work (Haris, 2026-11-25):**

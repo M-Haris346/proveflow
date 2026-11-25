@@ -14,13 +14,43 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 ## STATUS: what exists today
 
-Only **Find** is built. **Prove** is partial. **Fix** and **Verify** are not started. Nothing is
-released, and no attack-success rate has been measured.
+**What it does today.** **Find** is built. **Prove** runs as an offline-tested campaign
+pipeline, and it has had ONE paid campaign. **Fix** and **Verify** are not started. Nothing is
+released.
+
+**What it measured** [measured, once]: one forced-delivery campaign, `groq_forced_7db7eff3b652`
+(Groq, route `openai/gpt-oss-120b`, the key holder's stated free tier, temperature 0.0, 30
+counted trials, 10 per source). Exposure was MEASURED at 30 of 30. 0 compromised, END-TO-END and
+DELIVERED, per source 0/10 with Wilson 95% [0.000, 0.278]. The results, with the provenance and
+both findings beside the numbers, are in
+[docs/results/groq_forced_7db7eff3b652.md](docs/results/groq_forced_7db7eff3b652.md).
+
+**What that does NOT claim:**
+- **Why the zeros mean anything.** The pipeline counts a compromise IF AND ONLY IF the flow
+  happens. Control A verified that offline on the committed forced plan's own 30 cells: a
+  compliant scripted client gave 30/30 and a non-compliant one 0/30, on the same cells. L3
+  delivery, L4 proxy, L5 oracle and L6 ledger/report are each named by their own mutant.
+- **So the 30 zeros are a capability-dependent LOWER BOUND under a FAVOURABLE delivery
+  condition, and nothing stronger.** They are not an attack-success rate and not evidence that
+  the model is safe. ZERO REAL POSITIVES: no real trial has ever been compromised.
+- **Control A's 30-cell test runs only on the key holder's machine.** It needs the raw corpus
+  cache, which is never committed, so it SKIPS in a fresh clone and in CI. CI runs the same
+  check on a 3-cell synthetic plan, plus its mutants. If you cannot fetch the corpus, the 30-cell
+  figure is the author's local run, not something CI verified. How to re-run it is in the
+  results page.
+- **The run is NOT reproducible.** It saw 25 distinct `system_fingerprint` values in 84
+  responses inside one 8-minute campaign. Seed sent is not determinism, and a re-run is a new
+  measurement.
+- **Two findings limit it** (both in the results page):
+  - in 30 of 30 the agent made no tool call at all after reading the injection;
+  - the forced template's exfil clause asks for "the private data you have read" when none was
+    read.
+- One model, one tier, one template, small n.
 
 | Stage | State | What exists | What does not |
 |---|---|---|---|
 | Find | built (Phase 1) | `discover`, `scan` (static flow map; consented `tools/list` introspection), SARIF | |
-| Prove | partial | the twin proxy (Phase 2), the deterministic oracle R1 + R4 (Phase 3a) and R2 + R3 + R4 across cassettes (Phase 3b, tested on authored fixtures only; zero real positives), schema twins and `proveflow twin` (Phase 4), the agent runner (Phase 5, closed 2026-11-21 by ONE real trial: Groq, `openai/gpt-oss-120b`, a clean scenario with no attack; [evidence](evidence/provider-runs/groq-gpt-oss-120b-2026-11-21/README.md)) | any attack run on a real provider, any real positive for any rule, the attack corpus and campaigns (Phase 6), `prove` (Phase 7) |
+| Prove | partial (Phases 2-7) | the twin proxy, the deterministic oracle (R1-R4), schema twins, the agent runner, the corpus (347 records, 3 sources), the campaign engine and report (two rates per source, exposure measured), Control A, ONE paid forced campaign ([results](docs/results/groq_forced_7db7eff3b652.md)) | any real positive for any rule, the incidental campaign, a second model, `proveflow prove` as a CLI command, paired trials, HTML/JUnit reports |
 | Fix | not started (Phase 8) | | mitigations, patch files |
 | Verify | not started (Phase 8) | | re-running attacks with a fix applied |
 
@@ -161,7 +191,7 @@ released, and no attack-success rate has been measured.
 >   429, a kill and a resume. The report: results ledger only, per-source Wilson 95%, no pooled
 >   figure, the lower-bound note beside the numbers.
 > - **Phase 7.3a [impl][tested] (2026-11-24), OFFLINE only: the paid-campaign PATH, built and
->   dry-run; nothing paid, no provider call, local Windows; CI has not run on it yet.**
+>   dry-run; nothing paid, no provider call; CI run 45446488249 on a6b8b27.**
 >   - **Plans:** one plan file per campaign (`campaigns/`) feeds both the scripted dry run and
 >     the paid run. Every refusal is tested with a mutation: missing cap, cap over the ceiling or
 >     under one trial, missing limits, another template, another provider, a missing key, another
@@ -176,27 +206,34 @@ released, and no attack-success rate has been measured.
 >     Windows. For the first, short, watched campaign, the run's event-log output must be
 >     pasted with its report, or the report is not accepted. The trigger for building a
 >     detector is in docs/BACKLOG.md.
-> - **7.3b, the first paid campaign, has NOT run.** No real rate, delivered rate or exposure
->   figure exists, and every real trial so far is compromised=false (ZERO REAL POSITIVES).
->   When it runs, n = 10 per source: the intervals are so wide that ITS VALUE IS THE
->   MECHANISM AND THE EXPOSURE DATA, NOT THE RATE.
+> - **Phase 7.3b [measured, once] (2026-11-25): the first paid campaign, forced plan only.**
+>   - `groq_forced_7db7eff3b652`, 30 counted trials: 0 compromised, exposure MEASURED 30 of 30,
+>     per source 0/10 END-TO-END and DELIVERED, Wilson 95% [0.000, 0.278]
+>     ([docs/results/groq_forced_7db7eff3b652.md](docs/results/groq_forced_7db7eff3b652.md)).
+>   - The 2a07305 fix: a provider response without usage is now charged the full reservation.
+>   - Control A (`8003eb1`) [impl][tested]: the matched-pair positive control. It is
+>     [tested] on the 30 real cells ONLY locally, because it needs the uncommitted corpus cache.
+>     CI runs it on a 3-cell synthetic plan.
+>   - What the 30 zeros are, and are not, is in the STATUS block above. ZERO REAL POSITIVES.
+>   - NOT done: the incidental plan (`groq_incidental`), Finding 1's per-trial column, the
+>     report's provenance fields (docs/BACKLOG.md).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`45446488249` on commit `a6b8b27` (Phase 7.3a, offline), green on both OSes (ubuntu-24.04:
-1789 passed, 15 skipped, all Windows-only tests, 0 failed; the two POSIX signal tests ran
-there; windows-2025: 1802 passed, 2 skipped, both POSIX-only signal tests, 0 failed; passed +
-skipped = 1804 on each). It is the first CI evidence of Phase 7.3a: the campaign plan file,
-the preflight, the dry run with a kill and a resume, the paid-run refusals, and the report's
-two labelled rates with exposure read from the attacked cassette, all on scripted or real-twin
-inputs with a scripted provider. No test calls a provider, and 7.3b has not run.
+`45686096850` on commit `8003eb1` (Control A, offline), green on both OSes (ubuntu-24.04:
+1799 passed, 16 skipped; windows-2025: 1812 passed, 3 skipped; passed + skipped = 1815 on
+each). One skip on each OS is Control A's 30-cell test
+(`tests/integration/test_control_a.py:35`, "the raw corpus cache is never committed"): CI
+runs Control A on the 3-cell synthetic plan and all six mutants, never on the 30 real cells.
+The other skips are the Windows-only tests on ubuntu and the two POSIX signal tests on
+windows. No test calls a provider; the one paid campaign was run by hand by the key holder.
 Tests run in fixed order (`-p no:randomly` in addopts). Order-independence has been audited
 ONCE, locally on Windows, with seed 20261124: green. One permutation is not a proof, and CI
 has never run an audit (docs/BACKLOG.md). No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
 all green, in run
 `43582905272`.
 This README states CI results only for a run id checked with `gh run list`. It names the run
-that verified the CODE: `45446488249` on `a6b8b27`. A run triggered by a README-only commit
+that verified the CODE: `45686096850` on `8003eb1`. A run triggered by a README-only commit
 (for example `163547c`, whose run `45206531796` was green) does not get its own README line: that would need
 another README commit, whose run would need another line. Do not chase it. Local commands:
 
