@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import mcp_types
@@ -36,9 +36,23 @@ class Route:
     tool: mcp_types.Tool
 
 
+@dataclass
+class Gate:
+    """A twin mitigation as the agent applies it (Phase 8, built by ``runner.mitigation``).
+    ``hidden``: tool names the table no longer offers (M1); ``denied``: offered tool names whose
+    every call is denied (M3). ``blocked`` counts the calls either kept from any proxy. It rides
+    on the routing table (what the agent may call), so no agent signature changes."""
+
+    kind: str
+    hidden: frozenset[str] = field(default_factory=frozenset)
+    denied: frozenset[str] = field(default_factory=frozenset)
+    blocked: int = 0
+
+
 class RoutingTable:
-    def __init__(self, routes: Mapping[str, Route]) -> None:
+    def __init__(self, routes: Mapping[str, Route], gate: Gate | None = None) -> None:
         self._routes = dict(routes)
+        self.gate = gate
 
     @classmethod
     def build(cls, advertised: Sequence[tuple[str, str, Sequence[mcp_types.Tool]]]) -> RoutingTable:
@@ -65,6 +79,19 @@ class RoutingTable:
 
     def route(self, name: str) -> Route | None:
         return self._routes.get(name)
+
+    def without_server(self, server: str) -> RoutingTable:
+        """A copy without every tool ``server`` advertised (Phase 8, twin M1: the model is
+        never offered them, and a call to one takes the unknown-tool path)."""
+        return RoutingTable(
+            {n: r for n, r in self._routes.items() if r.server != server}, self.gate
+        )
+
+    def with_gate(self, gate: Gate) -> RoutingTable:
+        return RoutingTable(self._routes, gate)
+
+    def tools_of(self, server: str) -> frozenset[str]:
+        return frozenset(n for n, r in self._routes.items() if r.server == server)
 
     def openai_tools(self) -> list[dict[str, Any]]:
         """The union of every proxy's tools, in a stable order, as an OpenAI tools list."""

@@ -101,6 +101,43 @@ Example M3 patch content (ask before a sink tool runs):
 }
 ```
 
+**Re-read 2026-11-26 (Phase 8, before the M3 renderer was built).** The page was fetched (HTTP
+200) but read VERBATIM only in part (about 40k of 95k characters); the rest came as a
+model-extracted summary. What each item rests on:
+- Verbatim on 2026-11-26: "Ask rules prompt for confirmation when Claude tries to use the
+  specified tool."; "Rules are evaluated in order: deny, then ask, then allow."; "a matching
+  ask rule prompts even when a more specific allow rule also matches the same call."; "When
+  Claude Code loads a settings file, it skips any `mcp__` rule that has parentheses."; and the
+  local settings file `.claude/settings.local.json`.
+- NOT re-confirmed verbatim on 2026-11-26 (summary only): the rule forms
+  `mcp__<server>__*` and `mcp__<server>__<tool>`; the `.`/space -> `_` normalisation; the user
+  and project settings paths. These rest on the 2026-11-10 read above. The summary also says the
+  bare `mcp__<server>` form appears only as an example, not as a documented pattern, so the M3
+  renderer does NOT emit it: a server-level flow gets `mcp__<server>__*`.
+- No "ask" JSON example and no page date were found in the verbatim part.
+- **Why `mcp__<server>__*` and not the bare `mcp__<server>`:** the 2026-11-26 summary says the
+  bare form appears on the page only as an example, not as a documented pattern. The wildcard
+  form is listed as a pattern in both the 2026-11-10 read and the 2026-11-26 summary.
+- **OPEN, HIGH (docs/BACKLOG.md, Phase 8):** a full verbatim re-read of the MCP rule forms, by
+  hand, before M3 is relied on. Until then every M3 patch starts with a FOR REVIEW header
+  stating this.
+
+### JSON Patch and JSON Pointer (mitigation M1, Phase 8)
+
+Sources, read 2026-11-26: RFC 6901, "JavaScript Object Notation (JSON) Pointer", April 2013,
+<https://www.rfc-editor.org/rfc/rfc6901>; RFC 6902, "JavaScript Object Notation (JSON) Patch",
+April 2013, <https://www.rfc-editor.org/rfc/rfc6902>.
+
+- Escaping (RFC 6901 section 3): "'~' needs to be encoded as '~0' and '/' needs to be encoded as
+  '~1' when these characters appear in a reference token." Decoding (section 4) transforms '~1'
+  first, then '~0'. proveflow escapes '~' before '/' (`fix.pointer.escape`), the inverse order.
+- A patch document (RFC 6902 section 3): "A JSON Patch document is a JSON [RFC4627] document that
+  represents an array of objects." "Each object represents a single operation to be applied to
+  the target JSON document."
+- "remove" (RFC 6902 section 4.2): "The "remove" operation removes the value at the target
+  location." "The target location MUST exist for the operation to be successful." So an M1 patch
+  for an entry that is already gone fails, which is the intended loud failure.
+
 ## 3. Cursor
 
 Source: <https://cursor.com/docs/context/mcp>.

@@ -51,6 +51,17 @@ def small_plan(tmp_path: Path, per_source_n: int = 1) -> Path:
     return write_plan(tmp_path, plan_body(per_source_n=per_source_n))
 
 
+FS_PLAN = CAMPAIGNS / "groq_fs_forced.plan.json"
+
+
+def small_fs_plan(tmp_path: Path, per_source_n: int = 1) -> Path:
+    """The Phase 8 plan (fs_notes_exfil: the injection is in the file, the sink is fetch) with a
+    draw the synthetic corpus can serve."""
+    body: dict[str, Any] = json.loads(FS_PLAN.read_text(encoding="utf-8"))
+    body["per_source_n"] = per_source_n
+    return write_plan(tmp_path, body)
+
+
 def write_config(tmp_path: Path, **over: Any) -> Path:
     provider = {"name": "groq", "base_url": "https://api.groq.com/openai/v1",
                 "model": "openai/gpt-oss-120b", "api_key_env": KEY_ENV,
@@ -170,7 +181,8 @@ def assert_the_committed_plans_are_the_ruled_ones() -> None:
     from proveflow.runner.plan import load_plan, load_template
 
     fixture = REPO / "tests" / "fixtures" / "runner" / "cross_server_exfil" / "scenario.json"
-    for name, delivery in (("groq_forced", "forced"), ("groq_incidental", "incidental")):
+    for name, delivery in (("groq_forced", "forced"), ("groq_incidental", "incidental"),
+                           ("groq_fs_forced", "forced")):  # fmt: skip
         path = CAMPAIGNS / f"{name}.plan.json"
         plan = load_plan(path)
         template = load_template(plan, path)
@@ -191,6 +203,20 @@ def assert_the_committed_plans_are_the_ruled_ones() -> None:
     incidental = CAMPAIGNS / "templates" / "cross_server_exfil.json"
     if incidental.read_bytes() != fixture.read_bytes():
         raise AssertionError("the incidental template is not the cross_server_exfil fixture")
+    # Phase 8 (Haris's ruling): fs_notes_exfil is cross_server_exfil with EXACTLY four changes.
+    want = json.loads(incidental.read_text(encoding="utf-8"))
+    want["id"] = "fs_notes_exfil"
+    want["flow_id"] = ("filesystem->filesystem->fetch (exfil; forced delivery: the injection "
+                       "arrives in the file the task reads)")  # fmt: skip
+    want["attack_server"] = "filesystem"
+    fs = next(s for s in want["servers"] if s["name"] == "filesystem")
+    next(t for t in fs["tools"] if t["name"] == "read_text_file")["roles"].append(
+        {"role": "untrusted_source", "source": "override", "reason": "Phase 8 template (ruled): "
+         "the file's content is attacker-controlled", "weight": 1.0, "granularity": "tool",
+         "sink_severity": None})  # fmt: skip
+    got = json.loads((CAMPAIGNS / "templates" / "fs_notes_exfil.json").read_text(encoding="utf-8"))
+    if got != want:
+        raise AssertionError("fs_notes_exfil is not cross_server_exfil plus the four ruled changes")
 
 
 def assert_the_calibration_is_the_evidence_runs() -> None:

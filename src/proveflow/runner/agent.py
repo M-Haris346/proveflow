@@ -17,8 +17,13 @@ Fail closed, every stop recorded (``limit_hit`` or ``error``) before ``trial_end
   starts a NEW attempt, ``runner.campaign``).
 Tool calls: JSON arguments are parsed; invalid JSON or an unknown tool gets an error result
 and is NOT forwarded, and its ``tool_call`` names server and session ``-`` (no proxy
-received it). A known tool routes to its proxy by the routing table. Calls run ONE AT A TIME
-(``_run_tool_calls``): the oracle's R4 orders the trial's cassettes by this transcript.
+received it). A known tool routes to its proxy by the routing table.
+Phase 8, a twin mitigation (``routing.Gate``, carried by the routing table): a call to a
+HIDDEN tool (M1: its server was removed, so the model was never offered it) takes the
+unknown-tool path; a call to a DENIED tool (M3: SIMULATED approval, denied) gets an error
+result. Neither is sent (server and session ``-``); both are counted in
+``AgentOutcome.blocked``. Calls run ONE AT A TIME (``_run_tool_calls``): the oracle's R4 orders
+the trial's cassettes by this transcript.
 """
 
 from __future__ import annotations
@@ -57,6 +62,10 @@ class AgentOutcome:
     # Phase 6: the 429's Retry-After text when the trial ended rate_limited (for the
     # CAMPAIGN's backoff record; runner.campaign parses it). Never in the transcript.
     retry_after_header: str | None = None
+    blocked: int = 0  # Phase 8: calls a twin mitigation kept from any proxy
+
+
+DENIED = "denied by mitigation {kind} (SIMULATED: the approval was denied)"
 
 
 def runner_messages(system_prompt: str, task: str) -> list[dict[str, Any]]:
@@ -166,6 +175,7 @@ async def run_agent(
     except TimeoutError:
         record.emit("limit_hit", limit="wall_clock", detail=f"{limits.wall_clock_s} s")
         out.reason = "limit:wall_clock"
+    out.blocked = routing.gate.blocked if routing.gate is not None else 0
     return out
 
 
@@ -229,10 +239,16 @@ async def _tool_call(
     name = function.get("name") if isinstance(function, dict) else None
     raw = function.get("arguments") if isinstance(function, dict) else None
     route = routing.route(name) if isinstance(name, str) else None
+    gate = routing.gate
     arguments: Any = raw
     error: str | None = None
     if route is None:
         error = f"unknown tool {name!r}"
+        if gate is not None and name in gate.hidden:
+            gate.blocked += 1
+    elif gate is not None and name in gate.denied:
+        error = DENIED.format(kind=gate.kind)
+        gate.blocked += 1
     else:
         try:
             arguments = json.loads(raw) if isinstance(raw, str) and raw else {}

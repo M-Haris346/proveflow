@@ -136,6 +136,7 @@ def trial_attempt_for(
     limits: TrialLimits,
     temperature: float = 0.0,
     seed: int = 0,
+    mitigation: Any = None,
 ) -> AttemptFor:
     """Production ``attempt_for``: instantiate the cell's attack (the corpus payload VERBATIM
     plus its goal clause, corpus.instantiate) into ``template`` (a Scenario with an attack
@@ -145,7 +146,10 @@ def trial_attempt_for(
     trial ran with the DEFAULT caps whatever the campaign reserved with, a dropped parameter in
     the one path that spends money. Pass the SAME ``TrialLimits`` to ``run_engine``, which
     reserves with it; ``runner.paid`` builds both from one plan file. Pinned by
-    ``enginechecks.assert_the_trial_runs_with_the_campaigns_limits`` and its mutation."""
+    ``enginechecks.assert_the_trial_runs_with_the_campaigns_limits`` and its mutation.
+
+    ``mitigation`` (Phase 8, paired verify only): a ``TwinMitigation`` passed to every
+    ``run_trial``; None (the default, and every paid path) changes nothing."""
     from proveflow.core.attacks import Carrier as CarrierEnum
     from proveflow.corpus.instantiate import instantiate
     from proveflow.runner.scenario import Scenario
@@ -159,7 +163,8 @@ def trial_attempt_for(
             return await run_trial(scenario, trial_id=trial_id, llm=llm_for(cell.model),
                                    provider=provider_for(cell.model), temperature=temperature,
                                    seed=seed, out_dir=out_dir, twin_dir=twin_dir, budget=budget,
-                                   parent_env=parent_env, limits=limits)  # fmt: skip
+                                   parent_env=parent_env, limits=limits,
+                                   mitigation=mitigation)  # fmt: skip
 
         return attempt
 

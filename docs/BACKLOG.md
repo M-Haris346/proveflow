@@ -465,6 +465,7 @@ moves out of this file only with a fix and that test in the repo.
   | Control A working tree (= 8003eb1) | 1815 | 1.957 s | 7.7x | 930.61 s |
   | 8003eb1 | 1815 | 7.86 s | 1.91x | 1129.34 s |
   | Phase 7.3 closing tree (docs only on 8003eb1) | 1815 | 8.42 s | 1.78x | 1553.59 s |
+  | Phase 8 working tree (battery from 10 s in) | 1851 | 10.67 s | 1.41x | 2739.43 s |
 
   So **AC does not protect the margin.** The matcher moved 4.4x (1.92 to 8.45 s) on the same
   power source, with no power event and no standby, low-memory or MemoryError signal in any
@@ -1109,6 +1110,40 @@ condition. ZERO REAL POSITIVES stands.
   live `RunBudget`. Its docstring ("tokens actually recorded") is accurate as written. In a
   campaign, the live budget is rebuilt from the state file before every attempt
   (`campaign.py:524`), so it never reaches the ledger.
+
+## Phase 8: Fix + Verify (2026-11-26)
+
+### Claude Code's MCP rule syntax: a verbatim re-read by hand (OPEN; HIGH; Haris's ruling)
+- On the 2026-11-26 re-read only part of https://code.claude.com/docs/en/permissions was read
+  verbatim. The rule forms (`mcp__<server>__*`, `mcp__<server>__<tool>`) and the `.`/space
+  normalisation rest on the 2026-11-10 read (docs/CLIENT_CONFIGS.md section 2).
+- If that syntax is wrong, an M3 patch applies cleanly and protects nothing. Every M3 patch
+  therefore starts with a FOR REVIEW header (`fix.render.M3_SYNTAX_HEADER`).
+- Closed only by a full verbatim re-read of the MCP rule section, by hand, recorded in
+  CLIENT_CONFIGS with its date.
+
+### Find cannot discover file-borne injection (a Find-stage DEFECT; OPEN; HIGH; Haris's ruling)
+- **Missing:** the role classifier (`flows/roles.py`) never gives a filesystem READ tool the
+  `untrusted_source` role. The name rule pairs `READ_VERBS` with `UNTRUSTED_NOUNS`, and `file`
+  is in `PRIVATE_NOUNS`, not `UNTRUSTED_NOUNS`. So `read_text_file`, `read_file`,
+  `read_multiple_files`, `read_media_file` and the other filesystem read tools are
+  `private_data` only.
+- **Measured (2026-11-26, the shipped classifier on the tools of `fs_notes_exfil`, no
+  override):**
+  - every filesystem read tool is `private_data` only;
+  - the only source on either server is `fetch/fetch`;
+  - 104 flows, 0 of them with source `filesystem/read_text_file` and sink `fetch`.
+  - With the template's `override` evidence: 159 flows, 11 of them with that source and sink.
+  - So `fs_notes_exfil` needs the override, and `proveflow scan` reports none of these flows on
+    a real machine.
+- **Why it matters:** a file's contents are untrusted input, and file-borne injection is a main
+  real-world shape. A Find stage that misses it under-reports flows: the very class Phase 8
+  verifies.
+- **What would close it:**
+  - a CITED rationale for treating read tools of local content as `untrusted_source`;
+  - its effect re-measured on the labelled tool sets (docs/eval: dev and held-out), precision
+    AND recall per role, since widening a heuristic trades one for the other.
+- **NOT fixed now.** Phase 8 does not change the classifier.
 
 ## Tooling (2026-11-21)
 

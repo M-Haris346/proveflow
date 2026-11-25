@@ -61,6 +61,20 @@ def _read_simple(
     )
 
 
+# The top-level key that holds the server entries, per client (docs/CLIENT_CONFIGS.md sections
+# 1-5). ONE table, shared with ``proveflow.fix.pointer`` (Phase 8): the M1 patch must remove the
+# entry from exactly the key the reader read it from. ``--servers FILE`` is not here: its key
+# depends on the file's content (``read_explicit``).
+SERVERS_KEY: dict[ClientKind, str] = {
+    ClientKind.CLAUDE_DESKTOP: "mcpServers",
+    ClientKind.CLAUDE_CODE: "mcpServers",
+    ClientKind.CURSOR: "mcpServers",
+    ClientKind.VSCODE: "servers",
+    ClientKind.WINDSURF: "mcpServers",
+}
+CLAUDE_CODE_PROJECTS_KEY = "projects"  # local scope: projects["<path>"].mcpServers
+
+
 def read_claude_desktop(host: HostEnv) -> list[ClientConfig]:
     """Claude Desktop — CLIENT_CONFIGS.md §1 (Windows ``%APPDATA%\\Claude``, macOS
     ``~/Library/Application Support/Claude``, Linux ``~/.config/Claude``;
@@ -83,7 +97,7 @@ def read_claude_desktop(host: HostEnv) -> list[ClientConfig]:
     else:
         base = host.home / ".config" / "Claude"
     path = base / "claude_desktop_config.json"
-    return [_read_simple(kind, scope, path, key="mcpServers", url_keys=_URL)]
+    return [_read_simple(kind, scope, path, key=SERVERS_KEY[kind], url_keys=_URL)]
 
 
 def normalize_project_key(path_text: str, host: HostEnv) -> str:
@@ -116,8 +130,8 @@ def read_claude_code(host: HostEnv, project: Path) -> list[ClientConfig]:
     else:
         data = loaded.data
         servers, errors = parse_servers(
-            data.get("mcpServers"),
-            key_name="mcpServers",
+            data.get(SERVERS_KEY[kind]),
+            key_name=SERVERS_KEY[kind],
             url_keys=_URL,
             source_file=user_path,
             scope=ConfigScope.USER,
@@ -132,14 +146,14 @@ def read_claude_code(host: HostEnv, project: Path) -> list[ClientConfig]:
                 entry_errors=errors,
             )
         )
-        out.extend(_claude_code_local_scopes(data.get("projects"), user_path))
+        out.extend(_claude_code_local_scopes(data.get(CLAUDE_CODE_PROJECTS_KEY), user_path))
     project_path = project / ".mcp.json"
     out.append(
         _read_simple(
             kind,
             ConfigScope.PROJECT,
             project_path,
-            key="mcpServers",
+            key=SERVERS_KEY[kind],
             url_keys=_URL,
             project=str(project),
             var_syntax=VarSyntax.CLAUDE_CODE,
@@ -156,7 +170,7 @@ def _claude_code_local_scopes(projects: Any, user_path: Path) -> list[ClientConf
         entry = projects[key]
         if not isinstance(entry, dict):
             continue
-        mapping = entry.get("mcpServers")
+        mapping = entry.get(SERVERS_KEY[ClientKind.CLAUDE_CODE])
         if not mapping:
             continue
         servers, errors = parse_servers(
@@ -190,7 +204,7 @@ def read_cursor(host: HostEnv, project: Path) -> list[ClientConfig]:
             kind,
             ConfigScope.USER,
             host.home / ".cursor" / "mcp.json",
-            key="mcpServers",
+            key=SERVERS_KEY[kind],
             url_keys=_URL,
             var_syntax=VarSyntax.CURSOR,
         ),
@@ -198,7 +212,7 @@ def read_cursor(host: HostEnv, project: Path) -> list[ClientConfig]:
             kind,
             ConfigScope.PROJECT,
             project / ".cursor" / "mcp.json",
-            key="mcpServers",
+            key=SERVERS_KEY[kind],
             url_keys=_URL,
             project=str(project),
             var_syntax=VarSyntax.CURSOR,
@@ -219,7 +233,7 @@ def read_vscode(host: HostEnv, project: Path) -> list[ClientConfig]:
             kind,
             ConfigScope.PROJECT,
             project / ".vscode" / "mcp.json",
-            key="servers",
+            key=SERVERS_KEY[kind],
             url_keys=_URL,
             project=str(project),
             var_syntax=VarSyntax.VSCODE,
@@ -267,7 +281,7 @@ def read_windsurf(host: HostEnv) -> list[ClientConfig]:
                     kind,
                     scope,
                     new_path,
-                    key="mcpServers",
+                    key=SERVERS_KEY[kind],
                     url_keys=_URL_WINDSURF,
                     var_syntax=VarSyntax.WINDSURF,
                 )
@@ -279,7 +293,7 @@ def read_windsurf(host: HostEnv) -> list[ClientConfig]:
                 kind,
                 scope,
                 base / "devin" / "mcp_config.json",
-                key="mcpServers",
+                key=SERVERS_KEY[kind],
                 url_keys=_URL_WINDSURF,
                 var_syntax=VarSyntax.WINDSURF,
             )
@@ -290,7 +304,7 @@ def read_windsurf(host: HostEnv) -> list[ClientConfig]:
                 kind,
                 scope,
                 host.home / ".codeium" / legacy / "mcp_config.json",
-                key="mcpServers",
+                key=SERVERS_KEY[kind],
                 url_keys=_URL_WINDSURF,
                 var_syntax=VarSyntax.WINDSURF,
             )

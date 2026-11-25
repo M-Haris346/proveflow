@@ -160,7 +160,7 @@ def _engine_kwargs(plan: CampaignPlan, records: Any, campaign_id: str,
 
 
 def _attempt_for(plan: CampaignPlan, template: Scenario, out_dir: Path, llm: Any,
-                 provider: ProviderConfig) -> Any:  # fmt: skip
+                 provider: ProviderConfig, mitigation: Any = None) -> Any:  # fmt: skip
     from proveflow.proxy import policy
 
     twin_dir = policy.TWIN_ROOT / "campaign"
@@ -168,7 +168,7 @@ def _attempt_for(plan: CampaignPlan, template: Scenario, out_dir: Path, llm: Any
     return trial_attempt_for(template, llm_for=lambda model: llm, provider_for=lambda m: provider,
                              out_dir=out_dir, twin_dir=twin_dir, parent_env=dict(os.environ),
                              limits=plan.limits, temperature=plan.temperature,
-                             seed=plan.trial_seed)  # fmt: skip
+                             seed=plan.trial_seed, mitigation=mitigation)  # fmt: skip
 
 
 def _finish(plan: CampaignPlan, state: CampaignState, root: Path) -> str:

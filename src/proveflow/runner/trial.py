@@ -17,6 +17,14 @@ verified (F9) before any verdict; an invalid trial raises ``InvalidTrial``.
 twins (same seeds), fresh proxies, a NEW transcript. It requires the recorded timings
 sidecar for ``latency_ms`` and raises ``MissingTimings`` without it; a fabricated latency
 would be a published number nobody measured.
+
+Phase 8: ``run_trial(..., mitigation=...)`` applies a twin mitigation on the runner side
+(``runner.mitigation``). ``trial_start.parameters`` gains a ``"mitigation"`` key ONLY when one
+is set, so every unmitigated transcript is byte-identical to before. The verdict's
+``blocked_by_mitigation`` is set from the calls the mitigation kept from any proxy.
+``replay_trial`` REFUSES a mitigated transcript (``MitigatedReplayRefused``): replay of a
+mitigated trial is not built, and a replay that silently dropped the mitigation would diverge
+for a reason nobody named.
 """
 
 from __future__ import annotations
@@ -31,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from proveflow.config import ProviderConfig
+from proveflow.core.mitigations import TwinMitigation
 from proveflow.core.trials import Trial, Verdict
 from proveflow.oracle.rules import TrialFindings, evaluate_trial, to_verdict
 from proveflow.proxy.cassette import load_cassette
@@ -40,6 +49,8 @@ from proveflow.runner.agent import AgentOutcome, run_agent
 from proveflow.runner.harness import running_proxies
 from proveflow.runner.limits import RunBudget, TrialLimits
 from proveflow.runner.llm import ChatClient, ChatResponse, ReplayChatClient, ReplayMismatch
+from proveflow.runner.mitigation import apply as apply_mitigation
+from proveflow.runner.mitigation import record_of
 from proveflow.runner.routing import RoutingTable
 from proveflow.runner.scenario import Scenario
 from proveflow.runner.transcript import LlmResponse, TranscriptWriter, load_transcript
@@ -59,6 +70,10 @@ class MissingTimings(RuntimeError):
 
 class TimingsMismatch(RuntimeError):
     """The timings sidecar does not belong to this transcript."""
+
+
+class MitigatedReplayRefused(RuntimeError):
+    """The recorded transcript ran with a twin mitigation; its replay is not built."""
 
 
 @dataclass(frozen=True)
@@ -145,6 +160,7 @@ async def run_trial(
     parent_env: Mapping[str, str],
     limits: TrialLimits | None = None,
     recorded_latency_ms: float | None = None,
+    mitigation: TwinMitigation | None = None,
 ) -> TrialResult:
     limits = limits or TrialLimits()
     budget.reserve(limits)  # BudgetExhausted: nothing has been created
@@ -153,17 +169,20 @@ async def run_trial(
     transcript = out_dir / f"{trial_id}.transcript.jsonl"
     writer = TranscriptWriter(transcript)
     sent_seed = seed if provider.send_seed else None
+    parameters: dict[str, Any] = {
+        "temperature": temperature,
+        "max_tokens": limits.max_tokens_per_request,
+        "seed": seed,
+        "seed_sent": sent_seed is not None,
+    }
+    if mitigation is not None:  # ONLY when set: unmitigated transcripts stay byte-identical
+        parameters["mitigation"] = record_of(mitigation)
     writer.emit(
         "trial_start",
         trial_id=trial_id,
         scenario_id=scenario.id,
         provider={"name": provider.name, "base_url": provider.base_url, "model": provider.model},
-        parameters={
-            "temperature": temperature,
-            "max_tokens": limits.max_tokens_per_request,
-            "seed": seed,
-            "seed_sent": sent_seed is not None,
-        },
+        parameters=parameters,
         limits=limits.model_dump(mode="json"),
         budget_remaining=budget.remaining,
         servers=[{"server": name, "session_id": s.session_id} for name, s in sessions],
@@ -175,6 +194,8 @@ async def run_trial(
             routing = RoutingTable.build(
                 [(h.server, h.session.session_id, h.tools) for h in handles]
             )
+            if mitigation is not None:
+                routing = apply_mitigation(routing, mitigation)
             outcome = await run_agent(
                 llm=timed, model=provider.model, temperature=temperature, seed=sent_seed,
                 system_prompt=scenario.system_prompt, task=scenario.task, routing=routing,
@@ -212,6 +233,8 @@ async def run_trial(
                   model=provider.model, seed=seed)  # fmt: skip
     verdict = to_verdict(findings, utility=utility, tokens_in=outcome.tokens_in,
                          tokens_out=outcome.tokens_out, latency_ms=latency)  # fmt: skip
+    if outcome.blocked:
+        verdict = verdict.model_copy(update={"blocked_by_mitigation": True})
     return TrialResult(trial, outcome, findings, utility, scenario.utility.predicate, verdict,
                        transcript, cassettes, timings, recorded_latency_ms is not None)  # fmt: skip
 
@@ -245,7 +268,11 @@ async def replay_trial(
         recorded.name.replace(".transcript.jsonl", ".timings.json")
     )
     latency = read_timings(timings_path, recorded)  # fails loudly, never defaults to 0
-    replay = ReplayChatClient(load_transcript(recorded))
+    events = load_transcript(recorded)
+    start = events[0].model_dump(mode="json") if events else {}
+    if isinstance(start.get("parameters"), dict) and "mitigation" in start["parameters"]:
+        raise MitigatedReplayRefused(f"{recorded.name} ran with a twin mitigation")
+    replay = ReplayChatClient(events)
     result = await run_trial(
         scenario, trial_id=trial_id, llm=replay, provider=provider, temperature=temperature,
         seed=seed, out_dir=out_dir, twin_dir=twin_dir, budget=RunBudget(), parent_env=parent_env,
@@ -261,6 +288,7 @@ def sha256_file(path: Path) -> str:
 
 
 __all__: Sequence[str] = (
-    "InvalidTrial", "MissingTimings", "TimingsMismatch", "TrialResult", "read_timings",
+    "InvalidTrial", "MissingTimings", "MitigatedReplayRefused", "TimingsMismatch",
+    "TrialResult", "read_timings",
     "replay_trial", "run_trial",
 )  # fmt: skip

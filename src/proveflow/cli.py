@@ -479,15 +479,55 @@ def prove() -> None:
 
 
 @app.command()
-def fix() -> None:
-    """Write a mitigation patch for a flow (never applied automatically)."""
-    _stub("fix", "Phase 8")
+def fix(
+    from_scan: Annotated[
+        Path,
+        typer.Option(
+            "--from", help="A `proveflow scan --json` report.", exists=True, dir_okay=False
+        ),
+    ],
+    flow: Annotated[str, typer.Option("--flow", help="Flow id from the scan (F-<8 hex>).")],
+    mitigation: Annotated[
+        str,
+        typer.Option(
+            "--mitigation",
+            help="m1 (remove the sink's server) or m3 (Claude "
+            "Code approval rule). m2, m4, m5 and m6 are refused with a reason.",
+        ),
+    ],
+    out_dir: Annotated[
+        Path, typer.Option("--out-dir", help="Where the fix directory is created.", file_okay=False)
+    ],
+) -> None:
+    """Write a mitigation patch for a flow, for review. NEVER applied: proveflow never edits a
+    client config. The only input is the scan report; existing fixes are never overwritten."""
+    from pydantic import ValidationError
+
+    from proveflow.fix.render import FixRefused, load_scan, render
+    from proveflow.fix.writer import FixTargetExists, write_bundle
+    from proveflow.runner.verify import ALIASES
+
+    err = Console(stderr=True)
+    if mitigation not in ALIASES:
+        err.print(Text(f"error: --mitigation must be one of {sorted(ALIASES)}", style="red"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+    try:
+        bundle = render(load_scan(from_scan), flow, ALIASES[mitigation])
+        target = write_bundle(bundle, out_dir)
+    except (FixRefused, FixTargetExists, OSError, ValidationError) as exc:
+        err.print(Text(f"error: {exc}", style="red"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE) from None
+    err.print(Text(f"wrote {target} ({len(bundle.edits)} patch file(s), "
+                   f"{len(bundle.refused)} entry/entries not patched). NOT applied."))  # fmt: skip
 
 
-@app.command()
-def verify() -> None:
-    """Re-run the same attacks with a fix applied and measure the change."""
-    _stub("verify", "Phase 8")
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def verify(ctx: typer.Context) -> None:
+    """Paired verify against the CONTROL (offline, $0): the same arguments as
+    `python -m proveflow.runner.verify PLAN --mitigation m1|m3 --root DIR`."""
+    from proveflow.runner.verify import main
+
+    raise typer.Exit(code=main(list(ctx.args)))
 
 
 @app.command()

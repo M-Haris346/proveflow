@@ -15,7 +15,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 ## STATUS: what exists today
 
 **What it does today.** **Find** is built. **Prove** runs as an offline-tested campaign
-pipeline, and it has had ONE paid campaign. **Fix** and **Verify** are not started. Nothing is
+pipeline, and it has had ONE paid campaign. **Fix** writes M1 and M3 patch files for review
+(never applied). **Verify** runs offline against a scripted CONTROL, not a model. Nothing is
 released.
 
 **What it measured** [measured, once]: one forced-delivery campaign, `groq_forced_7db7eff3b652`
@@ -47,12 +48,35 @@ both findings beside the numbers, are in
     read.
 - One model, one tier, one template, small n.
 
+**What Phase 8 measured, against the CONTROL** [measured, offline, local]
+([docs/results/verify_control_groq_fs_forced_c254f660e358.md](docs/results/verify_control_groq_fs_forced_c254f660e358.md)).
+Paired verify reports three figures per row, each with its own denominator: rate, exposure and
+utility. A label names the mechanism, and only FLOW BLOCKED counts as a fix. Per source, 10
+cells each:
+- **M1** (remove the sink's server) on `fs_notes_exfil`, where the injection is in the file the
+  task reads and the sink is `fetch`. Rate 10/10 -> 0/10, exposure 10/10 -> 10/10, utility
+  10/10 -> 10/10: **FLOW BLOCKED**.
+- **M3** (Claude Code approval) on the same cells: the same figures, FLOW BLOCKED. **This means
+  the TWIN denied every call (simulated deny-all), NOT that a real Claude Code denied it.** M3's
+  patch is FOR REVIEW: its rule syntax was last verified 2026-11-10 and only partially
+  re-confirmed 2026-11-26. A wrong syntax would apply cleanly and protect nothing.
+- **M1** on the forced campaign's `fetch_summary_exfil`, where the attacked tool, the task's
+  tool and the sink are all `fetch`. Rate 10/10 -> 0/10, exposure 10/10 -> 0/10, utility 10/10
+  -> 0/10: **DELIVERY REMOVED + CAPABILITY REMOVED, NOT a fix**. The tool was turned off.
+
+What these do NOT show:
+- anything about a real model. The control is a scripted client that complies with the
+  injection;
+- that a patch works in a real client;
+- results from CI. The 30-cell runs need the uncommitted corpus cache and ran only on the key
+  holder's machine; CI checks the same labels on 3 synthetic cells.
+
 | Stage | State | What exists | What does not |
 |---|---|---|---|
 | Find | built (Phase 1) | `discover`, `scan` (static flow map; consented `tools/list` introspection), SARIF | |
 | Prove | partial (Phases 2-7) | the twin proxy, the deterministic oracle (R1-R4), schema twins, the agent runner, the corpus (347 records, 3 sources), the campaign engine and report (two rates per source, exposure measured), Control A, ONE paid forced campaign ([results](docs/results/groq_forced_7db7eff3b652.md)) | any real positive for any rule, the incidental campaign, a second model, `proveflow prove` as a CLI command, paired trials, HTML/JUnit reports |
-| Fix | not started (Phase 8) | | mitigations, patch files |
-| Verify | not started (Phase 8) | | re-running attacks with a fix applied |
+| Fix | M1 + M3 (Phase 8) | `proveflow fix --from SCAN --flow F-... --mitigation m1\|m3`: an RFC 6902 patch per config file (M1), a Claude Code `permissions.ask` fragment headed FOR REVIEW (M3); never applied | M2, M4, M5, M6 (each refused with its reason); any test against a real client |
+| Verify | against the CONTROL (Phase 8) | `python -m proveflow.runner.verify PLAN --mitigation m1\|m3`: paired halves on the same cells, rate + exposure + utility + label, exact McNemar | verify against a real model; Newcombe CI; a paid verify |
 
 ## Status in detail
 
@@ -217,6 +241,23 @@ both findings beside the numbers, are in
 >   - What the 30 zeros are, and are not, is in the STATUS block above. ZERO REAL POSITIVES.
 >   - NOT done: the incidental plan (`groq_incidental`), Finding 1's per-trial column, the
 >     report's provenance fields (docs/BACKLOG.md).
+> - **Phase 8 [impl][tested] (2026-11-26): Fix + Verify, measured against the CONTROL.**
+>   - Exit criterion, as Haris ruled it, because there is no confirmed flow from a real model:
+>     the control's rate falls to 0 on the new template's cells under FLOW BLOCKED, with
+>     exposure and utility retained. MET locally for M1 and M3 (STATUS block above).
+>   - `fix` [impl][tested on fixture configs]: M1 and M3 patch files for review, from the scan
+>     report only. A user config is never opened, and a safety test pins its bytes and mtime.
+>   - `verify` [impl][tested; measured on the control only]: paired halves, three figures and a
+>     mechanism label per row. A label edited by hand, or a report missing its CONTROL note, is
+>     refused by the report's own validator.
+>   - The new template `fs_notes_exfil` gets its source role by an OVERRIDE. That is a recorded
+>     Find-stage DEFECT with a BACKLOG item, not a template quirk: the classifier never calls a
+>     filesystem read tool an untrusted source, so `scan` cannot discover file-borne injection
+>     (measured: 0 such flows without the override, 11 with it). Its plan has never run against
+>     a provider.
+>   - NOT built: M2, M4, M5 (a scripted client never reads the prompt), M6; Newcombe CI; verify
+>     against a real model. OPEN, HIGH: a full verbatim re-read of Claude Code's MCP rule
+>     syntax, by hand, before M3 is relied on.
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:

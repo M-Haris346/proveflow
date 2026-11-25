@@ -26,10 +26,9 @@ def plain(output: str) -> str:
 
 STUBS = {
     "prove": "Phase 7",
-    "fix": "Phase 8",
-    "verify": "Phase 8",
     "replay": "Phase 7",
 }
+BUILT = ("fix", "verify")  # Phase 8: no longer stubs (tests/unit/test_fix_render.py et al.)
 
 
 def test_version() -> None:
@@ -41,7 +40,7 @@ def test_version() -> None:
 def test_help() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for command in [*STUBS, "discover", "scan"]:
+    for command in [*STUBS, *BUILT, "discover", "scan"]:
         assert command in result.output
 
 
