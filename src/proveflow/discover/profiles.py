@@ -8,6 +8,8 @@ docs/CLIENT_CONFIGS.md).
 
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from proveflow.core._base import FrozenModel
@@ -124,10 +126,78 @@ def build_profiles(configs: list[ClientConfig], host: HostEnv, project: Path) ->
     return partition_profiles(configs, host, project)[0]
 
 
+def canonical_path(path: Path) -> str:
+    """The FILE a path names, for comparing two configs: symlinks and junctions followed
+    (``os.path.realpath``), and case folded where the OS's paths are case-insensitive
+    (``os.path.normcase``: Windows; identity on POSIX)."""
+    return os.path.normcase(os.path.realpath(path))
+
+
+@dataclass(frozen=True)
+class Collapse:
+    """Two configs of the SAME client that read the same key of the same file: ``dropped`` was
+    read once, as ``kept``."""
+
+    kept: ClientConfig
+    dropped: ClientConfig
+    shared: str  # the canonical path they share
+
+
+def _read_key(c: ClientConfig) -> tuple[ClientKind, str, str | None]:
+    """Same client, same file, same key inside it. Claude Code's local scope reads
+    ``projects["<path>"].mcpServers`` of the file its user scope also reads, so its project key
+    is part of the identity: user and local are NOT the same read."""
+    if c.path is None:
+        raise ValueError("a config without a path has no file to compare")
+    return (c.kind, canonical_path(c.path), c.project if c.scope is ConfigScope.LOCAL else None)
+
+
+def collapse_same_file(configs: list[ClientConfig]) -> tuple[list[ClientConfig], list[Collapse]]:
+    """Phase 9 fix (measured defect, docs/BACKLOG.md): when the project directory IS the home
+    directory, Cursor's user and project scope name ONE file; keeping both counted every server
+    twice (4 entries, 16 flows where the file held 2 servers and 3 flows). Configs of the SAME
+    client kind that read the same key of the same file are read ONCE (the first, in discovery
+    order, is kept) and every collapse is returned so the report can SAY it. Different client
+    kinds are never collapsed: two clients reading one file are two agents."""
+    seen: dict[tuple[ClientKind, str, str | None], ClientConfig] = {}
+    kept: list[ClientConfig] = []
+    collapsed: list[Collapse] = []
+    for c in configs:
+        if c.status is ConfigStatus.FOUND and c.path is not None:
+            key = _read_key(c)
+            if key in seen:
+                collapsed.append(Collapse(seen[key], c, key[1]))
+                continue
+            seen[key] = c
+        kept.append(c)
+    return kept, collapsed
+
+
+def collapse_note(c: Collapse) -> str:
+    """The profile note that SAYS a collapse happened: which config was kept, which was
+    collapsed into it, and the file they share."""
+    kind = c.kept.kind.value
+    return (f"{kind} {c.dropped.scope.value} config {c.dropped.path} is the same file as {kind} "
+            f"{c.kept.scope.value} config {c.kept.path} ({c.shared}): read once, as the "
+            f"{c.kept.scope.value} entry; the {c.dropped.scope.value} entry was collapsed into "
+            "it")  # fmt: skip
+
+
+def _with_collapse_notes(profiles: list[Profile], collapses: list[Collapse]) -> list[Profile]:
+    out = []
+    for p in profiles:
+        notes = [collapse_note(c) for c in collapses if c.kept.kind is p.client]
+        out.append(p.model_copy(update={"notes": (*p.notes, *notes)}) if notes else p)
+    return out
+
+
 def partition_profiles(
     configs: list[ClientConfig], host: HostEnv, project: Path
 ) -> tuple[list[Profile], list[SkippedServer]]:
-    """Profiles plus every discovered server that is in none of them, with the reason."""
+    """Profiles plus every discovered server that is in none of them, with the reason.
+    Configs of one client that are the same file are read once (``collapse_same_file``), and
+    the profile's notes say so."""
+    configs, collapses = collapse_same_file(configs)
     profiles: list[Profile] = []
 
     for cfg in _found(configs, ClientKind.CLAUDE_DESKTOP):
@@ -148,7 +218,10 @@ def partition_profiles(
                     id=f"{name}@{project}",
                     client=kind,
                     members=_keep_all(specs),
-                    notes=("precedence between scopes not documented; all entries kept",)
+                    notes=(
+                        "precedence between scopes not documented; all entries kept, "
+                        "except where two scopes name the same file (reported as a collapse)",
+                    )
                     if kind is ClientKind.CURSOR
                     else (),
                 )
@@ -166,4 +239,5 @@ def partition_profiles(
                 )
 
     skipped.sort(key=lambda s: (s.client, str(s.source_file), s.scope, s.server_ref, s.reason))
+    profiles = _with_collapse_notes(profiles, collapses)
     return sorted(profiles, key=lambda p: p.id), skipped

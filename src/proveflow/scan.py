@@ -16,7 +16,7 @@ from proveflow.core.client import ClientConfig, ServerSpec, TransportKind
 from proveflow.core.flows import Flow
 from proveflow.core.tools import ToolSpec
 from proveflow.discover.hostenv import HostEnv
-from proveflow.discover.profiles import Profile, partition_profiles
+from proveflow.discover.profiles import Profile, collapse_same_file, partition_profiles
 from proveflow.flows.graph import apply_override, flows_for_profile, group_flows, rank_flows
 from proveflow.flows.pinning import check_pinning
 from proveflow.flows.roles import classify_tool
@@ -139,7 +139,9 @@ def build_scan(
     introspection: Mapping[str, IntrospectionResult] | None = None,
 ) -> ScanReport:
     profiles, skipped = partition_profiles(configs, host, project)
-    discovered = sum(len(c.servers) for c in configs)
+    # Counted on the SAME configs the profiles use: a file two scopes of one client name is
+    # one file (profiles.collapse_same_file), so its servers are discovered once.
+    discovered = sum(len(c.servers) for c in collapse_same_file(configs)[0])
     used: set[int] = set()
     profile_reports: list[ProfileReport] = []
     all_flows: list[Flow] = []
