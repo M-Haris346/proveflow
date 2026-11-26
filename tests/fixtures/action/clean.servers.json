@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "clock": {
+      "command": "python",
+      "args": ["tests/fixtures/fake_mcp_server.py", "--mode", "benign"]
+    }
+  }
+}

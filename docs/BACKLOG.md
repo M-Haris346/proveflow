@@ -466,6 +466,7 @@ moves out of this file only with a fix and that test in the repo.
   | 8003eb1 | 1815 | 7.86 s | 1.91x | 1129.34 s |
   | Phase 7.3 closing tree (docs only on 8003eb1) | 1815 | 8.42 s | 1.78x | 1553.59 s |
   | Phase 8 working tree (battery from 10 s in) | 1851 | 10.67 s | 1.41x | 2739.43 s |
+  | Phase 9 working tree (battery from 17 min in) | 1872 | 9.76 s | 1.54x | 2218.46 s |
 
   So **AC does not protect the margin.** The matcher moved 4.4x (1.92 to 8.45 s) on the same
   power source, with no power event and no standby, low-memory or MemoryError signal in any
@@ -1144,6 +1145,13 @@ condition. ZERO REAL POSITIVES stands.
   - its effect re-measured on the labelled tool sets (docs/eval: dev and held-out), precision
     AND recall per role, since widening a heuristic trades one for the other.
 - **NOT fixed now.** Phase 8 does not change the classifier.
+
+## Phase 9: Ship (2026-11-26)
+
+- **hatch-vcs: REJECTED, MEASURED (Haris's ruling).** In a scratch clone, an editable install reported `0.1.dev110+g29ddbcdb6` after two later commits and a `v0.1.0a1` tag; a provenance field that names the WRONG commit is worse than one that names nothing. The version stays STATIC.
+- **A machine-recorded commit field: DEFERRED (it bumps the cassette schema and the report models).** Shape, fixed now: the operator or CI sets an environment variable; the recorded value is that value with source `env`, or the literal `unknown` with source `unset`; never inferred, never guessed, `unknown` printed as unknown; the runbook sets it for a paid run, CI from the workflow's own sha.
+- **HIGH: config statuses in the scan JSON: DEFERRED (it bumps the ScanReport schema and its snapshot test).** A machine consumer must be able to tell an empty result from a failed read; the statuses go into the report, the schema version bumps, the snapshot test is regenerated. Today only the terminal names unread configs.
+- **`discover` prints a project identifier in clear (MEASURED, real run 2026-11-26).** On a real machine the "command / url" column showed a `--project-ref=<value>` in full. It is not a credential, and the printed limitation already says a short unflagged positional value can be missed, so no committed statement is false. But a user who shares a report does not expect a project identifier in it. Options for later: a `--redact-identifiers` flag, or a pattern for known project-ref shapes. Not fixed now; the repo commits no scan output.
 
 ## Tooling (2026-11-21)
 

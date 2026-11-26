@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "proveflow"
-version = "0.0.1.dev0"
+version = "0.1.0a1"  # STATIC (Phase 9 ruling): a package version, never a commit id
 description = "Find, prove, fix, and verify cross-server toxic flows in your MCP tool setup"
 readme = "README.md"
 license = { file = "LICENSE" }

@@ -221,6 +221,15 @@ def _introspect(
     )
 
 
+def _warn_unread(unread: list[str]) -> None:
+    """Without --fail-on the exit code is unchanged (Phase 9 ruling), but the terminal NAMES
+    every config the scan could not read, on stderr (so --json stays clean): an empty result
+    must never look like "I saw nothing" when it was "I could not look"."""
+    err = Console(stderr=True)
+    for line in unread:
+        err.print(Text(f"warning: could not read {line}", style="yellow"))
+
+
 @app.command()
 def scan(
     project: ProjectOpt = None,
@@ -281,13 +290,37 @@ def scan(
     no_cache_write: Annotated[
         bool, typer.Option("--no-cache-write", help="Compare with the cache but do not update it.")
     ] = False,
+    fail_on: Annotated[
+        str | None,
+        typer.Option(
+            "--fail-on",
+            help="CI gate: exit 3 if any flow of this class is found (exfil, action, leak or "
+            "any); 0 if none. An error is never a finding: an unreadable config exits 1.",
+        ),
+    ] = None,
 ) -> None:
     """Toxic-flow map of the discovered setup, no LLM.
 
     By default each stdio server is launched (after per-server consent) and asked for
     tools/list only - never tools/call. --no-launch never starts anything.
+
+    Exit codes:
+
+    0: clean (no flow matched --fail-on, or no --fail-on given).
+
+    1: a usage or config error proveflow detects; under --fail-on, ANY unreadable config.
+
+    2: Click's usage error, e.g. a missing --servers path (overloaded: stubs use it too).
+
+    3: findings (a flow matched --fail-on). An error is never 3.
     """
+    from proveflow import gate
+
     console = _console()
+    if fail_on is not None and fail_on not in gate.FAIL_ON:
+        console.print(Text(f"error: --fail-on must be one of {', '.join(gate.FAIL_ON)}",
+                           style="red"))  # fmt: skip
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
     protocol = protocol.lower()
     if protocol not in ("auto", "legacy"):
         console.print(Text("error: --protocol must be 'auto' or 'legacy'", style="red"))
@@ -305,6 +338,13 @@ def scan(
         raise typer.Exit(code=USAGE_ERROR_EXIT_CODE) from None
     host = _host()
     configs = run_discovery(host, proj, servers)
+    unread = gate.unread_configs(configs)
+    if fail_on is not None and unread:  # fail closed: a gate never passes an unread config
+        err = Console(stderr=True)
+        for line in unread:
+            err.print(Text(f"error: could not read {line}", style="red"))
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+    _warn_unread(unread)
     introspection = None
     if not no_launch:
         introspection = _introspect(
@@ -327,6 +367,13 @@ def scan(
         render_scan(report, console, limit)
         if sarif is not None:
             console.print(Text(f"SARIF written to {sarif}"))
+    if fail_on is not None:
+        hits = gate.matched(report.flows, fail_on)
+        if hits:
+            Console(stderr=True).print(
+                Text(gate.finding_message(hits, fail_on, introspected=not no_launch))
+            )
+            raise typer.Exit(code=gate.FINDINGS_EXIT_CODE)
 
 
 @app.command()

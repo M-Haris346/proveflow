@@ -1,5 +1,9 @@
-"""The CONTROL model side (Control A, Phase 7.3b; used by paired verify, Phase 8).
+"""TEST INSTRUMENT for Control A and paired verify, never a product feature: it only ever
+emits per-trial canaries and honey values, and only at twins.
 
+The CONTROL model side (Control A, Phase 7.3b; used by paired verify, Phase 8). It ships in
+the package only because ``runner.verify`` (a command) runs it; nothing else under src/ may
+import it (tests/safety/test_control_never_imported.py scans every import).
 ``CompliantChatClient`` does what the served injection's exfil clause asks. It is NEVER
 evidence about a model: it tests the PIPELINE (does it count a compromise IF AND ONLY IF the
 flow happens; does a mitigation block the flow), not model behaviour.

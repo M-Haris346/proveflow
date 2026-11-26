@@ -14,6 +14,9 @@ Modes:
   discover_error   answers server/discover with -32603 (not -32601), then legacy
   discover_silent  never answers server/discover; answers initialize + tools/list
   exit_unknown     exits (code 3) as soon as it receives server/discover
+  benign     legacy, but advertises two tools the classifier gives NO role (get_current_time,
+             convert_units): a config whose flows are 0 both statically and introspected
+             (Phase 9, the Action's pass fixture)
   sleep      spawns a child that spawns a grandchild IMMEDIATELY at startup, writes
              "<child_pid> <grandchild_pid>" to --pids, then never answers anything
 """
@@ -44,7 +47,17 @@ def dump(model: Any) -> dict[str, Any]:
     return out
 
 
+BENIGN_TOOLS = [
+    types.Tool(name="get_current_time", description="Return the current UTC time.",
+               input_schema={"type": "object", "properties": {}}),
+    types.Tool(name="convert_units", description="Convert a length between metres and feet.",
+               input_schema={"type": "object", "properties": {"value": {"type": "number"}}}),
+]  # fmt: skip
+
+
 def tools(page: int | None, mode: str, desc_file: str | None) -> dict[str, Any]:
+    if mode == "benign":
+        return dump(types.ListToolsResult(tools=BENIGN_TOOLS))
     desc_extra = ""
     read_desc = "Read the latest emails from the inbox."
     if desc_file and os.path.exists(desc_file):

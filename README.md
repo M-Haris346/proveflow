@@ -16,8 +16,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and
 
 **What it does today.** **Find** is built. **Prove** runs as an offline-tested campaign
 pipeline, and it has had ONE paid campaign. **Fix** writes M1 and M3 patch files for review
-(never applied). **Verify** runs offline against a scripted CONTROL, not a model. Nothing is
-released.
+(never applied). **Verify** runs offline against a scripted CONTROL, not a model. **Ship**
+(Phase 9): a static CI gate (`scan --fail-on`, a GitHub Action) and two installers. Nothing is
+released: version `0.1.0a1` is set, the tag is not yet created, and nothing is on PyPI.
 
 **What it measured** [measured, once]: one forced-delivery campaign, `groq_forced_7db7eff3b652`
 (Groq, route `openai/gpt-oss-120b`, the key holder's stated free tier, temperature 0.0, 30
@@ -76,7 +77,40 @@ What these do NOT show:
 | Find | built (Phase 1) | `discover`, `scan` (static flow map; consented `tools/list` introspection), SARIF | |
 | Prove | partial (Phases 2-7) | the twin proxy, the deterministic oracle (R1-R4), schema twins, the agent runner, the corpus (347 records, 3 sources), the campaign engine and report (two rates per source, exposure measured), Control A, ONE paid forced campaign ([results](docs/results/groq_forced_7db7eff3b652.md)) | any real positive for any rule, the incidental campaign, a second model, `proveflow prove` as a CLI command, paired trials, HTML/JUnit reports |
 | Fix | M1 + M3 (Phase 8) | `proveflow fix --from SCAN --flow F-... --mitigation m1\|m3`: an RFC 6902 patch per config file (M1), a Claude Code `permissions.ask` fragment headed FOR REVIEW (M3); never applied | M2, M4, M5, M6 (each refused with its reason); any test against a real client |
+| Ship | Phase 9 | `scan --fail-on` (exit 3 on findings, 1 on an unreadable config), the GitHub Action (`action/`, `--no-launch` only), `install/install.sh` + `install.ps1`, the tag/version check | a PyPI release; a CI run of the default (git tag) install route; the Action seeing introspected flows |
 | Verify | against the CONTROL (Phase 8) | `python -m proveflow.runner.verify PLAN --mitigation m1\|m3`: paired halves on the same cells, rate + exposure + utility + label, exact McNemar | verify against a real model; Newcombe CI; a paid verify |
+
+## Install, the Action, exit codes
+
+**Install** (docs/INSTALL.md has both routes, their sources, and what each does NOT prove):
+```sh
+sh install/install.sh                                          # Linux / macOS
+powershell -ExecutionPolicy ByPass -File install\install.ps1   # Windows
+```
+The default installs from the git tag `v0.1.0a1`, with dependencies from PyPI. The tag is
+created only after Phase 9 is green, so this route has not yet run in CI. The CI evidence is the
+wheelhouse route instead: every wheel, `--no-index`.
+
+**The GitHub Action** (`action/`, details and measured limits in action/README.md) runs `proveflow
+scan --no-launch --fail-on <class>` on a servers file and fails the job on a finding.
+- It classifies from the config only: server names and command lines, never tool lists.
+- Every flow it reports is THEORETICAL.
+- It MISSES flows an introspected scan finds. On the toxic fixture it sees 3 of 16 and misses
+  13 (measured by `tests/integration/test_action_blind_spot.py`). That is expected, not a bug.
+- It is a tripwire for a config change that introduces a dangerous server pairing, not a proof.
+
+**Exit codes of `proveflow scan`:**
+
+| code | meaning |
+|---|---|
+| 0 | clean: no flow matched `--fail-on` (or no `--fail-on` given) |
+| 1 | proveflow's own usage or config error, including, under `--fail-on`, ANY config it could not read: never a pass, never a finding |
+| 2 | Click's own usage error (e.g. a missing `--servers` path). It is currently OVERLOADED: the not-implemented stub commands also exit 2. Pre-existing, not introduced by Phase 9 |
+| 3 | findings: a flow matched `--fail-on` |
+
+Without `--fail-on`, the exit code is unchanged, but the terminal names every config it could
+not read, on stderr. The `--json` report does not carry config statuses yet (docs/BACKLOG.md,
+HIGH).
 
 ## Status in detail
 
@@ -258,23 +292,37 @@ What these do NOT show:
 >   - NOT built: M2, M4, M5 (a scripted client never reads the prompt), M6; Newcombe CI; verify
 >     against a real model. OPEN, HIGH: a full verbatim re-read of Claude Code's MCP rule
 >     syntax, by hand, before M3 is relied on.
+> - **Phase 9 [impl][tested] (2026-11-26): Ship. NOT closed until its CI evidence runs.**
+>   - `scan --fail-on` with the exit codes above. Each error status has its own named test, and
+>     a mutant that turns an error into 0 or 3 is killed.
+>   - The GitHub Action and its self-test workflow.
+>   - The installers, tested against a stub uv, plus the `Install evidence` workflow
+>     (wheelhouse route).
+>   - The STATIC version `0.1.0a1`, with a tag check. It is a package version, never a commit
+>     identifier. hatch-vcs was rejected as MEASURED (docs/BACKLOG.md).
+>   - Measured blind spot: the Action sees 3 of the toxic fixture's 16 introspected flows, and
+>     0 of the blind-spot fixture's 3.
+>   - NOT done: a PyPI release (ruled: not in Phase 9); the default install route in CI; the
+>     config-status field in the JSON (BACKLOG, HIGH).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`45686096850` on commit `8003eb1` (Control A, offline), green on both OSes (ubuntu-24.04:
-1799 passed, 16 skipped; windows-2025: 1812 passed, 3 skipped; passed + skipped = 1815 on
-each). One skip on each OS is Control A's 30-cell test
-(`tests/integration/test_control_a.py:35`, "the raw corpus cache is never committed"): CI
-runs Control A on the 3-cell synthetic plan and all six mutants, never on the 30 real cells.
-The other skips are the Windows-only tests on ubuntu and the two POSIX signal tests on
-windows. No test calls a provider; the one paid campaign was run by hand by the key holder.
+`45782507854` on commit `c9431cf` (Phase 8, offline), green on both OSes (ubuntu-24.04:
+1832 passed, 19 skipped; windows-2025: 1845 passed, 6 skipped; passed + skipped = 1851 on
+each). Four skips on each OS are the corpus-cache tests (Control A's two 30-cell tests and
+paired verify's two, "the raw corpus cache is never committed"): CI runs them on 3 synthetic
+cells, never on the 30 real cells. The other skips are the Windows-only tests on ubuntu and
+the two POSIX signal tests on windows. No test calls a provider; the one paid campaign was run
+by hand by the key holder. Phase 9 adds two workflows, `Action self-test` and `Install
+evidence`; neither has run yet as this line is written, and no result of theirs is claimed
+here.
 Tests run in fixed order (`-p no:randomly` in addopts). Order-independence has been audited
 ONCE, locally on Windows, with seed 20261124: green. One permutation is not a proof, and CI
 has never run an audit (docs/BACKLOG.md). No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
 all green, in run
 `43582905272`.
 This README states CI results only for a run id checked with `gh run list`. It names the run
-that verified the CODE: `45686096850` on `8003eb1`. A run triggered by a README-only commit
+that verified the CODE: `45782507854` on `c9431cf`. A run triggered by a README-only commit
 (for example `163547c`, whose run `45206531796` was green) does not get its own README line: that would need
 another README commit, whose run would need another line. Do not chase it. Local commands:
 

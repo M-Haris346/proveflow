@@ -1,0 +1,76 @@
+# Self-test of the proveflow scan gate (action/action.yml, Phase 9), on both OSes. A workflow
+# that only installs proves nothing (Haris's ruling), so this one RUNS the gate on the committed
+# fixtures and asserts what each must do (measured in action/README.md):
+#   clean       0 flows -> must PASS (exit 0)
+#   blind_spot  0 flows statically (3 if introspected) -> PASSES: the Action's measured blind spot
+#   toxic       3 flows -> must FAIL with exit 3 (a finding, not an error) and write SARIF
+# Actions pinned by full commit SHA, the same pins as ci.yml.
+name: Action self-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: clean fixture must pass
+        id: clean
+        uses: ./action
+        with:
+          servers: tests/fixtures/action/clean.servers.json
+          fail-on: any
+
+      - name: blind-spot fixture passes (the measured blind spot of --no-launch)
+        id: blind
+        uses: ./action
+        with:
+          servers: tests/fixtures/action/blind_spot.servers.json
+          fail-on: any
+
+      - name: toxic fixture must fail with a finding
+        id: toxic
+        continue-on-error: true
+        uses: ./action
+        with:
+          servers: tests/fixtures/action/toxic.servers.json
+          fail-on: exfil
+          sarif: toxic.sarif
+
+      - name: assert the gate did what each fixture requires
+        shell: bash
+        env:
+          CLEAN_EXIT: ${{ steps.clean.outputs.exit-code }}
+          CLEAN_FLOWS: ${{ steps.clean.outputs.flows }}
+          BLIND_EXIT: ${{ steps.blind.outputs.exit-code }}
+          BLIND_FLOWS: ${{ steps.blind.outputs.flows }}
+          TOXIC_OUTCOME: ${{ steps.toxic.outcome }}
+          TOXIC_EXIT: ${{ steps.toxic.outputs.exit-code }}
+          TOXIC_FLOWS: ${{ steps.toxic.outputs.flows }}
+        run: |
+          set -u
+          echo "clean: exit=$CLEAN_EXIT flows=$CLEAN_FLOWS"
+          echo "blind: exit=$BLIND_EXIT flows=$BLIND_FLOWS"
+          echo "toxic: outcome=$TOXIC_OUTCOME exit=$TOXIC_EXIT flows=$TOXIC_FLOWS"
+          fail=0
+          [ "$CLEAN_EXIT" = 0 ] && [ "$CLEAN_FLOWS" = 0 ] || { echo "FAIL: clean"; fail=1; }
+          [ "$BLIND_EXIT" = 0 ] && [ "$BLIND_FLOWS" = 0 ] || { echo "FAIL: blind spot"; fail=1; }
+          [ "$TOXIC_OUTCOME" = failure ] && [ "$TOXIC_EXIT" = 3 ] && [ "$TOXIC_FLOWS" = 3 ] \
+            || { echo "FAIL: toxic must be a finding (exit 3, 3 flows)"; fail=1; }
+          results=$(uv run --locked python -c "import json; print(sum(len(r['results']) for r in json.load(open('toxic.sarif', encoding='utf-8'))['runs']))")
+          echo "toxic SARIF results: $results"
+          [ "$results" -ge 1 ] || { echo "FAIL: no SARIF result"; fail=1; }
+          exit $fail

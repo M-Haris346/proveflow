@@ -1,0 +1,31 @@
+# A release tag must equal the STATIC package version (Phase 9, Haris's ruling, 2026-11-26):
+# scripts/check_tag_version.py compares the pushed tag's name with [project].version. No git is
+# needed and no git is called: github.ref_name is "the short ref name of the branch or tag that
+# triggered the workflow run" (GitHub docs, contexts). It reaches the script through an env
+# variable, never interpolated into the shell. Actions pinned by full commit SHA, as ci.yml.
+name: Tag matches version
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+
+      - name: The tag equals [project].version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: uv run --no-project python -I scripts/check_tag_version.py --tag "$TAG"

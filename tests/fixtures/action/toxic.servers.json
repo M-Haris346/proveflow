@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "python",
+      "args": ["tests/fixtures/fake_mcp_server.py", "--mode", "legacy"]
+    },
+    "filesystem": {
+      "command": "python",
+      "args": ["tests/fixtures/fake_mcp_server.py", "--mode", "legacy"]
+    }
+  }
+}

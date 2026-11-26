@@ -1,0 +1,120 @@
+# Installer evidence (Phase 9, Haris's rulings, 2026-11-26). The installers are checked by
+# RUNNING them; this job's output is the recorded evidence (docs/INSTALL.md cites the run).
+#
+# Route measured here: the WHEELHOUSE route. proveflow's wheel plus EVERY dependency wheel is
+# built in a `wheelhouse` job, then the real installer runs with --wheelhouse, i.e.
+# `uv tool install proveflow==<version> --find-links <wheelhouse> --no-index`: no package index
+# at all, so it proves the package and all its dependencies resolve from the wheelhouse alone.
+# It does NOT exercise the default (git tag) route, and the install job still downloads uv and
+# a Python interpreter from the network (stated in docs/INSTALL.md).
+#   linux:   a bare ubuntu:24.04 CONTAINER (no Python, no uv; only curl + ca-certificates added)
+#   windows: the windows-2025 HOSTED runner - NOT a clean machine (it ships Python and tools)
+# Actions pinned by full commit SHA (ci.yml's pins; download-artifact v8.0.2 resolved from the
+# GitHub API, 2026-11-26).
+name: Install evidence
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  wheelhouse:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Build the full wheelhouse (proveflow + every runtime dependency, hash-checked)
+        shell: bash
+        run: |
+          set -eu
+          uv build --wheel --out-dir wheelhouse
+          uv export --locked --no-dev --no-emit-project -o requirements.txt
+          uv run --no-project --with pip python -m pip download -r requirements.txt --only-binary :all: -d wheelhouse
+          ls -1 wheelhouse
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheelhouse-${{ matrix.os }}
+          path: wheelhouse/
+
+  linux:
+    needs: wheelhouse
+    runs-on: ubuntu-24.04
+    container: ubuntu:24.04
+    env:
+      UV_PYTHON: "3.12"  # the wheelhouse holds cp312 wheels (the job's own run verifies this)
+    steps:
+      - name: The container is bare (record it)
+        run: |
+          set -u
+          for t in python3 python uv curl; do printf '%s: ' "$t"; command -v "$t" || echo absent; done
+          apt-get update -qq && apt-get install -y -qq curl ca-certificates > /dev/null
+          echo "added: curl $(curl --version | head -n 1 | cut -d' ' -f2), ca-certificates"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheelhouse-ubuntu-24.04
+          path: wheelhouse
+      - name: install.sh --wheelhouse (no index)
+        run: |
+          set -eu
+          export PATH="$HOME/.local/bin:$PATH"
+          sh install/install.sh --wheelhouse "$PWD/wheelhouse"
+      - name: Assert the version and that scan --help exits 0
+        run: |
+          set -eu
+          export PATH="$HOME/.local/bin:$PATH"
+          want="proveflow $(sed -n 's/^version = "\([^"]*\)".*/\1/p' pyproject.toml)"
+          got="$(proveflow --version)"
+          echo "installed: $got (want: $want)"
+          [ "$got" = "$want" ]
+          proveflow scan --help > /dev/null
+          echo "proveflow scan --help: exit 0"
+
+  windows:
+    needs: wheelhouse
+    runs-on: windows-2025
+    env:
+      UV_PYTHON: "3.12"  # the wheelhouse holds cp312 wheels (the job's own run verifies this)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheelhouse-windows-2025
+          path: wheelhouse
+      - name: install.ps1 -Wheelhouse (no index); record whether uv was preinstalled
+        shell: powershell
+        run: |
+          $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
+          $pre = Get-Command uv -ErrorAction SilentlyContinue
+          if ($pre) { "uv preinstalled on the hosted image: $($pre.Source)" } else { "uv absent before the installer" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File install\install.ps1 -Wheelhouse "$PWD\wheelhouse"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assert the version and that scan --help exits 0
+        shell: powershell
+        run: |
+          $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
+          $line = Select-String -Path pyproject.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1
+          $want = "proveflow " + $line.Matches[0].Groups[1].Value
+          $got = (& proveflow --version | Out-String).Trim()
+          "installed: $got (want: $want)"
+          if ($got -ne $want) { exit 1 }
+          & proveflow scan --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "proveflow scan --help: exit 0"

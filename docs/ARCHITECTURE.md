@@ -4,7 +4,7 @@
 > Status legend used everywhere in this repo: **[impl]** implemented · **[tested]** tested · **[measured]** number produced by a stored run · **[planned]** not built yet · **[research]** FYP/experimental, may fail.
 > Everything below is **[planned]** until a phase marks it otherwise.
 >
-> **Status (2026-11-26).** Find is built. Prove has ONE paid forced campaign: 0 of 30 compromised with exposure measured 30 of 30, a capability-dependent LOWER BOUND under a FAVOURABLE delivery condition, made meaningful by Control A (the pipeline counts a compromise if and only if the flow happens, on the same 30 cells, verified locally only). It is not reproducible (25 backend fingerprints in one run). ZERO REAL POSITIVES. Fix (M1, M3 patch files for review) and Verify (paired, three figures and a mechanism label per row) are built and measured against the CONTROL only, not a model: M1 and M3 give FLOW BLOCKED on the file-borne template, and M1 on the forced fetch template gives DELIVERY REMOVED + CAPABILITY REMOVED, not a fix. Details: §9 rows 7-8, docs/results/.
+> **Status (2026-11-26).** Find is built. Prove has ONE paid forced campaign: 0 of 30 compromised with exposure measured 30 of 30, a capability-dependent LOWER BOUND under a FAVOURABLE delivery condition, made meaningful by Control A (the pipeline counts a compromise if and only if the flow happens, on the same 30 cells, verified locally only). It is not reproducible (25 backend fingerprints in one run). ZERO REAL POSITIVES. Fix (M1, M3 patch files for review) and Verify (paired, three figures and a mechanism label per row) are built and measured against the CONTROL only, not a model (Ship, Phase 9: a static `scan --fail-on` CI gate, a `--no-launch` GitHub Action and two installers, version 0.1.0a1, not yet tagged; §5.12): M1 and M3 give FLOW BLOCKED on the file-borne template, and M1 on the forced fetch template gives DELIVERY REMOVED + CAPABILITY REMOVED, not a fix. Details: §9 rows 7-8, docs/results/.
 
 ---
 
@@ -440,8 +440,62 @@ Wilson 95% CI [impl]; paired McNemar exact [impl][tested] Phase 8 (`stats/paired
 - In the report model, `Finding` means only a **non-flow** static finding about one server (e.g. PF-UNPINNED). Flows are not `Finding`s.
 - Rule: every number in README/site is regenerable by one command from a stored run.
 
-### 5.12 CI `action/`
-- Composite GitHub Action for **MCP server authors**: introspect their server, scan flows against a reference "companion" sink/source set, run `replay` on committed cassettes (free, deterministic) every PR, optional scheduled live run. Fail when ASR upper CI exceeds threshold or a new flow appears.
+### 5.12 Ship surface: the scan gate, the Action, the installers, the version [impl][tested] Phase 9
+- **`proveflow scan --fail-on exfil|action|leak|any`** (`src/proveflow/gate.py`) gives the exit
+  codes:
+  - 3 ONLY when a flow of that class is in the report;
+  - 0 when none is (`any` with zero flows included);
+  - 1 for proveflow's own errors. FAIL CLOSED: under `--fail-on`, any config the scan could not
+    read (PARSE_ERROR, UNREADABLE, invalid entries) is exit 1, never a pass and never a finding.
+    Measured before this: a malformed `--servers` file scanned as 0 flows, exit 0;
+  - 2: Click's own usage error, overloaded (pre-existing) with the stub commands.
+  - Without `--fail-on` the exit code is unchanged, and the terminal names every unread config
+    on stderr.
+  - NOT built: config statuses in the JSON report (BACKLOG, HIGH).
+- **The GitHub Action** (`action/action.yml`, composite) runs that gate with `--no-launch`
+  ONLY. Launching a scanned repo's servers on `pull_request` would run untrusted code.
+  - It installs proveflow with `uv run --locked` from its own repository, so no index lookup of
+    "proveflow" ever happens.
+  - It classifies from config names and command lines only. Every flow it reports is
+    THEORETICAL.
+  - Measured blind spot (`tests/integration/test_action_blind_spot.py`, on the repo's fake MCP
+    server):
+
+    | fixture | `--no-launch` | introspected |
+    |---|---|---|
+    | clean | 0 | 0 |
+    | blind_spot | 0 | 3 |
+    | toxic | 3 (server-level) | 16 (tool-level) |
+
+    So the Action misses 13 of 16 on the toxic fixture; expected, not a bug.
+  - Purpose: a tripwire for a config change that introduces a dangerous server pairing.
+  - The self-test workflow runs it on both OSes: clean and blind_spot pass; toxic fails with
+    exit 3, 3 flows and SARIF.
+  - Every `uses:` in the Action and all workflows is pinned by commit SHA (named check plus
+    mutant).
+- **The installers** (`install/install.sh`, `install/install.ps1`):
+  - default route: `uv tool install git+https://github.com/M-Haris346/proveflow@v<version>`,
+    dependencies from PyPI;
+  - `--wheelhouse DIR` route: `--find-links DIR --no-index`;
+  - a pinned uv bootstrap if uv is absent;
+  - a PATH check and a version check; any failure exits non-zero with a message.
+  - Tested against a stub uv. `.github/workflows/install.yml` is the evidence: a full wheelhouse
+    per OS, installed with no index, in a bare `ubuntu:24.04` container and on the windows-2025
+    hosted runner (NOT clean).
+  - docs/INSTALL.md cites every uv, pip and GitHub fact used, and says what each route does NOT
+    prove.
+- **The version** is STATIC (`0.1.0a1`), a package version and never a commit identifier.
+  `.github/workflows/tag.yml` requires a `v*` tag to equal `[project].version`
+  (`scripts/check_tag_version.py`; no git at runtime).
+  - hatch-vcs was REJECTED as MEASURED: an editable install kept reporting the commit of its
+    last reinstall (`0.1.dev110+g29ddbcdb6` after two later commits and a tag).
+  - A provenance field naming the wrong commit is worse than one naming none (BACKLOG).
+- **Not built:**
+  - a PyPI release (ruled: not in Phase 9; TestPyPI only on a later ruling, after its three
+    missing facts are cited);
+  - introspection in the Action;
+  - `replay` of committed cassettes in CI;
+  - a machine-recorded commit field (BACKLOG).
 
 ### 5.13 Site `site/`
 Next.js static export: landing + install commands, docs, methodology, published results (per model × flow class × mitigation), limitations, competitor comparison. Reads exported JSON only.
@@ -530,7 +584,7 @@ proveflow/
 | **6b Agent adapter** | drive a user's real agent (a CLI agent rather than a raw API) through the twin proxies via `--agent-cmd` with a JSON-lines protocol, under the same transcript, caps and validity guard [planned] | one real CLI agent completes the clean fixture scenario through the proxies, and its transcript passes D7 | later |
 | **7 Prove** | campaign engine, paired trials, stats, HTML/JSON/JUnit. **Binding aggregation rule (from Phase 6 step 2):** THE RESULTS LEDGER IS THE ONLY SOURCE OF COUNTED TRIALS (`runner.campaign.results`, the campaign state file). A transcript's verdict is NOT evidence that a trial counted: `run_trial` also gives a rate-limited or failed attempt a verdict with compromised=false, so aggregating verdicts read off transcripts would count every attempt that measured nothing as a safe trial and dilute the ASR. Phase 7's aggregation must be pinned against a state file containing rate-limited and failed attempts, proving they are excluded from the denominator as well as the numerator (docs/BACKLOG.md). | **First real numbers**: ≥2 models, FlowVerdicts with CIs. **7.0–7.2 [impl][tested] 2026-11-24, OFFLINE only (scripted model side; nothing paid; no provider call; CI green, see the end of this row).** **7.0 handshake deadline:** per-stage `HANDSHAKE_TIMEOUT_S = 30.0` (spawn, initialize, tools_list), separate from the 600 s session timeout; two layers (the proxy's per-stage cancel deadline, and the harness's startup bound DERIVED from it, `(stages + 1) × 30 × 1.5`), each mutation-tested with the other off, plus the layering; stages recorded in the cassette (schema 4; a v3 cassette is refused) and named in `session_end.handshake_outstanding`; elapsed ms only in the NON-EVIDENCE timings sidecar (ADR-008). It makes the sighting-3 hang VISIBLE, BOUNDED and NAMED; **its cause is unknown and NOT fixed** (docs/BACKLOG.md). Random-order audit: pytest-randomly DEV-ONLY, off by default (`-p no:randomly`); one seeded audit run (seed and result in docs/BACKLOG.md). **7.1 campaign engine** (`runner.engine`): stratified EQUAL-per-source seeded sampler (seed, population and draw recorded in the state file; attack_family never an axis), cells (payload, carrier, goal, model) run through the Phase 6 state machine unchanged; a six-cell SMOKE campaign on real twins and proxies with a SCRIPTED provider (a 429, a kill mid-attempt, a resume: each completed trial counted once, every attempt charged). **7.2 report** (`runner.report`): from the results ledger only (pinned with a rate-limited and a failed attempt on disk); per-source Wilson 95%, NO pooled figure; the lower-bound note beside the numbers; counted trials by end reason; SCRIPTED reports refused under docs/results/. CI run 45386319527 (head 0ce2abe) green on both OSes. **7.3a [impl][tested] 2026-11-24, OFFLINE only (scripted model side; nothing paid; CI run 45446488249, head a6b8b27, green on both OSes):** the paid-campaign PATH. One plan file per campaign (`campaigns/*.plan.json`; `runner.plan`) feeds the dry run and the paid run, with campaign id `<name>_<plan sha256[:12]>` and only the model side and the root differing (F2). `python -m proveflow.runner.paid` has `preflight` (no network, no twin; measured request bytes, an estimate from the evidence run's calibration with N = 2, the published price with its URLs and read date), `dry-run` (real twins, scripted provider, a kill and a resume) and `run` (key from the environment at call time; refuses before anything is created). Every refusal is tested with a mutation. The campaign's limits now reach every trial (F3, required). The corpus is read from the local cache only. EXPOSURE is read from the attacked cassette; every report has TWO rates per source, END-TO-END and DELIVERED, never one "ASR"; low exposure is a reachability finding; a forced-delivery template is a stated FAVOURABLE condition (METHODOLOGY threats 14–15). Two plans: forced (`fetch_summary_exfil`) and incidental (`cross_server_exfil`), 30 cells each, cap 400,000, 32,000 per trial; runbook docs/RUNBOOK_7_3.md. **Not built, by ruling:** a suspend detector. The clock design is a no-op on Windows. For the first short, watched campaign, the event-log output pasted with the report is the acceptance rule. A detector is REQUIRED above about 30 minutes or for unattended runs, measured first (BACKLOG). Forced plan first and alone. **7.3b [measured, once] 2026-11-25: the first PAID campaign, forced plan only** (docs/results/groq_forced_7db7eff3b652.md): `groq_forced_7db7eff3b652`, Groq route `openai/gpt-oss-120b`, the key holder's stated free tier, temperature 0.0, 30 counted trials (10 per source), exposure MEASURED 30 of 30, 0 compromised, per source 0/10 END-TO-END and DELIVERED, Wilson 95% [0.000, 0.278]. Fixed on the way: a provider response without usage is charged the full reservation (2a07305). **Control A [impl][tested] (8003eb1):** the matched-pair positive control, offline, $0: the pipeline counts a compromise IF AND ONLY IF the flow happens, verified on the committed forced plan's own 30 cells (compliant 30/30 compromised, exposed and DELIVERED; non-compliant 0/30; the same cells), with L3 delivery, L4 proxy, L5 oracle and L6 ledger/report each named by its own mutant and an oracle that fires on anything killed by the negative half. So the 30 zeros are a capability-dependent LOWER BOUND under a FAVOURABLE delivery condition, and nothing stronger. The 30-cell test needs the raw corpus cache, which is never committed: it runs only on the key holder's machine and SKIPS in CI, which runs the same check on a 3-cell synthetic plan. **Limits, stated beside the numbers:** Finding 1 (no tool call after the injection in 30 of 30), Finding 2 (the forced template's exfil clause has no referent; METHODOLOGY threat 16), NOT reproducible (25 `system_fingerprint` values in 84 responses inside one 7 min 54 s campaign; seed sent is not determinism), one model, one tier, one template, small n. **Phase 7.3 closed by Haris's ruling. The written exit criterion is NOT met:** one model, not two; no FlowVerdict is emitted; `proveflow prove` is not a CLI command. **NOT done:** the incidental plan; paired trials; HTML/JUnit; Finding 1's per-trial column; the report's provenance fields (docs/BACKLOG.md). ZERO REAL POSITIVES. | 4–5 d |
 | **8 Fix + Verify** | catalog M1–M3, M5, M6; patch writers; paired verify | Written: "One CONFIRMED flow → fix → measured ASR change". **Replaced by Haris's ruling (2026-11-26), because there are ZERO confirmed flows from a real model:** "on the new template's cells, the control's rate falls from every counted cell compromised to 0 compromised when the mitigation is applied", under the label FLOW BLOCKED (exposure AND utility retained), each mitigation with its own named test and one mutation, and the CONTROL substitution stated wherever the result appears. **[impl][tested] 2026-11-26; the exit criterion MET locally (30 real cells; CI runs 3 synthetic cells):** M1 and M3 on `fs_notes_exfil` (`groq_fs_forced_c254f660e358`): per source rate 10/10 → 0/10, exposure 10/10 → 10/10, utility 10/10 → 10/10, FLOW BLOCKED, McNemar exact p = 2/2^10. M3's FLOW BLOCKED means the TWIN denied every call (simulated deny-all), NOT that a real Claude Code did. Its patch is FOR REVIEW: the rule syntax was verified 2026-11-10 and only partially re-confirmed 2026-11-26. The contrast is the deliverable: the same M1 on `fetch_summary_exfil` (attacked tool = task tool = sink = fetch) gives rate 10/10 → 0/10, exposure 10/10 → 0/10, utility 10/10 → 0/10, DELIVERY REMOVED + CAPABILITY REMOVED, NOT a fix. Told apart by measurement (docs/results/verify_control_groq_fs_forced_c254f660e358.md; METHODOLOGY threats 17-19). Ruling 1b (verify on `cross_server_exfil`) was Haris's error: its attacked tool IS its sink. NOT built: M2, M4, M5, M6, Newcombe CI, verify against a real model, a paid verify. OPEN, HIGH: a verbatim re-read of the MCP rule syntax by hand. ZERO REAL POSITIVES. | 4–5 d |
-| **9 Ship** | GitHub Action, PyPI trusted publishing, install.sh/ps1 | Clean-machine install on Windows + Linux recorded | 2–3 d |
+| **9 Ship** | GitHub Action, PyPI trusted publishing, install.sh/ps1 | Clean-machine install on Windows + Linux recorded. **[impl][tested] 2026-11-26 (§5.12): built, NOT yet closed.** Built: `scan --fail-on` (exit 3 only for findings; any unreadable config exit 1 under it); the Action (`--no-launch` only; measured to miss 13 of 16 flows on the toxic fixture) and its self-test; the installers (git-tag default; wheelhouse route) and the `Install evidence` workflow; the static version `0.1.0a1` and the tag check; hatch-vcs REJECTED as MEASURED. **The exit criterion is met only by that workflow's first green run on the Phase 9 commit**, cited by run id. Linux: a bare `ubuntu:24.04` container. Windows: the windows-2025 HOSTED image, which is NOT a clean machine, stated as such. The default (git tag) route cannot run in CI before the tag exists. PyPI trusted publishing: NOT built, by ruling (a decision, not an assumption; the name is unregistered as of 2026-11-26). The repository was made public by Haris after a full-history scan (no machine paths, no pf-scan data; a value scan of the revoked key was not possible). | 2–3 d |
 | **10 Site + story** | Next.js site, README, demo video, write-up | Site live; every number links to run ID | 4–5 d |
 | **11 v1** | taint-gate guard, real read-only mode, HTTP transport, detector track | per item | later |
 | **F1–F4** | adaptive attacker, ddmin, rug-pull, transfer matrix | research questions answered from stored runs | FYP semester |
