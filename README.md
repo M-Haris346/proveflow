@@ -292,7 +292,8 @@ HIGH).
 >   - NOT built: M2, M4, M5 (a scripted client never reads the prompt), M6; Newcombe CI; verify
 >     against a real model. OPEN, HIGH: a full verbatim re-read of Claude Code's MCP rule
 >     syntax, by hand, before M3 is relied on.
-> - **Phase 9 [impl][tested] (2026-11-26): Ship. NOT closed until its CI evidence runs.**
+> - **Phase 9 [impl][tested] (2026-11-26): Ship. CLOSED 2026-11-27 by Install evidence run
+>   `45880776283` (see the CI paragraph below).**
 >   - `scan --fail-on` with the exit codes above. Each error status has its own named test, and
 >     a mutant that turns an error into 0 or 3 is killed.
 >   - The GitHub Action and its self-test workflow.
@@ -307,22 +308,28 @@ HIGH).
 > - Everything else is [planned]. No releases.
 
 CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`45782507854` on commit `c9431cf` (Phase 8, offline), green on both OSes (ubuntu-24.04:
-1832 passed, 19 skipped; windows-2025: 1845 passed, 6 skipped; passed + skipped = 1851 on
+`45880776353` on commit `7e9f932` (Phase 9, offline), green on both OSes (ubuntu-24.04:
+1851 passed, 21 skipped; windows-2025: 1866 passed, 6 skipped; passed + skipped = 1872 on
 each). Four skips on each OS are the corpus-cache tests (Control A's two 30-cell tests and
 paired verify's two, "the raw corpus cache is never committed"): CI runs them on 3 synthetic
-cells, never on the 30 real cells. The other skips are the Windows-only tests on ubuntu and
-the two POSIX signal tests on windows. No test calls a provider; the one paid campaign was run
-by hand by the key holder. Phase 9 adds two workflows, `Action self-test` and `Install
-evidence`; neither has run yet as this line is written, and no result of theirs is claimed
-here.
+cells, never on the 30 real cells. The other skips are the Windows-only tests on ubuntu
+(including the two `install.ps1` tests) and the two POSIX signal tests on windows. No test
+calls a provider; the one paid campaign was run by hand by the key holder.
+Install evidence (`.github/workflows/install.yml`): run `45880776283` on `7e9f932`, green, its
+first run. A full wheelhouse (36 wheels on ubuntu, 38 on windows) was installed by the real
+installer with `--no-index`, in a bare `ubuntu:24.04` container (`python3`, `python`, `uv`,
+`curl` absent) and on the windows-2025 HOSTED runner (not a clean machine). Both bootstrapped
+uv 0.13.10, matched `proveflow 0.1.0a1`, and exited 0 on `scan --help`. It does not cover the
+default git-tag route (no tag yet), and uv and a Python interpreter were still downloaded.
+Action self-test (`.github/workflows/action.yml`): run `45880776237` on `7e9f932`, green on
+both OSes: clean 0 flows, blind spot 0 flows, toxic exit 3 with 3 flows and 3 SARIF results.
 Tests run in fixed order (`-p no:randomly` in addopts). Order-independence has been audited
 ONCE, locally on Windows, with seed 20261124: green. One permutation is not a proof, and CI
 has never run an audit (docs/BACKLOG.md). No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
 all green, in run
 `43582905272`.
 This README states CI results only for a run id checked with `gh run list`. It names the run
-that verified the CODE: `45782507854` on `c9431cf`. A run triggered by a README-only commit
+that verified the CODE: `45880776353` on `7e9f932`. A run triggered by a README-only commit
 (for example `163547c`, whose run `45206531796` was green) does not get its own README line: that would need
 another README commit, whose run would need another line. Do not chase it. Local commands:
 
