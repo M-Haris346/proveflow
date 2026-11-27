@@ -34,6 +34,9 @@ out/
 # the tree that step 0.4 requires clean. Root only: tests write their own under tmp_path.
 /proveflow.toml
 
+# private drafts (LinkedIn post, video script, interview notes): never committed
+/incoming/
+
 # OS / editor
 .DS_Store
 Thumbs.db

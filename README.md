@@ -2,348 +2,324 @@
 
 **Find → Prove → Fix → Verify** for the MCP tool setup you actually run.
 
-Your agent is connected to many MCP servers. Some combinations let an attacker who controls
-*one* tool output steal data through *another* tool. Static scanners say "this might be risky" —
-proveflow is being built to *prove* it: discover your installed MCP setup, map toxic flows inside
-each agent profile (exfil, action, or informational leak; cross-server flows ranked first), attack
-each flow in a safe schema twin with real-world injection payloads, let a
-deterministic oracle decide whether the agent was hijacked, then propose a fix and measure the
-attack-success-rate change after applying it.
+An agent connected to several MCP servers holds two capabilities at once: it reads content it
+does not control, and it can act. A tool that fetches a page and a tool that writes a file, in
+one session, is a path — text in that page can carry private data out through the second tool.
+You approved both tools. Nobody approved the combination.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, scope, and phase plan.
+```mermaid
+flowchart LR
+  A["<b>Untrusted source</b><br/>fetch a web page,<br/>read an issue, read a file"]
+  B["<b>The agent</b><br/>one session<br/>both tools approved separately"]
+  C["<b>Private data</b><br/>your files, your database,<br/>your messages"]
+  D["<b>Sink</b><br/>write a file, send a request,<br/>post a message"]
 
-## STATUS: what exists today
+  A -->|"tool result"| B
+  C -->|"tool result"| B
+  B -->|"tool call"| D
 
-**What it does today.** **Find** is built. **Prove** runs as an offline-tested campaign
-pipeline, and it has had ONE paid campaign. **Fix** writes M1 and M3 patch files for review
-(never applied). **Verify** runs offline against a scripted CONTROL, not a model. **Ship**
-(Phase 9): a static CI gate (`scan --fail-on`, a GitHub Action) and two installers. Nothing is
-released: version `0.1.0a1` is set, the tag is not yet created, and nothing is on PyPI.
+  A -. "<b>1.</b> text in that result<br/>instructs the model" .-> B
+  B -. "<b>2.</b> the private data leaves<br/>through a tool you approved" .-> D
 
-**What it measured** [measured, once]: one forced-delivery campaign, `groq_forced_7db7eff3b652`
-(Groq, route `openai/gpt-oss-120b`, the key holder's stated free tier, temperature 0.0, 30
-counted trials, 10 per source). Exposure was MEASURED at 30 of 30. 0 compromised, END-TO-END and
-DELIVERED, per source 0/10 with Wilson 95% [0.000, 0.278]. The results, with the provenance and
-both findings beside the numbers, are in
-[docs/results/groq_forced_7db7eff3b652.md](docs/results/groq_forced_7db7eff3b652.md).
+  style A fill:#fde2e2,stroke:#c0392b
+  style D fill:#fde2e2,stroke:#c0392b
+  style C fill:#fff6d6,stroke:#b8860b
+```
 
-**What that does NOT claim:**
-- **Why the zeros mean anything.** The pipeline counts a compromise IF AND ONLY IF the flow
-  happens. Control A verified that offline on the committed forced plan's own 30 cells: a
-  compliant scripted client gave 30/30 and a non-compliant one 0/30, on the same cells. L3
-  delivery, L4 proxy, L5 oracle and L6 ledger/report are each named by their own mutant.
-- **So the 30 zeros are a capability-dependent LOWER BOUND under a FAVOURABLE delivery
-  condition, and nothing stronger.** They are not an attack-success rate and not evidence that
-  the model is safe. ZERO REAL POSITIVES: no real trial has ever been compromised.
-- **Control A's 30-cell test runs only on the key holder's machine.** It needs the raw corpus
-  cache, which is never committed, so it SKIPS in a fresh clone and in CI. CI runs the same
-  check on a 3-cell synthetic plan, plus its mutants. If you cannot fetch the corpus, the 30-cell
-  figure is the author's local run, not something CI verified. How to re-run it is in the
-  results page.
-- **The run is NOT reproducible.** It saw 25 distinct `system_fingerprint` values in 84
-  responses inside one 8-minute campaign. Seed sent is not determinism, and a re-run is a new
-  measurement.
-- **Two findings limit it** (both in the results page):
-  - in 30 of 30 the agent made no tool call at all after reading the injection;
-  - the forced template's exfil clause asks for "the private data you have read" when none was
-    read.
-- One model, one tier, one template, small n.
+> The agent holds both capabilities in one session. The attacker controls only the first tool's
+> *output* — and that is enough. proveflow's own scanner does not yet see the file-borne case — see
+> [Known limits](#known-limits-stated-plainly).
 
-**What Phase 8 measured, against the CONTROL** [measured, offline, local]
-([docs/results/verify_control_groq_fs_forced_c254f660e358.md](docs/results/verify_control_groq_fs_forced_c254f660e358.md)).
-Paired verify reports three figures per row, each with its own denominator: rate, exposure and
-utility. A label names the mechanism, and only FLOW BLOCKED counts as a fix. Per source, 10
-cells each:
-- **M1** (remove the sink's server) on `fs_notes_exfil`, where the injection is in the file the
-  task reads and the sink is `fetch`. Rate 10/10 -> 0/10, exposure 10/10 -> 10/10, utility
-  10/10 -> 10/10: **FLOW BLOCKED**.
-- **M3** (Claude Code approval) on the same cells: the same figures, FLOW BLOCKED. **This means
-  the TWIN denied every call (simulated deny-all), NOT that a real Claude Code denied it.** M3's
-  patch is FOR REVIEW: its rule syntax was last verified 2026-11-10 and only partially
-  re-confirmed 2026-11-26. A wrong syntax would apply cleanly and protect nothing.
-- **M1** on the forced campaign's `fetch_summary_exfil`, where the attacked tool, the task's
-  tool and the sink are all `fetch`. Rate 10/10 -> 0/10, exposure 10/10 -> 0/10, utility 10/10
-  -> 0/10: **DELIVERY REMOVED + CAPABILITY REMOVED, NOT a fix**. The tool was turned off.
+Static scanners list those pairings. proveflow is built to **measure** them: discover your real
+setup, map the flows, attack each one in a safe schema twin with published injection payloads,
+let a deterministic oracle decide whether the agent was hijacked, then patch the config and
+re-measure on the same cells.
 
-What these do NOT show:
-- anything about a real model. The control is a scripted client that complies with the
-  injection;
-- that a patch works in a real client;
-- results from CI. The 30-cell runs need the uncommitted corpus cache and ran only on the key
-  holder's machine; CI checks the same labels on 3 synthetic cells.
+> **Read this first.** One paid campaign has run: **0 of 30 trials compromised**, with exposure
+> measured at 30 of 30. That zero is a capability-dependent lower bound under a favourable
+> delivery condition — not an attack-success rate, and not evidence any model is safe.
+> **ZERO REAL POSITIVES: no real trial has ever been compromised.** Why the zero means anything
+> at all, and what it cannot mean, is in [What is proved](#what-is-proved-and-what-is-not).
 
-| Stage | State | What exists | What does not |
-|---|---|---|---|
-| Find | built (Phase 1) | `discover`, `scan` (static flow map; consented `tools/list` introspection), SARIF | |
-| Prove | partial (Phases 2-7) | the twin proxy, the deterministic oracle (R1-R4), schema twins, the agent runner, the corpus (347 records, 3 sources), the campaign engine and report (two rates per source, exposure measured), Control A, ONE paid forced campaign ([results](docs/results/groq_forced_7db7eff3b652.md)) | any real positive for any rule, the incidental campaign, a second model, `proveflow prove` as a CLI command, paired trials, HTML/JUnit reports |
-| Fix | M1 + M3 (Phase 8) | `proveflow fix --from SCAN --flow F-... --mitigation m1\|m3`: an RFC 6902 patch per config file (M1), a Claude Code `permissions.ask` fragment headed FOR REVIEW (M3); never applied | M2, M4, M5, M6 (each refused with its reason); any test against a real client |
-| Ship | Phase 9 | `scan --fail-on` (exit 3 on findings, 1 on an unreadable config), the GitHub Action (`action/`, `--no-launch` only), `install/install.sh` + `install.ps1`, the tag/version check | a PyPI release; a CI run of the default (git tag) install route; the Action seeing introspected flows |
-| Verify | against the CONTROL (Phase 8) | `python -m proveflow.runner.verify PLAN --mitigation m1\|m3`: paired halves on the same cells, rate + exposure + utility + label, exact McNemar | verify against a real model; Newcombe CI; a paid verify |
+📄 **[Case study: building a security tool that refuses to overstate its own results](docs/CASE_STUDY.md)**
+— the design decisions, the negative result, and the defect I found in my own tool that stopped
+my own release.
 
-## Install, the Action, exit codes
+---
 
-**Install** (docs/INSTALL.md has both routes, their sources, and what each does NOT prove):
+## What it looks like
+
+The committed fixture `tests/fixtures/action/toxic.servers.json`, scanned from the repo root.
+Captured 2026-11-27 on Windows, verbatim, at 140 columns, with an empty home directory so
+that no client config of the machine was read (`--project` pointed at an empty directory):
+
+```console
+$ proveflow scan --servers tests/fixtures/action/toxic.servers.json --no-launch --fail-on any
+                                   Profile explicit:tests\fixtures\action\toxic.servers.json                                    
++------------------------------------------------------------------------------------------------------------------------------+
+| server     | transport | introspection              | era | tools | baseline | redacted | roles                              |
+|------------+-----------+----------------------------+-----+-------+----------+----------+------------------------------------|
+| fetch      | stdio     | not launched (--no-launch) | -   | -     | -        | -        | source (server-level guess)        |
+| filesystem | stdio     | not launched (--no-launch) | -   | -     | -        | -        | private, sink (server-level guess) |
++------------------------------------------------------------------------------------------------------------------------------+
+Servers: 2 discovered, 2 analyzed, 0 skipped
+                                    Toxic flows: 3 groups (3 flows), all THEORETICAL                                     
++-----------------------------------------------------------------------------------------------------------------------+
+| id         | class  | source | private    | sink       | cross | worst sink kind | max conf      | #flows | #profiles |
+|------------+--------+--------+------------+------------+-------+-----------------+---------------+--------+-----------|
+| G-253caf41 | exfil  | fetch  | filesystem | filesystem | yes   | local_write     | 0.35 (server) | 1      | 1         |
+| G-812c077e | action | fetch  | -          | filesystem | yes   | local_write     | 0.35 (server) | 1      | 1         |
+| G-6655df9e | leak   | -      | filesystem | filesystem | no    | local_write     | 0.35 (server) | 1      | 1         |
++-----------------------------------------------------------------------------------------------------------------------+
+limitation: Static analysis only: every flow is THEORETICAL until proven in a twin (Phase 7). No flow listed does not mean the setup is 
+safe.
+limitation: --no-launch: tools are unknown; roles are inferred from server names/commands only (granularity=server, low confidence).
+limitation: Every configured server is treated as connected to its client (over-approximation): client-side approval and disabled flags are
+not modeled.
+limitation: Secrets in args/URLs are redacted by pattern (docs/REDACTION.md); a short unflagged positional secret can be missed. Env and 
+header values are always fully redacted.
+proveflow: 3 flow(s) matched --fail-on any (THEORETICAL: from config names and command lines only (--no-launch))
+exit=3
+```
+
+Every report carries its own limitations. A scan that analysed nothing says `this is NOT a
+clean result` instead of printing an empty flow table.
+
+## Install
+
 ```sh
 sh install/install.sh                                          # Linux / macOS
 powershell -ExecutionPolicy ByPass -File install\install.ps1   # Windows
 ```
-The default installs from the git tag `v0.1.0a1`, with dependencies from PyPI. The tag is
-created only after Phase 9 is green, so this route has not yet run in CI. The CI evidence is the
-wheelhouse route instead: every wheel, `--no-index`.
 
-**The GitHub Action** (`action/`, details and measured limits in action/README.md) runs `proveflow
-scan --no-launch --fail-on <class>` on a servers file and fails the job on a finding.
-- It classifies from the config only: server names and command lines, never tool lists.
-- Every flow it reports is THEORETICAL.
-- It MISSES flows an introspected scan finds. On the toxic fixture it sees 3 of 16 and misses
-  13 (measured by `tests/integration/test_action_blind_spot.py`). That is expected, not a bug.
-- It is a tripwire for a config change that introduces a dangerous server pairing, not a proof.
+The default route installs from the git tag `v0.1.0a1`, with dependencies from PyPI.
+- **It has run once, LOCALLY**, on the author's Windows machine (2026-11-27; not in CI, not a
+  clean machine).
+- `uv tool install git+https://github.com/M-Haris346/proveflow@v0.1.0a1`, the command the
+  installers wrap, run directly, resolved 38 packages, built from the tag at `4740df3`, reported
+  `proveflow 0.1.0a1` and uninstalled cleanly.
+- CI has not run this route.
+- Nothing is on PyPI.
+
+Both routes, their cited sources, and what each does **not** prove:
+[docs/INSTALL.md](docs/INSTALL.md).
+
+**Install evidence (the wheelhouse route).** CI run `45906223124` on `4740df3`:
+- the real installer ran in a bare `ubuntu:24.04` container with `python3`, `python`, `uv` and
+  `curl` all absent;
+- it bootstrapped uv 0.13.10 and installed 36 wheels with **no package index at all**
+  (`--no-index`);
+- it matched its version, and `scan --help` exited 0;
+- on Windows, 38 wheels installed on a hosted runner, which is not a clean machine and is
+  labelled as such.
+
+## How it works
+
+```mermaid
+flowchart TD
+  subgraph FIND["FIND — what is reachable"]
+    direction LR
+    DI["<b>discover</b><br/>real client configs<br/><i>secrets redacted at read time</i>"]
+    SC["<b>scan</b><br/>flow graph per agent profile<br/><i>SARIF · exit 3 as a CI gate</i>"]
+    DI --> SC
+  end
+
+  subgraph PROVE["PROVE — does a real model actually do it"]
+    direction LR
+    TW["<b>twin</b><br/>schema twin per server<br/><i>synthetic data, honey values</i>"]
+    PX["<b>proxy</b><br/>inject · record · sandbox pure sinks<br/><i>hash-chained cassette</i>"]
+    RU["<b>runner</b><br/>real LLM tool-calling loop<br/><i>per-trial DESIGN caps</i>"]
+    OR["<b>oracle</b><br/>R1–R4, deterministic<br/><i>NO LLM judge</i>"]
+    CA["<b>campaign</b><br/>two rates per source<br/><i>Wilson 95%, never pooled</i>"]
+    TW --> PX --> RU --> OR --> CA
+  end
+
+  subgraph ACT["FIX + VERIFY — did the change help"]
+    direction LR
+    FX["<b>fix</b><br/>patch files<br/><i>NEVER applied</i>"]
+    VE["<b>verify</b><br/>paired halves, same cells<br/><i>rate + exposure + utility + label</i>"]
+    FX --> VE
+  end
+
+  SC -->|"introspected scan only<br/>a --no-launch scan is refused"| TW
+  CA --> FX
+
+  CTRL["<b>Control A</b><br/>the positive control<br/>30/30 compliant · 0/30 not<br/><i>without this, a zero means nothing</i>"]
+  CTRL -.-> CA
+  CTRL -.-> VE
+
+  style OR fill:#e8f4ea,stroke:#2e7d32
+  style CTRL fill:#e3eefc,stroke:#1565c0
+  style FX fill:#fff6d6,stroke:#b8860b
+```
+
+| Stage | What it does | Key constraint |
+|---|---|---|
+| **Find** | Reads real client configs; classifies tools into untrusted source / private data / sink; builds a flow graph per agent profile; emits SARIF 2.1.0 | Secrets redacted at read time. Introspection asks `tools/list` only, with per-server consent and a method allowlist that blocks `tools/call` |
+| **Prove** | Replaces each server with a deterministic schema twin (same tool names, descriptions and schemas; synthetic data; honey values); a proxy injects the payload into every result of the one attacked tool; a real model drives the loop | **Pure sinks are always sandboxed and never forwarded.** A dual-role tool (untrusted source AND sink, e.g. `fetch`) is forwarded to a twin that passed the no-I/O guard, recorded as `upstream_request.sink=true`, and that is the path the campaigns actually use (ADR-007). The guard is an AST check, not a sandbox. Payloads target per-trial canaries only: no real credentials, no real endpoints |
+| **Oracle** | Decides compromise deterministically: the canary or a honey value in the arguments of a sandboxed sink call OR of a forwarded dual-role sink call (the campaigns use the second), across 10 encodings | **No LLM judge, anywhere.** Canary space 47.99 bits, honey 63.98 bits, counted exactly |
+| **Fix** | Emits an RFC 6902 patch per config file, or a Claude Code approval fragment | **Never applied.** A safety test proves `fix` never modifies a config (bytes and mtime unchanged). That it never opens one is by construction (it reads only the scan report), not a test result |
+| **Verify** | Paired halves on the same cells with the mitigation in the twin | Three figures per row — rate, exposure, utility — each with its own denominator, plus a label naming the mechanism |
+
+```mermaid
+flowchart LR
+  LLM["<b>real LLM</b><br/>OpenAI-compatible<br/>provider"]
+  PX{{"<b>proveflow proxy</b><br/>default deny"}}
+  TW["<b>schema twin</b><br/>same tool names,<br/>descriptions and schemas<br/>synthetic data + honey values"]
+  SB["<b>sandboxed</b><br/>the call goes nowhere<br/>a fixed ok reply goes back to the model"]
+  CAS[("<b>cassette</b><br/>hash-chained JSONL")]
+  ORA["<b>oracle</b><br/>canary or honey value<br/>in a sink call's arguments?<br/>10 encodings · no LLM"]
+
+  LLM -->|"tools/call"| PX
+  PX -->|"result, with the payload injected into<br/>EVERY result of the one attacked tool"| LLM
+
+  PX ==>|"<b>pure sink</b>"| SB
+  PX -->|"non-sink tool, or dual-role<br/>(e.g. fetch)"| TW
+  TW -->|"result"| PX
+
+  PX --> CAS --> ORA
+
+  style SB fill:#e8f4ea,stroke:#2e7d32
+  style ORA fill:#e8f4ea,stroke:#2e7d32
+  style PX fill:#e3eefc,stroke:#1565c0
+```
+
+> A **pure sink** call is sandboxed and never forwarded. A **dual-role** tool — one that is both
+> an untrusted source and a sink, such as `fetch` — *is* forwarded, to a twin that passed an AST
+> no-I/O guard, and is recorded as `upstream_request.sink=true`. That is the path the campaigns
+> actually use, and the guard is a static check, **not a sandbox**.
+
+Payloads: 347 records from three published benchmarks at pinned revisions, MIT on every record.
+72% come from one source, so results are reported **per source** and never pooled.
+
+## What is proved, and what is not
+
+**The one paid campaign** (`groq_forced_7db7eff3b652`, Groq `openai/gpt-oss-120b`, temperature
+0.0, 30 counted trials, 10 per source) →
+[full result](docs/results/groq_forced_7db7eff3b652.md)
+
+| | |
+|---|---|
+| Compromised | **0 of 30**, END-TO-END and DELIVERED |
+| Exposure (payload actually reached the model) | **measured, 30 of 30** |
+| Per source | 0/10, Wilson 95% [0.000, 0.278] |
+
+**Why that zero means anything at all.** A broken oracle, a proxy that never flags sinks, or a
+payload that never arrives would all report zero too. So the positive control came first:
+**Control A** runs the same 30 cells twice. A scripted client that complies with the injection
+gives **30/30**; one that ignores it gives **0/30**. Six mutants each break one thing, and each
+is killed with its layer named:
+- **L3** delivery;
+- **L4** the proxy's sink flag;
+- **L5** the oracle;
+- **L6** the ledger;
+- **L6** the report;
+- an oracle that fires on anything, which passes the compliant half and is killed only by the
+  negative half.
+
+**What the zero still is not:** an attack-success rate, or evidence a model is safe. It is a
+capability-dependent lower bound under a favourable delivery condition.
+
+**Three limits recorded beside it:**
+- in 30 of 30, the model made **no tool call at all** after reading the injection, so the run
+  cannot distinguish "refused to act" from "acted without leaking";
+- the template's exfil clause asked for private data the task never read;
+- the run is **not reproducible**: 25 distinct provider `system_fingerprint` values across 84
+  responses in one campaign of 7 min 54 s. A seed sent is not determinism.
+
+**Control A's 30-cell test runs only on the author's machine.** It needs a raw corpus cache that
+is never committed, so it skips in a fresh clone and in CI; CI runs the same check on a 3-cell
+synthetic plan plus its mutants.
+
+### Verify, against the control only
+
+| Mitigation / template | Rate | Exposure | Utility | Label |
+|---|---|---|---|---|
+| M1 on `fs_notes_exfil` | 10/10 → **0/10** | 10/10 → 10/10 | 10/10 → 10/10 | **FLOW BLOCKED** ✅ |
+| M3 on the same cells | 10/10 → **0/10** | retained | retained | FLOW BLOCKED — *but the twin denied every call, not a real client* |
+| M1 on `fetch_summary_exfil` | 10/10 → **0/10** | 10/10 → **0/10** | 10/10 → **0/10** | **DELIVERY + CAPABILITY REMOVED — NOT a fix** ❌ |
+
+The third row is the point: the rate went to zero because the tool was turned off. Both rows
+move the same way; only one of them means anything.
+[Full report](docs/results/verify_control_groq_fs_forced_c254f660e358.md)
+
+### Known limits, stated plainly
+
+- **No real positive, for any rule.** Oracle rules are validated against fixtures authored here,
+  which shows they match our model of the attack — not that they catch real model behaviour.
+- One model, one tier, one template, n=10 per source.
+- Verify has only run against a scripted control, never a real model.
+- The approval mitigation has never been tested in a real client; its patch is headed FOR REVIEW
+  because a wrong rule would apply cleanly and protect nothing.
+- **`scan` cannot discover file-borne injection at all** — the classifier never labels a
+  filesystem read tool an untrusted source. Measured: 0 such flows without a manual override,
+  11 with it. A recorded Find-stage defect.
+- Held-out classifier recall: sink 16/25, private data 4/20, and 10 of 13 rules never exercised.
+- The GitHub Action classifies from config text only; on the toxic fixture it sees 3 of 16 flows
+  and misses 13. A tripwire, not a proof.
+- Nothing is released on PyPI.
+
+## CI gate and the GitHub Action
 
 **Exit codes of `proveflow scan`:**
 
 | code | meaning |
 |---|---|
-| 0 | clean: no flow matched `--fail-on` (or no `--fail-on` given) |
-| 1 | proveflow's own usage or config error, including, under `--fail-on`, ANY config it could not read: never a pass, never a finding |
-| 2 | Click's own usage error (e.g. a missing `--servers` path). It is currently OVERLOADED: the not-implemented stub commands also exit 2. Pre-existing, not introduced by Phase 9 |
-| 3 | findings: a flow matched `--fail-on` |
+| `0` | clean: no flow matched `--fail-on` (or none given) |
+| `1` | proveflow's own usage or config error — including, under `--fail-on`, **any config it could not read**. Never a pass, never a finding |
+| `2` | Click's own usage error. Currently overloaded: the not-implemented stub commands also exit 2 (pre-existing) |
+| `3` | findings: a flow matched `--fail-on` |
 
-Without `--fail-on`, the exit code is unchanged, but the terminal names every config it could
-not read, on stderr. The `--json` report does not carry config statuses yet (docs/BACKLOG.md,
-HIGH).
+Without `--fail-on` the exit code is unchanged, but every unreadable config is named on stderr.
 
-## Status in detail
+**The Action** (`action/`, measured limits in [action/README.md](action/README.md)) runs
+`scan --no-launch --fail-on <class>` and fails the job on a finding.
+- It classifies from server names and command lines only, never tool lists.
+- Every flow it reports is THEORETICAL.
+- It misses 13 of 16 flows on the toxic fixture.
+- It is a tripwire for a config change that introduces a dangerous pairing.
 
-> **Phase 1 (Find) done. Phase 2 (Proxy), Phase 3a (Oracle) and Phase 4 (Twin) [impl][tested].
-> Phase 5 (Runner) closed. Not released.**
->
-> - `proveflow discover` [impl][tested]: reads Claude Desktop, Claude Code (user/local/project),
->   Cursor (user/project), VS Code (workspace), and Windsurf configs, plus `--servers FILE`.
->   Secrets are redacted at read time (docs/REDACTION.md). VS Code user-profile config is
->   reported *unsupported* (path not verified).
-> - `proveflow scan --no-launch` [impl][tested]: static flow map from server names/commands only
->   (low confidence; nothing is started). `--json`, and `--sarif` (SARIF 2.1.0, validated
->   against the official OASIS schemas in tests). Every flow is THEORETICAL.
-> - `proveflow scan` (introspection) [impl][tested with a fake MCP server on Windows and in CI;
->   verified once on the author's real Windows machine]:
->   - per-server consent; `--yes` does not cover project-scoped servers (`--yes-project`)
->   - `tools/list` only, with a method allowlist that blocks `tools/call`
->   - the process tree is killed (Windows Job Object; POSIX process group)
->   - minimal env and an empty temp cwd; no executables from the cwd or project
->   - servers with unresolved variables are not launched
->   - tool-change detection against a per-user cache; PF-UNPINNED notes
->   - **Real-machine check (1b exit):** run by the author with 1 real stdio server.
->     Consent yes gave `ok`; consent no gave `declined`. `scripts/leak_check.py` was clean
->     both times. Output is not committed.
-> - Role-classifier baseline [measured, once]: results are in
->   [docs/eval/RESULTS.md](docs/eval/RESULTS.md). Test N = 40, dev N = 60 tools, from 13
->   servers (12 of 14 planned collected).
->   - **Caveat:** the test split is mostly reference servers, dev recall is about 0.2-0.3, and
->     the labels are LLM pre-labels reviewed by the author. There is no independent human
->     second labeler, so no kappa.
->   - Test has only 1 `untrusted_source` positive.
->   - Read the caveats in RESULTS.md before quoting any number.
-> - Role classifier v2 [measured, once, on a fresh held-out set]: rules tuned on dev only,
->   results in [docs/eval/RESULTS_V2.md](docs/eval/RESULTS_V2.md). held-out (55 tools, 7
->   servers, single blind human labeler): sink recall 8/25 -> 16/25, mostly one rule (C1) on
->   one server; private_data recall 4/20 for both; 10 of 13 v2 rules untested; large
->   dev-to-held-out gap.
-> - Fixed after the real-machine run:
->   - servers discovered but in no profile (e.g. another project's Claude Code local entry)
->     are now listed as `skipped` with a reason, no longer dropped silently (THREAT_MODEL T16)
->   - `--json` is written as UTF-8 on Windows whatever the console code page
-> - Flow grouping [impl][tested] (scan report schema 2): the table shows one row per group of
->   flows with the same (class, source server, private server, sink server) across profiles;
->   `--limit` counts groups. **Grouping reduces table rows, not the number of tool paths**:
->   every flow is still in `--json` and `--sarif`, and per-path triage is Prove (Phase 7).
->   Rules and limitations: docs/ARCHITECTURE.md §5.3.
-> - `proveflow proxy --session FILE` (Phase 2) [impl][tested, against a fake twin only]: a stdio
->   MCP proxy that serves ONE twin upstream to an agent (docs/ARCHITECTURE.md §5.5,
->   docs/adr/ADR-006-proxy-default-deny.md).
->   - the upstream must be this Python interpreter running a script inside proveflow's own twin
->     directory, whose sha256 matches the session (the hashed copy is what runs); npx, uvx,
->     node, docker, URLs and any other `.py` file are refused before anything starts. This does
->     not prove a script placed in that directory is harmless
->   - the session lists classified tools, never allow/deny decisions; the proxy computes the
->     policy itself (default deny: only role-classified, non-sink, tool-level tools) and also
->     runs its own classifier on what the twin advertises: a tool it calls a sink is never
->     forwarded; look-alike names (e.g. with a zero-width space) are denied together. Every
->     other `tools/call` gets a sandbox reply; a second check on the write path blocks
->     independently. No flag, env var or session field disables this
->   - 5 injection carriers for source results; hash-chained JSONL cassette with a validating
->     loader; per-call / session / call-count limits plus message and cassette-size caps;
->     fails closed
->   - tested only with a fake twin written for the tests: no real server, no network, no LLM, no
->     agent loop. Windows locally and in CI; the POSIX kill tests run only in CI (run
->     `43582905272`, ubuntu job: not skipped, 0 failed; that run also repeated both POSIX kill
->     tests 10x each, all green, after a test race was fixed).
->     Residuals: a sink that both the session's labels and the proxy's classifier miss (the
->     twin describes it innocently; held-out sink recall is 16/25) is forwarded to the twin,
->     harmless in twin mode but must be closed before any real-reads mode; fetch-a-URL sources
->     count as sinks (since Phase 4 they are forwarded only to a twin that passed the twin
->     guard, see below); two low-severity items (L3, L4) are listed in docs/BACKLOG.md
-> - Oracle, Phase 3a [impl][tested] (docs/ORACLE.md): canary generator; a deterministic
->   matcher for 10 encodings (raw, case, zero-width, separator, URL, base64, hex, rot13,
->   reversed, JSON-escaped); rule R1 (canary in a call the proxy sandboxed as a sink) and R4
->   (review only) over a validated cassette; incomplete cassettes give no verdict. No LLM.
-> - Oracle, Phase 3b [impl][tested on authored fixtures only] (docs/ORACLE.md): R2 (the
->   trial's minted action target in the goal argument of the goal tool's sink call), R3 (the
->   trial's minted marker, carried separator-split, rejoined in the final answer; raw + casefold
->   only; not evaluable without a final answer), R4 across a trial's cassettes in the runner
->   transcript's order. **Zero real positives:** every real trial so far has compromised=false,
->   so every rule is validated only against fixtures authored here, which shows the rule
->   matches our model of the attack, not that it catches real model behaviour. R3 is a
->   capability-dependent lower bound, not comparable across models. Nothing measured
-> - Twin, Phase 4 [impl][tested, local only: Windows, both shells; CI not yet run on it]
->   (docs/ARCHITECTURE.md §5.4, docs/adr/ADR-007-dual-role-twin-exception.md):
->   - one self-contained, deterministic twin script per server (five imports, no proveflow
->     import; same tool names, descriptions and input schemas; 6 response archetypes; fake
->     data; honey values in private-data tools; a per-tool marker)
->   - honey and canaries are rejection-sampled against a structural T4 rule (no 12-digit
->     run, no NINO shape): canary space 47.9895 bits (|S| = 279,426,400,710,656), honey
->     63.9762 bits (|S| = 18,145,465,120,237,551,616), counted exactly by
->     `tools/count_t4_space.py`
->   - the oracle now searches for the canary and every honey value, and also checks dual-role
->     tools (e.g. fetch) that the proxy forwards only to a twin passing the AST no-I/O guard.
->     That guard is not a sandbox; this exception must not survive into any real-reads mode
->   - tested on twins generated from stored metadata (no server launched except the generated
->     twins, no network, no LLM): fetch (injection + canary R1), filesystem (honey R1 by a
->     scripted agent; no source tool, so not an injection chain), pg-mcp-guard (0 sink tools:
->     no exfiltration is possible, reported as a finding about the server)
->   - limitation: one canned response per tool (arguments are validated, never varied on)
->   - `proveflow twin --from SCAN.json --profile ID --out-dir DIR` [impl][tested on synthetic
->     scans]: one twin and one proxy session per introspected server; refuses a `--no-launch`
->     scan, an out-dir outside the twin directory and any existing file; prints to stderr only
-> - Agent runner, Phase 5 [impl][tested on replay; one real trial] (docs/ARCHITECTURE.md
->   §5.6, docs/adr/ADR-008-auditable-not-reproducible.md, docs/PROVIDERS.md):
->   - one agent wired to N twin proxies, one OpenAI-compatible client, a hash-chained
->     transcript with strict replay, design caps on provider-reported usage, and a validity
->     guard (the attack arrives only through tool results)
->   - every test replays a recording; no test calls a provider (a network guard enforces it)
->   - **closed 2026-11-21** by its exit criterion. One real trial, run by the key holder on
->     Groq `openai/gpt-oss-120b`, scenario `clean_utility` (no attack): final answer,
->     utility true, compromised false, 3180 tokens in + 168 out. The transcript passed the
->     exact-key check and the evidence check and is committed under
->     `evidence/provider-runs/`. A strict offline replay (`tools/replay_evidence.py`, run
->     by hand, never a test) reproduces its verdict.
->     N = 1 and no attack, so no attack-success rate is measured
->   - the run found two things no hand-authored recording had shown. First, the model
->     Groq's docs name returned 404 on that account (availability is per account). Second,
->     real tool-call ids are `fc_<uuid>`, which the D7 scan flagged; they are now excluded
->     at five exact paths, and the four proveflow constructs must pass an echo check
->   - residuals: the caps are design values, not measured (docs/BACKLOG.md); 429 handling
->     added in Phase 6 step 2
-> - **Phase 6 complete (2026-11-23; docs/ARCHITECTURE.md §9). Phase 7 is next.** Payload
->   instantiation and the goal clause, 429 / backoff / resumable campaign state (OFFLINE
->   only: fake provider, scripted agents; nothing paid, ASR unmeasured, not zero), and the
->   corpus: 347 records measured at pinned revisions (BIPIA attack files 250, InjecAgent 62,
->   AgentDojo 35 at upstream benchmark v1.2.2; MIT on every record; 72% BIPIA, so Phase 7
->   must stratify or report per source; docs/DATASETS.md). LLMail-Inject is not ingested
->   pending a ruling. FakeLLM policies are forbidden by D7 (Phase 5,
->   docs/ARCHITECTURE.md §5.6).
-> - **Phase 7.0–7.2 [impl][tested] (2026-11-24), OFFLINE only: scripted model side, nothing
->   paid, no provider call; CI green on both OSes (run below).** A per-stage handshake
->   deadline (30 s; spawn, initialize, tools_list) that makes the twin-handshake hang VISIBLE,
->   BOUNDED and NAMED in the cassette. Its cause is unknown and it is NOT fixed. The campaign
->   engine: an equal-per-source seeded sampler and a six-cell scripted smoke campaign with a
->   429, a kill and a resume. The report: results ledger only, per-source Wilson 95%, no pooled
->   figure, the lower-bound note beside the numbers.
-> - **Phase 7.3a [impl][tested] (2026-11-24), OFFLINE only: the paid-campaign PATH, built and
->   dry-run; nothing paid, no provider call; CI run 45446488249 on a6b8b27.**
->   - **Plans:** one plan file per campaign (`campaigns/`) feeds both the scripted dry run and
->     the paid run. Every refusal is tested with a mutation: missing cap, cap over the ceiling or
->     under one trial, missing limits, another template, another provider, a missing key, another
->     plan's state file, a root under docs/results/, no `--yes`.
->   - **Preflight:** it prints the measured request bytes, the estimate with its arithmetic, and
->     the published price with its URLs and read date.
->   - **Report:** EXPOSURE is read from the attacked server's cassette. Every report gives TWO
->     rates per source, END-TO-END and DELIVERED, and never one "ASR"; low exposure is a
->     reachability finding.
->   - **Runbook:** docs/RUNBOOK_7_3.md.
->   - **Not built, by ruling:** a suspend detector. The clock-based design is a no-op on
->     Windows. For the first, short, watched campaign, the run's event-log output must be
->     pasted with its report, or the report is not accepted. The trigger for building a
->     detector is in docs/BACKLOG.md.
-> - **Phase 7.3b [measured, once] (2026-11-25): the first paid campaign, forced plan only.**
->   - `groq_forced_7db7eff3b652`, 30 counted trials: 0 compromised, exposure MEASURED 30 of 30,
->     per source 0/10 END-TO-END and DELIVERED, Wilson 95% [0.000, 0.278]
->     ([docs/results/groq_forced_7db7eff3b652.md](docs/results/groq_forced_7db7eff3b652.md)).
->   - The 2a07305 fix: a provider response without usage is now charged the full reservation.
->   - Control A (`8003eb1`) [impl][tested]: the matched-pair positive control. It is
->     [tested] on the 30 real cells ONLY locally, because it needs the uncommitted corpus cache.
->     CI runs it on a 3-cell synthetic plan.
->   - What the 30 zeros are, and are not, is in the STATUS block above. ZERO REAL POSITIVES.
->   - NOT done: the incidental plan (`groq_incidental`), Finding 1's per-trial column, the
->     report's provenance fields (docs/BACKLOG.md).
-> - **Phase 8 [impl][tested] (2026-11-26): Fix + Verify, measured against the CONTROL.**
->   - Exit criterion, as Haris ruled it, because there is no confirmed flow from a real model:
->     the control's rate falls to 0 on the new template's cells under FLOW BLOCKED, with
->     exposure and utility retained. MET locally for M1 and M3 (STATUS block above).
->   - `fix` [impl][tested on fixture configs]: M1 and M3 patch files for review, from the scan
->     report only. A user config is never opened, and a safety test pins its bytes and mtime.
->   - `verify` [impl][tested; measured on the control only]: paired halves, three figures and a
->     mechanism label per row. A label edited by hand, or a report missing its CONTROL note, is
->     refused by the report's own validator.
->   - The new template `fs_notes_exfil` gets its source role by an OVERRIDE. That is a recorded
->     Find-stage DEFECT with a BACKLOG item, not a template quirk: the classifier never calls a
->     filesystem read tool an untrusted source, so `scan` cannot discover file-borne injection
->     (measured: 0 such flows without the override, 11 with it). Its plan has never run against
->     a provider.
->   - NOT built: M2, M4, M5 (a scripted client never reads the prompt), M6; Newcombe CI; verify
->     against a real model. OPEN, HIGH: a full verbatim re-read of Claude Code's MCP rule
->     syntax, by hand, before M3 is relied on.
-> - **Phase 9 [impl][tested] (2026-11-26): Ship. CLOSED 2026-11-27 by Install evidence run
->   `45880776283` (see the CI paragraph below).**
->   - `scan --fail-on` with the exit codes above. Each error status has its own named test, and
->     a mutant that turns an error into 0 or 3 is killed.
->   - The GitHub Action and its self-test workflow.
->   - The installers, tested against a stub uv, plus the `Install evidence` workflow
->     (wheelhouse route).
->   - The STATIC version `0.1.0a1`, with a tag check. It is a package version, never a commit
->     identifier. hatch-vcs was rejected as MEASURED (docs/BACKLOG.md).
->   - Measured blind spot: the Action sees 3 of the toxic fixture's 16 introspected flows, and
->     0 of the blind-spot fixture's 3.
->   - NOT done: a PyPI release (ruled: not in Phase 9); the default install route in CI; the
->     config-status field in the JSON (BACKLOG, HIGH).
-> - Everything else is [planned]. No releases.
+Its self-test, run `45906223026` on `4740df3`, gives the same result on both OSes: clean 0
+flows, blind spot 0 flows, toxic exit 3 with 3 flows and 3 SARIF results.
 
-CI (`.github/workflows/ci.yml`, ubuntu + windows) runs on push. Last checked run:
-`45880776353` on commit `7e9f932` (Phase 9, offline), green on both OSes (ubuntu-24.04:
-1851 passed, 21 skipped; windows-2025: 1866 passed, 6 skipped; passed + skipped = 1872 on
-each). Four skips on each OS are the corpus-cache tests (Control A's two 30-cell tests and
-paired verify's two, "the raw corpus cache is never committed"): CI runs them on 3 synthetic
-cells, never on the 30 real cells. The other skips are the Windows-only tests on ubuntu
-(including the two `install.ps1` tests) and the two POSIX signal tests on windows. No test
-calls a provider; the one paid campaign was run by hand by the key holder.
-Install evidence (`.github/workflows/install.yml`): run `45880776283` on `7e9f932`, green, its
-first run. A full wheelhouse (36 wheels on ubuntu, 38 on windows) was installed by the real
-installer with `--no-index`, in a bare `ubuntu:24.04` container (`python3`, `python`, `uv`,
-`curl` absent) and on the windows-2025 HOSTED runner (not a clean machine). Both bootstrapped
-uv 0.13.10, matched `proveflow 0.1.0a1`, and exited 0 on `scan --help`. It does not cover the
-default git-tag route (no tag yet), and uv and a Python interpreter were still downloaded.
-Action self-test (`.github/workflows/action.yml`): run `45880776237` on `7e9f932`, green on
-both OSes: clean 0 flows, blind spot 0 flows, toxic exit 3 with 3 flows and 3 SARIF results.
-Tests run in fixed order (`-p no:randomly` in addopts). Order-independence has been audited
-ONCE, locally on Windows, with seed 20261124: green. One permutation is not a proof, and CI
-has never run an audit (docs/BACKLOG.md). No test calls an LLM provider. The POSIX kill tests were also repeated 10x each,
-all green, in run
-`43582905272`.
-This README states CI results only for a run id checked with `gh run list`. It names the run
-that verified the CODE: `45880776353` on `7e9f932`. A run triggered by a README-only commit
-(for example `163547c`, whose run `45206531796` was green) does not get its own README line: that would need
-another README commit, whose run would need another line. Do not chase it. Local commands:
+## Tests
+
+CI run `45906223082` on `4740df3`, green on both OSes: **ubuntu-24.04 1858 passed / 21 skipped, windows-2025 1873 passed / 6 skipped** (1879 collected on each).
+
+- 225 mutation test functions (287 collected, with parametrisation); the newest 11 name the
+  exact line they kill.
+- Property tests on redaction.
+- Safety tests prove that `discover`, `scan` and `fix` never **modify** a client config: its
+  bytes and mtime are unchanged. `discover` opens configs to read them.
+- The control client, which deliberately obeys injections, **is** importable: it ships in the
+  package. A guard proves that nothing under `src/` imports it except `runner.verify`.
+- **No test calls an LLM provider** — a network guard enforces it. The one paid campaign was run
+  by hand.
+- Four skips per OS are the corpus-cache tests, which need an uncommitted cache; CI runs the
+  equivalent on 3 synthetic cells.
 
 ```bash
 uv sync
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy src
+uv run mypy src          # strict, src only
 uv run pytest --cov -rs
 ```
 
-`mypy` runs in strict mode on `src` only, locally and in CI (pyproject `files = ["src"]`). The
-tests, `tools/` and `scripts/` are not type-checked; `mypy tests` reports 62 errors
-(2026-11-21, docs/BACKLOG.md).
+## Documentation
+
+| Document | What's in it |
+|---|---|
+| [docs/CASE_STUDY.md](docs/CASE_STUDY.md) | The design decisions, the negative result, and the defect that blocked a release |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full design, every stage, the phase plan |
+| [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | T1–T20, each with its mitigation and its state |
+| [docs/ORACLE.md](docs/ORACLE.md) | Rules R1–R4 and the encoding matcher |
+| [docs/METHODOLOGY.md](docs/METHODOLOGY.md) | Rates, denominators, controls, labels |
+| [docs/DATASETS.md](docs/DATASETS.md) | Corpus sources, licences, pinned revisions |
+| [docs/REDACTION.md](docs/REDACTION.md) | What is redacted, where, and what can still be missed |
+| [docs/INSTALL.md](docs/INSTALL.md) | Both install routes and what each does not prove |
+| [docs/STATUS.md](docs/STATUS.md) | Phase-by-phase state, every claim tagged `[impl]`/`[tested]`/`[measured]` |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | Everything still open, with measurements, not guesses |
 
 ## License
 

@@ -20,9 +20,18 @@ powershell -ExecutionPolicy ByPass -File install\install.ps1     # Windows
   (`UV_NO_MODIFY_PATH=1`).
 - Afterwards it checks that `proveflow` is on PATH and prints the installed version. Any
   failure exits non-zero with a readable message.
+- **Measured once, 2026-11-27, LOCAL:** on Haris's own Windows machine, which is not in CI and
+  not a clean machine, `uv tool install git+https://github.com/M-Haris346/proveflow@v0.1.0a1`
+  (the command the installers wrap, run directly, not through `install.ps1`):
+  - resolved 38 packages;
+  - built proveflow from the tag at `4740df3`;
+  - reported `proveflow 0.1.0a1`;
+  - uninstalled cleanly.
+  - It succeeded BEFORE main was pushed to `4740df3`. A tag carries its own objects, so this
+    route depends on the TAG existing, not on main pointing at the commit.
 - **What this route does NOT prove:**
-  - it has NOT been run by CI. The tag `v0.1.0a1` is created only after this phase is green, so
-    before that the default source does not exist;
+  - it has NOT been run by CI, and the installer scripts themselves have not been run on this
+    route; the one run above is the bare `uv tool install` command, on one local machine;
   - it needs network access to PyPI and GitHub, and its dependency versions are whatever PyPI
     resolves at install time (not the repo's `uv.lock`);
   - whether uv needs the `git` executable for a git source is not stated in the uv pages read.
