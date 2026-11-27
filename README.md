@@ -321,6 +321,16 @@ uv run pytest --cov -rs
 | [docs/STATUS.md](docs/STATUS.md) | Phase-by-phase state, every claim tagged `[impl]`/`[tested]`/`[measured]` |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Everything still open, with measurements, not guesses |
 
+## How this was built
+
+I designed and built ProveFlow, and I am its only author. I used Claude Code as a pair-programmer,
+working from my own specification ([CLAUDE.md](CLAUDE.md)) and phase plans. Each phase started as a
+plan that I reviewed, amended and approved before any code was written; I then reviewed the output
+and the real test and campaign runs, and pushed back where something was wrong. Commits written with
+Claude Code carry a `Co-Authored-By` trailer. I ran every git command myself, and I can explain
+every design decision in this repository. The reasoning is in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/CASE_STUDY.md](docs/CASE_STUDY.md).
+
 ## License
 
-MIT
+[MIT](LICENSE)
